@@ -29,6 +29,12 @@ jobs:
       - name: Setup EAS
         run: npm install -g eas-cli
 
+      - name: Initialize EAS project
+        run: eas init
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
       - name: Build iOS (EAS)
         run: |
           eas build \
@@ -40,3 +46,4 @@ jobs:
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_BUILD_NO_EXPO_GO_WARNING: true
