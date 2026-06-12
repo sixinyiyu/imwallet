@@ -12,10 +12,6 @@ on:
       - "apps/server/**"
       - ".github/workflows/test-server.yml"
 
-defaults:
-  run:
-    working-directory: apps/server
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -42,32 +38,37 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           cache: "npm"
-          cache-dependency-path: apps/server/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
       - name: Lint (if configured)
         run: npm run lint
+        working-directory: apps/server
         continue-on-error: true
 
       - name: Type check
         run: npx tsc --noEmit
+        working-directory: apps/server
 
       - name: Generate Prisma client
         run: npx prisma generate
+        working-directory: apps/server
         env:
           DATABASE_URL: postgresql://imwallet:imwallet_test@localhost:5432/imwallet
 
       - name: Run database migrations
         run: npx prisma db push --skip-generate
+        working-directory: apps/server
         env:
           DATABASE_URL: postgresql://imwallet:imwallet_test@localhost:5432/imwallet
 
       - name: Run tests
         run: npx vitest run --reporter=verbose
+        working-directory: apps/server
         env:
           DATABASE_URL: postgresql://imwallet:imwallet_test@localhost:5432/imwallet
           JWT_SECRET: test_secret

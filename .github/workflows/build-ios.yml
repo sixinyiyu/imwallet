@@ -8,10 +8,6 @@ on:
       - "apps/mobile/**"
       - ".github/workflows/build-ios.yml"
 
-defaults:
-  run:
-    working-directory: apps/mobile
-
 jobs:
   build-ios:
     runs-on: macos-latest
@@ -25,7 +21,7 @@ jobs:
         with:
           node-version: 22
           cache: "npm"
-          cache-dependency-path: apps/mobile/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -41,5 +37,6 @@ jobs:
             --non-interactive \
             --auto-submit \
             --no-wait
+        working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
