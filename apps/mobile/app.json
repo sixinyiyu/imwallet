@@ -23,6 +23,12 @@
     },
     "plugins": [
       "expo-status-bar"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "1c7d3fd7-d914-401e-9082-fa9e08457ea9"
+      }
+    },
+    "owner": "sixinyiyu"
   }
 }
