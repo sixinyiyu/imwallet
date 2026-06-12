@@ -23,7 +23,7 @@ export async function getAllTokens(): Promise<
     orderBy: { symbol: "asc" },
   });
 
-  return tokens.map((t) => ({
+  return tokens.map((t: any) => ({
     id: t.id,
     symbol: t.symbol,
     name: t.name,
@@ -61,7 +61,7 @@ export async function getTokenBalances(
   const usdRate = usdtFiat ? parseFloat(usdtFiat.rate.toString()) : 1;
   const cnyRate = cnyFiat ? parseFloat(cnyFiat.rate.toString()) : 7.25;
 
-  return walletTokens.map((wt) => {
+  return walletTokens.map((wt: any) => {
     const tokenBalance = wt.balance.toString();
     const usdValue = (parseFloat(tokenBalance) * usdRate).toFixed(2);
     const cnyValue = (parseFloat(tokenBalance) * cnyRate).toFixed(2);

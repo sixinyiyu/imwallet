@@ -14,7 +14,7 @@ export default function AdminScreen() {
     {
       label: "用户管理",
       icon: <UserManageIcon size={26} color="#3B82F6" />,
-      screen: "UserManage" as keyof RootStackParamList,
+      screen: "UserManage" as const,
       desc: "查看所有用户、审核激活、删除用户",
     },
   ];

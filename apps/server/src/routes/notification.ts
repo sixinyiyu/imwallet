@@ -38,7 +38,7 @@ router.put(
   "/:id/read",
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.userId;
-    await notificationService.markAsRead(req.params.id, userId);
+    await notificationService.markAsRead(req.params.id as string, userId);
     res.json({ success: true });
   })
 );

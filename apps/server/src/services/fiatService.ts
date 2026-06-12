@@ -12,7 +12,7 @@ export async function getFiatRates(): Promise<FiatRate[]> {
     orderBy: { code: "asc" },
   });
 
-  return rates.map((r) => ({
+  return rates.map((r: any) => ({
     code: r.code,
     name: r.name,
     symbol: r.symbol,

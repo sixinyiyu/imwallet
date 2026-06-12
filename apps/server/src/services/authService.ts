@@ -172,13 +172,13 @@ export async function getAllUsers() {
   });
 
   // Flatten wallet info
-  return users.map((u) => ({
+  return users.map((u: any) => ({
     ...u,
-    wallets: u.wallets.map((uw) => ({
+    wallets: u.wallets.map((uw: any) => ({
       id: uw.wallet.id,
       alias: uw.wallet.alias,
       address: uw.wallet.address,
-      tokenBalances: uw.wallet.tokenBalances.map((tb) => ({
+      tokenBalances: uw.wallet.tokenBalances.map((tb: any) => ({
         id: tb.id,
         symbol: tb.token.symbol,
         name: tb.token.name,

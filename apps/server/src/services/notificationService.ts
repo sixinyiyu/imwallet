@@ -53,7 +53,7 @@ export async function getUserNotifications(
   ]);
 
   return {
-    notifications: notifications.map((n) => ({
+    notifications: notifications.map((n: any) => ({
       id: n.id,
       title: n.title,
       content: n.content,

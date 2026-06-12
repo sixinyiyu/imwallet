@@ -144,7 +144,7 @@ export async function transfer(
       .update(`${input.fromWalletId}-${toWallet.id}-${amount}-${Date.now()}-${uuid()}`)
       .digest("hex");
 
-  const tx = await prisma.$transaction(async (tx) => {
+  const tx = await prisma.$transaction(async (tx: any) => {
     // Update sender WalletToken balance
     await tx.walletToken.update({
       where: { id: senderWalletToken.id },
@@ -306,9 +306,9 @@ export async function getTransactions(
       where: { username: { contains: keyword, mode: "insensitive" } },
       include: { wallets: { select: { walletId: true } } },
     });
-    const userWalletIds = matchingUsers.flatMap((u) => u.wallets.map((w) => w.walletId));
-    const walletIds = [...matchingWallets.map((w) => w.id), ...userWalletIds];
-    const contactAddresses = matchingContacts.map((c) => c.address);
+    const userWalletIds = matchingUsers.flatMap((u: any) => u.wallets.map((w: any) => w.walletId));
+    const walletIds = [...matchingWallets.map((w: any) => w.id), ...userWalletIds];
+    const contactAddresses = matchingContacts.map((c: any) => c.address);
     const typeConditions = filter.type === "send" ? [{ fromWalletId: walletId }] : filter.type === "receive" ? [{ toWalletId: walletId }] : [{ fromWalletId: walletId }, { toWalletId: walletId }];
     where.OR = typeConditions.map((cond) => ({
       ...cond,
@@ -317,7 +317,7 @@ export async function getTransactions(
         { toWalletId: { in: walletIds } },
       ],
     }));
-    const extraConditions = contactAddresses.map((addr) => {
+    const extraConditions = contactAddresses.map((addr: any) => {
       if (filter.type === "send") return { fromWalletId: walletId, toWallet: { address: addr } };
       if (filter.type === "receive") return { toWalletId: walletId, fromWallet: { address: addr } };
       return { OR: [{ fromWalletId: walletId, toWallet: { address: addr } }, { toWalletId: walletId, fromWallet: { address: addr } }] };
@@ -362,7 +362,7 @@ export async function getTransactions(
     }),
   ]);
 
-  const contactMap = new Map(contacts.map((c) => [c.address, c.name]));
+  const contactMap = new Map<string, string>(contacts.map((c: any) => [c.address, c.name]));
   const usernameMap = new Map<string, string>();
   for (const uw of userWallets) {
     if (!usernameMap.has(uw.walletId)) {
@@ -371,7 +371,7 @@ export async function getTransactions(
   }
 
   return {
-    transactions: transactions.map((tx) => formatTransaction(tx, contactMap, usernameMap)),
+    transactions: transactions.map((tx: any) => formatTransaction(tx, contactMap, usernameMap)),
     total,
   };
 }
@@ -406,7 +406,7 @@ export async function getTransactionDetail(
     }),
   ]);
 
-  const contactMap = new Map(contacts.map((c) => [c.address, c.name]));
+  const contactMap = new Map<string, string>(contacts.map((c: any) => [c.address, c.name]));
   const usernameMap = new Map<string, string>();
   for (const uw of userWallets) {
     if (!usernameMap.has(uw.walletId)) {

@@ -63,7 +63,7 @@ async function computeTokenBalances(walletId: string): Promise<{
 
   let totalCny = 0;
 
-  const tokenBalances: WalletTokenBalance[] = walletTokens.map((wt) => {
+  const tokenBalances: WalletTokenBalance[] = walletTokens.map((wt: any) => {
     const balance = wt.balance.toString();
     const usdValue = (parseFloat(balance) * usdRate).toFixed(2);
     const cnyValue = (parseFloat(balance) * cnyRate).toFixed(2);
@@ -123,7 +123,7 @@ export async function createWallet(
 
   if (activeTokens.length > 0) {
     await prisma.walletToken.createMany({
-      data: activeTokens.map((token) => ({
+      data: activeTokens.map((token: any) => ({
         walletId: wallet.id,
         tokenId: token.id,
         balance: 0,
@@ -182,7 +182,7 @@ export async function importWallet(
 
   if (activeTokens.length > 0) {
     await prisma.walletToken.createMany({
-      data: activeTokens.map((token) => ({
+      data: activeTokens.map((token: any) => ({
         walletId: wallet.id,
         tokenId: token.id,
         balance: 0,
