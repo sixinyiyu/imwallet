@@ -1,0 +1,231 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// 钱包来源：CREATE=新建钱包, IMPORT=导入钱包
+enum WalletSource {
+  IMPORT
+  CREATE
+}
+
+/// 交易状态：PENDING=待确认, CONFIRMED=已确认, FAILED=失败
+enum TxStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+/// 用户账号状态：PENDING=待审核(新注册), ACTIVE=已激活, REJECTED=已拒绝
+enum UserStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+}
+
+/// 用户角色：NORMAL=普通用户, ADMIN=高等级管理员
+enum UserRole {
+  NORMAL
+  ADMIN
+}
+
+/// 通知类型
+enum NotificationType {
+  TRANSFER_IN
+  TRANSFER_OUT
+  ACCOUNT_ACTIVATED
+  ACCOUNT_REJECTED
+}
+
+/// 用户表：存储钱包用户的基本信息
+model User {
+  id           String       @id @default(uuid())
+  /// 用户名，3-32位字母数字下划线
+  username     String       @unique @db.VarChar(32)
+  /// 密码哈希值，bcrypt 加密
+  passwordHash String       @map("password_hash") @db.VarChar(60)
+  /// 设备信息，JSON 格式存储设备标识
+  deviceInfo   String       @default("") @map("device_info") @db.Text
+  /// 账号状态：PENDING=待审核, ACTIVE=已激活, REJECTED=已拒绝
+  status       UserStatus   @default(PENDING) @map("status")
+  /// 用户角色：NORMAL=普通, ADMIN=高等级管理员
+  role         UserRole     @default(NORMAL) @map("role")
+  /// 软删除时间戳，null 表示未删除
+  deletedAt    DateTime?    @map("deleted_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  wallets      UserWallet[]
+  contacts     Contact[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+/// 代币表：存储系统支持的代币类型
+model Token {
+  id              String    @id @default(uuid())
+  /// 代币符号，如 USDT、TRX
+  symbol          String    @unique @db.VarChar(16)
+  /// 代币名称，如 Tether USD、Tron
+  name            String    @db.VarChar(64)
+  /// 精度（小数位数）
+  decimals        Int       @default(6)
+  /// 所属网络
+  network         String    @default("Private Chain") @db.VarChar(64)
+  /// 合约地址（可选，原生代币为空）
+  contractAddress String?   @map("contract_address") @db.VarChar(66)
+  /// 图标 URL（可选）
+  iconUrl         String?   @map("icon_url") @db.VarChar(512)
+  /// 是否启用
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  walletTokens    WalletToken[]
+  transactions    Transaction[]
+
+  @@map("tokens")
+}
+
+/// 钱包表：存储用户创建或导入的钱包
+model Wallet {
+  id           String        @id @default(uuid())
+  /// 钱包别名，用户自定义名称
+  alias        String        @db.VarChar(64)
+  /// 钱包地址，链上唯一标识
+  address      String        @unique @db.VarChar(42)
+  /// 钱包来源
+  source       WalletSource  @default(CREATE)
+  /// 备注说明
+  memo         String        @default("") @db.VarChar(256)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  users        UserWallet[]
+  sentTxs      Transaction[] @relation("FromWallet")
+  receivedTxs  Transaction[] @relation("ToWallet")
+  tokenBalances WalletToken[]
+
+  @@map("wallets")
+}
+
+/// 钱包代币余额表：每个钱包中每种代币的余额
+model WalletToken {
+  id        String   @id @default(uuid())
+  walletId  String   @map("wallet_id") @db.VarChar(36)
+  tokenId   String   @map("token_id") @db.VarChar(36)
+  /// 代币余额
+  balance   Decimal  @default(0) @db.Decimal(30, 8)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  token  Token  @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@unique([walletId, tokenId])
+  @@map("wallet_tokens")
+}
+
+/// 用户钱包关联表：多对多关系，支持一个用户管理多个钱包
+model UserWallet {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id") @db.VarChar(36)
+  walletId  String   @map("wallet_id") @db.VarChar(36)
+  /// 是否为当前激活钱包
+  isActive  Boolean  @default(false) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, walletId])
+  @@map("user_wallets")
+}
+
+/// 法币汇率表：存储各法币对 USDT 的兑换汇率
+model FiatCurrency {
+  id       String   @id @default(uuid())
+  /// 货币代码，如 USD、CNY、EUR
+  code     String   @unique @db.VarChar(8)
+  /// 货币名称，如 US Dollar、人民币
+  name     String   @db.VarChar(32)
+  /// 货币符号，如 $、¥、€
+  symbol   String   @db.VarChar(4)
+  /// 对 USDT 的汇率
+  rate     Decimal  @db.Decimal(18, 8)
+  /// 小数位数
+  decimals Int      @default(2)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("fiat_currencies")
+}
+
+/// 交易记录表：存储钱包间的转账记录
+model Transaction {
+  id           String   @id @default(uuid())
+  /// 交易哈希，链上唯一标识
+  txHash       String   @unique @map("tx_hash") @db.VarChar(66)
+  /// 付款钱包 ID
+  fromWalletId String   @map("from_wallet_id") @db.VarChar(36)
+  /// 收款钱包 ID
+  toWalletId   String   @map("to_wallet_id") @db.VarChar(36)
+  /// 代币 ID
+  tokenId      String   @map("token_id") @db.VarChar(36)
+  /// 交易金额
+  amount       Decimal  @db.Decimal(30, 8)
+  /// 手续费
+  fee          Decimal  @default(0) @db.Decimal(30, 8)
+  /// 交易状态
+  status       TxStatus @default(PENDING)
+  /// 交易备注
+  memo         String   @default("") @db.VarChar(256)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  fromWallet Wallet @relation("FromWallet", fields: [fromWalletId], references: [id])
+  toWallet   Wallet @relation("ToWallet", fields: [toWalletId], references: [id])
+  token      Token  @relation(fields: [tokenId], references: [id])
+
+  @@map("transactions")
+}
+
+/// 地址本：用户常用联系人地址表
+model Contact {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id") @db.VarChar(36)
+  /// 联系人名称
+  name      String   @db.VarChar(64)
+  /// 钱包地址
+  address   String   @db.VarChar(42)
+  /// 备注
+  memo      String   @default("") @db.VarChar(256)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("contacts")
+}
+
+/// 通知/消息表：站内信通知
+model Notification {
+  id        String           @id @default(uuid())
+  /// 接收通知的用户 ID
+  userId    String           @map("user_id") @db.VarChar(36)
+  /// 通知标题
+  title     String           @db.VarChar(128)
+  /// 通知内容
+  content   String           @db.Text
+  /// 通知类型
+  type      NotificationType @map("type")
+  /// 是否已读
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}

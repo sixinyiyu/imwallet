@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+dist/
+
+# Environment (contains secrets)
+.env
+.env.local
+.env.*.local
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal

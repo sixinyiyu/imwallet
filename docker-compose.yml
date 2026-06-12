@@ -1,0 +1,41 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: imwallet-db
+    environment:
+      POSTGRES_USER: imwallet
+      POSTGRES_PASSWORD: imwallet_dev
+      POSTGRES_DB: imwallet
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U imwallet"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./apps/server
+      dockerfile: Dockerfile
+    container_name: imwallet-server
+    environment:
+      DATABASE_URL: postgresql://imwallet:imwallet_dev@postgres:5432/imwallet
+      JWT_SECRET: dev_jwt_secret_change_in_production
+      PORT: 3000
+      NODE_ENV: development
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./apps/server/src:/app/src
+    command: npm run dev
+
+volumes:
+  pgdata:

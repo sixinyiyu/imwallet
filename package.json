@@ -1,0 +1,25 @@
+{
+  "name": "imwallet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "多链去中心化钱包 - 私有链钱包应用",
+  "workspaces": [
+    "apps/server",
+    "apps/mobile"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev --workspace=apps/server",
+    "dev:mobile": "npm run start --workspace=apps/mobile",
+    "build:server": "npm run build --workspace=apps/server",
+    "test:server": "npm run test --workspace=apps/server",
+    "test:mobile": "npm run test --workspace=apps/mobile",
+    "lint": "npm run lint --workspaces --if-present",
+    "db:migrate": "npm run db:migrate --workspace=apps/server",
+    "db:generate": "npm run db:generate --workspace=apps/server",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,45 @@
+name: Build iOS
+
+on:
+  push:
+    tags:
+      - "mobile-v*"
+    paths:
+      - "apps/mobile/**"
+      - ".github/workflows/build-ios.yml"
+
+defaults:
+  run:
+    working-directory: apps/mobile
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup EAS
+        run: npm install -g eas-cli
+
+      - name: Build iOS (EAS)
+        run: |
+          eas build \
+            --platform ios \
+            --profile production \
+            --non-interactive \
+            --auto-submit \
+            --no-wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
