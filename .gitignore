@@ -3,7 +3,7 @@
 *.code-workspace
 output/
 node_modules/
-document.md
+
 
 # Environment files (contain secrets)
 .env
