@@ -124,7 +124,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
-        pattern: android-*
+          pattern: android-*
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
