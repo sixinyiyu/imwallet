@@ -7,14 +7,21 @@ const path = require("path");
  * 1. Reads BUILD_ABI env var and sets reactNativeArchitectures + ndk.abiFilters
  * 2. Enables minification (R8) and resource shrinking for release builds
  * 3. Reads API_BASE_URL env var and injects into app.json extra.apiBaseUrl
+ * 4. Reads EAS_PROJECT_ID env var and injects into app.json extra.eas.projectId
  */
 function withAbiFilter(config) {
   const abi = process.env.BUILD_ABI;
   const apiBaseUrl = process.env.API_BASE_URL;
+  const easProjectId = process.env.EAS_PROJECT_ID;
 
-  // 0. Inject API_BASE_URL into app config extra
-  if (apiBaseUrl && config.extra) {
-    config.extra.apiBaseUrl = apiBaseUrl;
+  // 0. Inject env vars into app config extra
+  if (config.extra) {
+    if (apiBaseUrl) {
+      config.extra.apiBaseUrl = apiBaseUrl;
+    }
+    if (easProjectId && config.extra.eas) {
+      config.extra.eas.projectId = easProjectId;
+    }
   }
 
   // 1. Modify gradle.properties via withDangerousMod

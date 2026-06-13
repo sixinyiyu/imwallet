@@ -45,7 +45,7 @@ jobs:
         run: npm install -g eas-cli
 
       - name: Initialize EAS project
-        run: eas init
+        run: eas init --id
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -61,6 +61,7 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EAS_BUILD_NO_EXPO_GO_WARNING: true
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
 
       - name: Download APK from EAS
         run: |
