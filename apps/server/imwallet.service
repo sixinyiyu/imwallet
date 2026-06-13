@@ -1,0 +1,33 @@
+[Unit]
+Description=IMWallet Server - 区块链钱包后端服务
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=imwallet
+Group=imwallet
+WorkingDirectory=/opt/imwallet-server
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+# 环境变量文件
+EnvironmentFile=/opt/imwallet-server/.env.production
+
+# 安全限制
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/imwallet-server
+PrivateTmp=true
+
+# 日志
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=imwallet
+
+[Install]
+WantedBy=multi-user.target

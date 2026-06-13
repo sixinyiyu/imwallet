@@ -1,4 +1,4 @@
-name: Build Server Docker
+name: Build Server
 
 on:
   push:
@@ -9,43 +9,71 @@ on:
       - ".github/workflows/build-server.yml"
 
 permissions:
-  contents: read
-  packages: write
+  contents: write
 
 jobs:
-  build-and-push:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: package-lock.json
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}/imwallet-server
-          tags: |
-            type=semver,pattern={{version}}
-            type=sha,prefix=
-            latest
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
+      - name: Generate Prisma client
+        run: npx prisma generate
+        working-directory: apps/server
+
+      - name: Build TypeScript
+        run: npm run build
+        working-directory: apps/server
+
+      - name: Package release artifact
+        run: |
+          VERSION="${GITHUB_REF_NAME#server-v}"
+          mkdir -p /tmp/imwallet-server
+          
+          # Copy compiled JS
+          cp -r apps/server/dist /tmp/imwallet-server/dist
+          
+          # Copy production node_modules (prisma client included)
+          cp -r apps/server/node_modules /tmp/imwallet-server/node_modules
+          
+          # Copy prisma schema (for migrations on server)
+          cp -r apps/server/prisma /tmp/imwallet-server/prisma
+          
+          # Copy package.json
+          cp apps/server/package.json /tmp/imwallet-server/package.json
+          
+          # Copy .env.example as reference
+          cp apps/server/.env.example /tmp/imwallet-server/.env.example
+          
+          # Create tarball
+          cd /tmp
+          tar -czf imwallet-server-${VERSION}.tar.gz imwallet-server/
+          
+          # Move to workspace
+          cp /tmp/imwallet-server-${VERSION}.tar.gz $GITHUB_WORKSPACE/
+          echo "✅ Packaged: imwallet-server-${VERSION}.tar.gz"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
-          context: apps/server
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          name: server-build
+          path: imwallet-server-*.tar.gz
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: IMWallet Server ${{ github.ref_name }}
+          files: imwallet-server-*.tar.gz
+          generate_release_notes: true
