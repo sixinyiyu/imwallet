@@ -9,10 +9,20 @@ on:
       - ".github/workflows/build-android.yml"
 
 jobs:
-  build-android:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64-v8a
+            profile: production-arm64
+          - abi: armeabi-v7a
+            profile: production-armv7
+          - abi: x86
+            profile: production-x86
+          - abi: x86_64
+            profile: production-x86_64
 
     steps:
       - name: Checkout
@@ -37,47 +47,61 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Build Android (EAS)
+      - name: Build Android (EAS) - ${{ matrix.abi }}
         run: |
           eas build \
             --platform android \
-            --profile production \
+            --profile ${{ matrix.profile }} \
             --non-interactive
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EAS_BUILD_NO_EXPO_GO_WARNING: true
 
-      - name: Download build artifact from EAS
+      - name: Download APK from EAS
         run: |
           mkdir -p dist
-          BUILD_INFO=$(eas build:list --platform android --limit 1 --json)
+          BUILD_INFO=$(eas build:list --platform android --limit 10 --json)
           BUILD_URL=$(echo "$BUILD_INFO" | node -e "
             const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-            const url = data[0]?.artifacts?.buildUrl || '';
+            const build = data.find(b => b.buildProfile === '${{ matrix.profile }}');
+            const url = build?.artifacts?.buildUrl || '';
             console.log(url);
           ")
           if [ -n "$BUILD_URL" ]; then
             VERSION="${GITHUB_REF_NAME#mobile-v}"
-            curl -L -o "dist/imwallet-${VERSION}.aab" "$BUILD_URL"
-            echo "✅ AAB downloaded successfully: imwallet-${VERSION}.aab"
+            curl -L -o "dist/imwallet-${VERSION}-${{ matrix.abi }}.apk" "$BUILD_URL"
+            echo "✅ APK downloaded: imwallet-${VERSION}-${{ matrix.abi }}.apk"
           else
-            echo "⚠️ Could not find build artifact download URL"
+            echo "⚠️ Could not find APK download URL"
+            exit 1
           fi
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Upload artifact
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-build
-          path: apps/mobile/dist/*.aab
-        continue-on-error: true
+          name: android-${{ matrix.abi }}
+          path: apps/mobile/dist/*.apk
 
-      - name: Create GitHub Release and Upload
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all APK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: android-*
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: IMWallet ${{ github.ref_name }}
-          files: apps/mobile/dist/*.aab
+          files: artifacts/**/*.apk
           generate_release_notes: true
