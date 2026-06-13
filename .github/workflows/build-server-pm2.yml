@@ -1,12 +1,12 @@
-name: Build Server (Systemd)
+name: Build Server (PM2)
 
 on:
   push:
     tags:
-      - "server-v*"
+      - "server-pm2-v*"
     paths:
       - "apps/server/**"
-      - ".github/workflows/build-server.yml"
+      - ".github/workflows/build-server-pm2.yml"
 
 permissions:
   contents: write
@@ -39,7 +39,7 @@ jobs:
 
       - name: Package release artifact
         run: |
-          VERSION="${GITHUB_REF_NAME#server-v}"
+          VERSION="${GITHUB_REF_NAME#server-pm2-v}"
           mkdir -p /tmp/imwallet-server
           
           cp -r apps/server/dist /tmp/imwallet-server/dist
@@ -47,18 +47,17 @@ jobs:
           cp -r apps/server/prisma /tmp/imwallet-server/prisma
           cp apps/server/package.json /tmp/imwallet-server/package.json
           cp apps/server/.env.example /tmp/imwallet-server/.env.example
-          cp apps/server/imwallet.service /tmp/imwallet-server/imwallet.service
-          cp apps/server/setup-ec2.sh /tmp/imwallet-server/setup-ec2.sh
-          cp apps/server/deploy.sh /tmp/imwallet-server/deploy.sh
+          cp apps/server/ecosystem.config.js /tmp/imwallet-server/ecosystem.config.js
+          cp apps/server/deploy-pm2.sh /tmp/imwallet-server/deploy-pm2.sh
           
           cd /tmp
-          tar -czf imwallet-server-systemd-${VERSION}.tar.gz imwallet-server/
-          cp /tmp/imwallet-server-systemd-${VERSION}.tar.gz $GITHUB_WORKSPACE/
-          echo "✅ Packaged: imwallet-server-systemd-${VERSION}.tar.gz"
+          tar -czf imwallet-server-pm2-${VERSION}.tar.gz imwallet-server/
+          cp /tmp/imwallet-server-pm2-${VERSION}.tar.gz $GITHUB_WORKSPACE/
+          echo "✅ Packaged: imwallet-server-pm2-${VERSION}.tar.gz"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: IMWallet Server (Systemd) ${{ github.ref_name }}
-          files: imwallet-server-systemd-*.tar.gz
+          name: IMWallet Server (PM2) ${{ github.ref_name }}
+          files: imwallet-server-pm2-*.tar.gz
           generate_release_notes: true
