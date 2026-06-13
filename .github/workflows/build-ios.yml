@@ -40,9 +40,7 @@ jobs:
           eas build \
             --platform ios \
             --profile production \
-            --non-interactive \
-            --auto-submit \
-            --no-wait
+            --non-interactive
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
