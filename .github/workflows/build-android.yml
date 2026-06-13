@@ -55,13 +55,13 @@ jobs:
           eas build \
             --platform android \
             --profile ${{ matrix.profile }} \
-            --non-interactive
+            --non-interactive \
+            --env API_BASE_URL=${{ secrets.API_BASE_URL }} \
+            --env EAS_PROJECT_ID=${{ secrets.EAS_PROJECT_ID }}
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EAS_BUILD_NO_EXPO_GO_WARNING: true
-          API_BASE_URL: ${{ secrets.API_BASE_URL }}
-          EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
 
       - name: Download APK from EAS
         run: |
