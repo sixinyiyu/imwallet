@@ -48,7 +48,7 @@ jobs:
 
       - name: Download APK from EAS
         run: |
-          mkdir -p apps/mobile/dist
+          mkdir -p dist
           BUILD_INFO=$(eas build:list --platform android --limit 1 --json)
           BUILD_URL=$(echo "$BUILD_INFO" | node -e "
             const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
@@ -56,11 +56,12 @@ jobs:
             console.log(url);
           ")
           if [ -n "$BUILD_URL" ]; then
-            curl -L -o apps/mobile/dist/app.apk "$BUILD_URL"
+            curl -L -o dist/app.apk "$BUILD_URL"
             echo "✅ APK downloaded successfully"
           else
             echo "⚠️ Could not find APK download URL"
           fi
+        working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
