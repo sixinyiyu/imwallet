@@ -8,6 +8,9 @@ on:
       - "apps/mobile/**"
       - ".github/workflows/build-ios.yml"
 
+permissions:
+  contents: read
+
 jobs:
   build-ios:
     runs-on: macos-latest

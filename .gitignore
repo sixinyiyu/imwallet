@@ -1,13 +1,17 @@
 .DS_Store
 .idea/
-android/gradle/gradle-daemon-jvm.properties
-
-core/target/
-core/.env
-core/.vscode/
-core/gemstone/src/.build/
 *.code-workspace
 output/
 node_modules/
 document.md
-node_modules
+
+# Environment files (contain secrets)
+.env
+.env.*
+!.env.example
+
+# RSA keys (generated at runtime, never commit)
+*.pem
+
+# Android build output
+android/

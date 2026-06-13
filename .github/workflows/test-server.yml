@@ -12,6 +12,9 @@ on:
       - "apps/server/**"
       - ".github/workflows/test-server.yml"
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -20,9 +23,9 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: imwallet
-          POSTGRES_PASSWORD: imwallet_test
-          POSTGRES_DB: imwallet
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
+          POSTGRES_DB: test_db
         ports:
           - 5432:5432
         options: >-
@@ -58,18 +61,18 @@ jobs:
         run: npx prisma generate
         working-directory: apps/server
         env:
-          DATABASE_URL: postgresql://imwallet:imwallet_test@localhost:5432/imwallet
+          DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/test_db
 
       - name: Run database migrations
         run: npx prisma db push --skip-generate
         working-directory: apps/server
         env:
-          DATABASE_URL: postgresql://imwallet:imwallet_test@localhost:5432/imwallet
+          DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/test_db
 
       - name: Run tests
         run: npx vitest run --reporter=verbose
         working-directory: apps/server
         env:
-          DATABASE_URL: postgresql://imwallet:imwallet_test@localhost:5432/imwallet
-          JWT_SECRET: test_secret
+          DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/test_db
+          JWT_SECRET: ci_test_secret_only
           NODE_ENV: test

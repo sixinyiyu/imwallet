@@ -9,7 +9,7 @@ async function main() {
   const SALT_ROUNDS = 12;
 
   // 1. 创建 damotou 用户（ADMIN 角色，已激活）
-  const passwordHash = await bcrypt.hash("yhblSqt@7890Wdc", SALT_ROUNDS);
+  const passwordHash = await bcrypt.hash(process.env.SEED_PASSWORD || "changeme", SALT_ROUNDS);
 
   const damotou = await prisma.user.upsert({
     where: { username: "damotou" },

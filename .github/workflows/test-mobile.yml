@@ -12,6 +12,9 @@ on:
       - "apps/mobile/**"
       - ".github/workflows/test-mobile.yml"
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

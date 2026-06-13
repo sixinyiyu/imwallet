@@ -1,29 +1,27 @@
 import { generateKeyPairSync, publicEncrypt, privateDecrypt, constants } from "crypto";
-import fs from "fs";
-import path from "path";
-
-const KEY_DIR = path.resolve(__dirname, "../keys");
-const PRIVATE_KEY_PATH = path.join(KEY_DIR, "private.pem");
-const PUBLIC_KEY_PATH = path.join(KEY_DIR, "public.pem");
 
 let privateKey: string;
 let publicKey: string;
 
 /**
- * Initialize RSA key pair. Generate new keys if they don't exist.
+ * Initialize RSA key pair.
+ * Priority: environment variables > auto-generate in memory
+ * In production, keys should be set via RSA_PRIVATE_KEY and RSA_PUBLIC_KEY env vars.
+ * In development, keys are auto-generated and kept in memory only.
  */
 export function initRSAKeys(): void {
-  if (!fs.existsSync(KEY_DIR)) {
-    fs.mkdirSync(KEY_DIR, { recursive: true });
-  }
+  // 1. Try loading from environment variables (production)
+  const envPrivateKey = process.env.RSA_PRIVATE_KEY;
+  const envPublicKey = process.env.RSA_PUBLIC_KEY;
 
-  if (fs.existsSync(PRIVATE_KEY_PATH) && fs.existsSync(PUBLIC_KEY_PATH)) {
-    privateKey = fs.readFileSync(PRIVATE_KEY_PATH, "utf-8");
-    publicKey = fs.readFileSync(PUBLIC_KEY_PATH, "utf-8");
-    console.log("🔑 RSA keys loaded from existing files");
+  if (envPrivateKey && envPublicKey) {
+    privateKey = envPrivateKey.replace(/\\n/g, "\n");
+    publicKey = envPublicKey.replace(/\\n/g, "\n");
+    console.log("🔑 RSA keys loaded from environment variables");
     return;
   }
 
+  // 2. Auto-generate (development / first run)
   const { publicKey: pub, privateKey: priv } = generateKeyPairSync("rsa", {
     modulusLength: 2048,
     publicKeyEncoding: {
@@ -36,12 +34,9 @@ export function initRSAKeys(): void {
     },
   });
 
-  fs.writeFileSync(PRIVATE_KEY_PATH, priv, "utf-8");
-  fs.writeFileSync(PUBLIC_KEY_PATH, pub, "utf-8");
-
   privateKey = priv;
   publicKey = pub;
-  console.log("🔑 RSA keys generated and saved");
+  console.log("🔑 RSA keys auto-generated (set RSA_PRIVATE_KEY/RSA_PUBLIC_KEY env vars for production)");
 }
 
 /**

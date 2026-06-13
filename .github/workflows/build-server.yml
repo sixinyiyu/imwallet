@@ -8,12 +8,13 @@ on:
       - "apps/server/**"
       - ".github/workflows/build-server.yml"
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
 
     steps:
       - name: Checkout
@@ -48,32 +49,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Generate deployment .env template
-        run: |
-          cat > .env.production.template << 'EOF'
-          # IMWallet Server - Production Environment Variables
-          # Copy this file to your EC2 instance and fill in the values
-          # Then run: docker run --env-file .env.production -p 3000:3000 ghcr.io/sixinyiyu/imwallet/imwallet-server:latest
-
-          PORT=3000
-          NODE_ENV=production
-
-          # Database (AWS RDS PostgreSQL)
-          DATABASE_URL=postgresql://USER:PASSWORD@RDS_ENDPOINT:5432/DATABASE_NAME
-
-          # JWT
-          JWT_SECRET=CHANGE_ME_TO_A_STRONG_SECRET
-          JWT_EXPIRES_IN=7d
-
-          # Fee
-          FEE_RATE=0.005
-          FEE_MODE=DEDUCTED
-          EOF
-          echo "✅ .env.production.template generated"
-
-      - name: Upload deployment template
-        uses: actions/upload-artifact@v4
-        with:
-          name: deployment-env-template
-          path: .env.production.template
