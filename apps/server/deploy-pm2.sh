@@ -55,7 +55,8 @@ cp /tmp/imwallet-server/ecosystem.config.js "$APP_DIR/"
 # 7. 执行数据库迁移
 echo "🗄️  执行数据库迁移..."
 cd "$APP_DIR"
-npx prisma migrate deploy
+export DATABASE_URL=$(grep -E '^DATABASE_URL=' "$ENV_FILE" | sed 's/^DATABASE_URL=//')
+npx prisma@6 migrate deploy
 
 # 8. 加载环境变量并重启 PM2
 echo "🔄 重启 imwallet (PM2)..."

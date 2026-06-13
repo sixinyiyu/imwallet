@@ -30,24 +30,86 @@ async function main() {
   console.log(`✅ 用户 damotou 已创建/更新 (角色: ADMIN, 状态: ACTIVE)`);
   console.log(`   用户ID: ${damotou.id}`);
 
-  // 2. 为 damotou 创建钱包，余额 90000000
+  // 2. 创建代币 USDT
+  const usdt = await prisma.token.upsert({
+    where: { symbol: "USDT" },
+    update: {},
+    create: {
+      symbol: "USDT",
+      name: "Tether USD",
+      decimals: 6,
+      network: "Private Chain",
+      isActive: true,
+    },
+  });
+  console.log(`✅ 代币 USDT 已创建/确认`);
+
+  // 3. 创建代币 TRX
+  const trx = await prisma.token.upsert({
+    where: { symbol: "TRX" },
+    update: {},
+    create: {
+      symbol: "TRX",
+      name: "Tron",
+      decimals: 6,
+      network: "Private Chain",
+      isActive: true,
+    },
+  });
+  console.log(`✅ 代币 TRX 已创建/确认`);
+
+  // 4. 为 damotou 创建钱包
   const wallet = await prisma.wallet.upsert({
     where: { address: "0xDAMOTOU00000000000000000000000000000001" },
-    update: {
-      balance: 90000000,
-    },
+    update: {},
     create: {
-      alias: "damotou 主钱包",
+      alias: "主钱包",
       address: "0xDAMOTOU00000000000000000000000000000001",
-      balance: 90000000,
       source: "CREATE",
       memo: "种子数据-内置钱包",
     },
   });
-  console.log(`✅ 钱包已创建/更新 (余额: 90,000,000)`);
+  console.log(`✅ 钱包已创建/确认`);
   console.log(`   钱包ID: ${wallet.id}`);
 
-  // 3. 关联 damotou 与钱包
+  // 5. 设置钱包代币余额 (USDT: 90000000, TRX: 100000)
+  const usdtBalance = await prisma.walletToken.upsert({
+    where: {
+      walletId_tokenId: {
+        walletId: wallet.id,
+        tokenId: usdt.id,
+      },
+    },
+    update: {
+      balance: 90000000,
+    },
+    create: {
+      walletId: wallet.id,
+      tokenId: usdt.id,
+      balance: 90000000,
+    },
+  });
+  console.log(`✅ USDT 余额已设置: 90,000,000`);
+
+  const trxBalance = await prisma.walletToken.upsert({
+    where: {
+      walletId_tokenId: {
+        walletId: wallet.id,
+        tokenId: trx.id,
+      },
+    },
+    update: {
+      balance: 100000,
+    },
+    create: {
+      walletId: wallet.id,
+      tokenId: trx.id,
+      balance: 100000,
+    },
+  });
+  console.log(`✅ TRX 余额已设置: 100,000`);
+
+  // 6. 关联 damotou 与钱包
   const userWallet = await prisma.userWallet.upsert({
     where: {
       userId_walletId: {
@@ -66,7 +128,7 @@ async function main() {
   });
   console.log(`✅ 用户钱包关联已创建`);
 
-  // 4. 确保法币汇率数据存在
+  // 7. 确保法币汇率数据存在
   const fiatDefaults = [
     { code: "USD", name: "US Dollar", symbol: "$", rate: 1.0, decimals: 2 },
     { code: "CNY", name: "人民币", symbol: "¥", rate: 7.25, decimals: 2 },
@@ -83,7 +145,7 @@ async function main() {
   }
   console.log(`✅ 法币汇率数据已创建/更新 (${fiatDefaults.length} 种)`);
 
-  // 5. 确保现有 admin 用户也更新角色
+  // 8. 确保现有 admin 用户也更新角色
   const adminUser = await prisma.user.findUnique({ where: { username: "admin" } });
   if (adminUser && !adminUser.deletedAt) {
     await prisma.user.update({
@@ -93,7 +155,7 @@ async function main() {
     console.log(`✅ 用户 admin 角色已更新为 ADMIN`);
   }
 
-  // 6. 确保现有用户都设置为 NORMAL 角色（除了 admin 和 damotou）
+  // 9. 确保现有用户都设置为 NORMAL 角色（除了 admin 和 damotou）
   const otherUsers = await prisma.user.findMany({
     where: {
       username: { notIn: ["admin", "damotou"] },

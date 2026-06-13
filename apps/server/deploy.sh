@@ -9,7 +9,7 @@ VERSION="${1:?请指定版本号，如: ./deploy.sh 1.0.0}"
 APP_DIR="/opt/imwallet-server"
 ENV_FILE="$APP_DIR/.env.production"
 SERVICE_NAME="imwallet"
-RELEASE_URL="https://github.com/sixinyiyu/imwallet/releases/download/server-v${VERSION}/imwallet-server-${VERSION}.tar.gz"
+RELEASE_URL="https://github.com/sixinyiyu/imwallet/releases/download/server-v${VERSION}/imwallet-server-systemd-${VERSION}.tar.gz"
 
 echo "========================================="
 echo "  IMWallet Server 部署 v${VERSION}"
@@ -32,9 +32,9 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 # 3. 下载制品
-echo "⬇️  下载 imwallet-server-${VERSION}.tar.gz ..."
+echo "⬇️  下载 imwallet-server-systemd-${VERSION}.tar.gz ..."
 cd /tmp
-curl -L -o "imwallet-server-${VERSION}.tar.gz" "$RELEASE_URL"
+curl -L -o "imwallet-server-systemd-${VERSION}.tar.gz" "$RELEASE_URL"
 
 # 4. 备份当前版本
 if [ -d "$APP_DIR/dist" ]; then
@@ -44,7 +44,7 @@ fi
 
 # 5. 解压覆盖
 echo "📂 解压到 $APP_DIR ..."
-tar -xzf "imwallet-server-${VERSION}.tar.gz" -C /tmp
+tar -xzf "imwallet-server-systemd-${VERSION}.tar.gz" -C /tmp
 sudo cp -r /tmp/imwallet-server/dist "$APP_DIR/"
 sudo cp -r /tmp/imwallet-server/node_modules "$APP_DIR/"
 sudo cp -r /tmp/imwallet-server/prisma "$APP_DIR/"
@@ -53,7 +53,8 @@ sudo cp /tmp/imwallet-server/package.json "$APP_DIR/"
 # 6. 执行数据库迁移
 echo "🗄️  执行数据库迁移..."
 cd "$APP_DIR"
-npx prisma migrate deploy
+export DATABASE_URL=$(grep -E '^DATABASE_URL=' "$ENV_FILE" | sed 's/^DATABASE_URL=//')
+npx prisma@6 migrate deploy
 
 # 7. 重启服务
 echo "🔄 重启 imwallet 服务..."
@@ -71,7 +72,7 @@ else
 fi
 
 # 9. 清理临时文件
-rm -f "/tmp/imwallet-server-${VERSION}.tar.gz"
+rm -f "/tmp/imwallet-server-systemd-${VERSION}.tar.gz"
 rm -rf /tmp/imwallet-server
 
 echo "🎉 部署完成!"
