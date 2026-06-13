@@ -32,6 +32,7 @@
       "./plugins/withAbiFilter"
     ],
     "extra": {
+      "apiBaseUrl": "",
       "eas": {
         "projectId": "1c7d3fd7-d914-401e-9082-fa9e08457ea9"
       }

@@ -57,6 +57,7 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EAS_BUILD_NO_EXPO_GO_WARNING: true
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
 
       - name: Download APK from EAS
         run: |

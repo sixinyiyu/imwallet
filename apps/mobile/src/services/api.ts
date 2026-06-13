@@ -1,11 +1,14 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 
 const TOKEN_KEY = "imwallet_token";
 
-// Base URL — point to your server
-// For Android emulator: 10.0.2.2, for iOS simulator: localhost
-const BASE_URL = "http://localhost:3000/api/v1";
+// Read API base URL from expo extra config (injected via EAS env at build time)
+// Fallback to localhost for development
+const BASE_URL =
+  Constants.expoConfig?.extra?.apiBaseUrl ||
+  "http://localhost:3000/api/v1";
 
 const api = axios.create({
   baseURL: BASE_URL,

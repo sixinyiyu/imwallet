@@ -1,7 +1,4 @@
-const {
-  withAppBuildGradle,
-  withDangerousMod,
-} = require("expo/config-plugins");
+const { withAppBuildGradle, withDangerousMod } = require("expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
 
@@ -9,9 +6,16 @@ const path = require("path");
  * Config plugin that:
  * 1. Reads BUILD_ABI env var and sets reactNativeArchitectures + ndk.abiFilters
  * 2. Enables minification (R8) and resource shrinking for release builds
+ * 3. Reads API_BASE_URL env var and injects into app.json extra.apiBaseUrl
  */
 function withAbiFilter(config) {
   const abi = process.env.BUILD_ABI;
+  const apiBaseUrl = process.env.API_BASE_URL;
+
+  // 0. Inject API_BASE_URL into app config extra
+  if (apiBaseUrl && config.extra) {
+    config.extra.apiBaseUrl = apiBaseUrl;
+  }
 
   // 1. Modify gradle.properties via withDangerousMod
   config = withDangerousMod(config, [
@@ -54,8 +58,6 @@ function withAbiFilter(config) {
   // 2. Add abiFilters to build.gradle release block
   config = withAppBuildGradle(config, (config) => {
     if (abi && !config.modResults.contents.includes("abiFilters")) {
-      // Match "release {" that is inside buildTypes block
-      // The release block starts with "release {" on its own line
       config.modResults.contents = config.modResults.contents.replace(
         /(\s+release\s*\{)/,
         `$1\n            ndk {\n                abiFilters '${abi}'\n            }`
