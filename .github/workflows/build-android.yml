@@ -48,7 +48,7 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EAS_BUILD_NO_EXPO_GO_WARNING: true
 
-      - name: Download APK from EAS
+      - name: Download build artifact from EAS
         run: |
           mkdir -p dist
           BUILD_INFO=$(eas build:list --platform android --limit 1 --json)
@@ -58,27 +58,26 @@ jobs:
             console.log(url);
           ")
           if [ -n "$BUILD_URL" ]; then
-            # Extract version from tag (mobile-v1.0.0 -> 1.0.0)
             VERSION="${GITHUB_REF_NAME#mobile-v}"
-            curl -L -o "dist/imwallet-${VERSION}.apk" "$BUILD_URL"
-            echo "✅ APK downloaded successfully: imwallet-${VERSION}.apk"
+            curl -L -o "dist/imwallet-${VERSION}.aab" "$BUILD_URL"
+            echo "✅ AAB downloaded successfully: imwallet-${VERSION}.aab"
           else
-            echo "⚠️ Could not find APK download URL"
+            echo "⚠️ Could not find build artifact download URL"
           fi
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Upload APK artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: apps/mobile/dist/*.apk
+          name: android-build
+          path: apps/mobile/dist/*.aab
         continue-on-error: true
 
-      - name: Create GitHub Release and Upload APK
+      - name: Create GitHub Release and Upload
         uses: softprops/action-gh-release@v2
         with:
           name: IMWallet ${{ github.ref_name }}
-          files: apps/mobile/dist/*.apk
+          files: apps/mobile/dist/*.aab
           generate_release_notes: true
