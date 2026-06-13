@@ -45,7 +45,7 @@ jobs:
         run: npm install -g eas-cli
 
       - name: Initialize EAS project
-        run: eas init --id ${{ secrets.EAS_PROJECT_ID }}
+        run: eas init --id ${{ secrets.EAS_PROJECT_ID }} --force
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
