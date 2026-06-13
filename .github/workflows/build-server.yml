@@ -37,6 +37,11 @@ jobs:
         run: npm run build
         working-directory: apps/server
 
+      - name: Install production dependencies for server
+        run: |
+          mkdir -p apps/server/node_modules
+          npm install --omit=dev --workspace=apps/server
+
       - name: Package release artifact
         run: |
           VERSION="${GITHUB_REF_NAME#server-v}"
