@@ -50,14 +50,32 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
+      - name: Inject env vars into eas.json
+        run: |
+          cd apps/mobile
+          # Inject API_BASE_URL and EAS_PROJECT_ID into all production profiles
+          node -e "
+            const fs = require('fs');
+            const eas = JSON.parse(fs.readFileSync('eas.json', 'utf8'));
+            const profiles = ['production-arm64', 'production-armv7', 'production-x86', 'production-x86_64'];
+            for (const p of profiles) {
+              if (eas.build[p]) {
+                eas.build[p].env.API_BASE_URL = process.env.API_BASE_URL;
+                eas.build[p].env.EAS_PROJECT_ID = process.env.EAS_PROJECT_ID;
+              }
+            }
+            fs.writeFileSync('eas.json', JSON.stringify(eas, null, 2) + '\n');
+          "
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+
       - name: Build Android (EAS) - ${{ matrix.abi }}
         run: |
           eas build \
             --platform android \
             --profile ${{ matrix.profile }} \
-            --non-interactive \
-            --env API_BASE_URL=${{ secrets.API_BASE_URL }} \
-            --env EAS_PROJECT_ID=${{ secrets.EAS_PROJECT_ID }}
+            --non-interactive
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
