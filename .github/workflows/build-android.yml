@@ -4,9 +4,6 @@ on:
   push:
     tags:
       - "mobile-v*"
-    paths:
-      - "apps/mobile/**"
-      - ".github/workflows/build-android.yml"
 
 permissions:
   contents: write
@@ -50,7 +47,7 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Inject env vars into eas.json
+      - name: Inject env vars and commit for EAS
         run: |
           cd apps/mobile
           # Inject API_BASE_URL and EAS_PROJECT_ID into all production profiles
@@ -66,6 +63,11 @@ jobs:
             }
             fs.writeFileSync('eas.json', JSON.stringify(eas, null, 2) + '\n');
           "
+          # EAS build uses git state, so we must commit the changes locally
+          git config user.email "ci@github.com"
+          git config user.name "GitHub Actions"
+          git add eas.json
+          git commit -m "chore: inject env vars for EAS build" --allow-empty
         env:
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
           EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
@@ -118,7 +120,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
-          pattern: android-*
+        pattern: android-*
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
