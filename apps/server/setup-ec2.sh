@@ -1,6 +1,7 @@
 #!/bin/bash
 # IMWallet Server - EC2 首次初始化脚本
-# 在 EC2 上以 ubuntu 用户执行: sudo bash setup-ec2.sh
+# 支持 Debian/Ubuntu 和 Amazon Linux / RHEL / CentOS
+# 用法: sudo bash setup-ec2.sh
 
 set -e
 
@@ -11,10 +12,36 @@ echo "========================================="
 echo "  IMWallet Server - EC2 初始化"
 echo "========================================="
 
+# 检测系统类型
+if [ -f /etc/os-release ]; then
+  . /etc/os-release
+  OS_ID="${ID}"
+  OS_NAME="${PRETTY_NAME:-$ID}"
+else
+  echo "❌ 无法检测操作系统"
+  exit 1
+fi
+
+echo "🖥️  检测到系统: $OS_NAME"
+
 # 1. 安装 Node.js 22
 echo "📦 安装 Node.js 22..."
-curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-apt install -y nodejs
+if [ "$OS_ID" = "amzn" ] || [ "$OS_ID" = "rhel" ] || [ "$OS_ID" = "centos" ] || [ "$OS_ID" = "rocky" ] || [ "$OS_ID" = "almalinux" ]; then
+  # Amazon Linux / RHEL 系列
+  curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
+  dnf install -y nodejs
+elif [ "$OS_ID" = "debian" ] || [ "$OS_ID" = "ubuntu" ] || [ "$OS_ID" = "pop" ] || [ "$OS_ID" = "linuxmint" ]; then
+  # Debian / Ubuntu 系列
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt install -y nodejs
+else
+  echo "❌ 不支持的操作系统: $OS_NAME"
+  echo "   请手动安装 Node.js 22 后重新运行此脚本"
+  exit 1
+fi
+
+node --version
+npm --version
 
 # 2. 创建服务用户
 echo "👤 创建服务用户: $SERVICE_USER"
