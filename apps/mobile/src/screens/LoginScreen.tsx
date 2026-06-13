@@ -25,6 +25,7 @@ export default function LoginScreen() {
   const { fetchWallets } = useWalletStore();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
@@ -97,13 +98,22 @@ export default function LoginScreen() {
           />
 
           <Text style={styles.label}>密码</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="请输入密码"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+          <View style={styles.passwordWrapper}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="请输入密码"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassword(!showPassword)}
+              activeOpacity={0.6}
+            >
+              <Text style={styles.eyeIcon}>{showPassword ? "🙈" : "👁️"}</Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
@@ -145,6 +155,28 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 16,
     marginBottom: 16,
+  },
+  passwordWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    marginBottom: 16,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 14,
+    fontSize: 16,
+  },
+  eyeButton: {
+    padding: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  eyeIcon: {
+    fontSize: 18,
   },
   button: {
     backgroundColor: "#3B82F6",

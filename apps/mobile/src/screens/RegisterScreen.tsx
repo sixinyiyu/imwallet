@@ -24,6 +24,8 @@ export default function RegisterScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
@@ -93,21 +95,39 @@ export default function RegisterScreen() {
             autoCorrect={false}
           />
           <Text style={styles.label}>密码</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="至少8位密码"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+          <View style={styles.passwordWrapper}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="至少8位密码"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassword(!showPassword)}
+              activeOpacity={0.6}
+            >
+              <Text style={styles.eyeIcon}>{showPassword ? "🙈" : "👁️"}</Text>
+            </TouchableOpacity>
+          </View>
           <Text style={styles.label}>确认密码</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="再次输入密码"
-            value={confirmPw}
-            onChangeText={setConfirmPw}
-            secureTextEntry
-          />
+          <View style={styles.passwordWrapper}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="再次输入密码"
+              value={confirmPw}
+              onChangeText={setConfirmPw}
+              secureTextEntry={!showConfirmPw}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowConfirmPw(!showConfirmPw)}
+              activeOpacity={0.6}
+            >
+              <Text style={styles.eyeIcon}>{showConfirmPw ? "🙈" : "👁️"}</Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
             onPress={handleRegister}
@@ -162,6 +182,28 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 16,
     marginBottom: 16,
+  },
+  passwordWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    marginBottom: 16,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 14,
+    fontSize: 16,
+  },
+  eyeButton: {
+    padding: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  eyeIcon: {
+    fontSize: 18,
   },
   button: {
     backgroundColor: "#3B82F6",
