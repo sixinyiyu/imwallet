@@ -63,11 +63,9 @@ jobs:
             }
             fs.writeFileSync('eas.json', JSON.stringify(eas, null, 2) + '\n');
           "
-          # Verify injection
-          echo "📋 Injected eas.json content:"
-          cat eas.json
-          echo ""
-          echo "✅ API_BASE_URL length: $(node -e "const e=JSON.parse(require('fs').readFileSync('eas.json','utf8'));console.log((e.build['production-arm64'].env.API_BASE_URL||'').length)")"
+          # Verify injection (mask sensitive values)
+          echo "📋 Verifying eas.json injection:"
+          node -e "const e=JSON.parse(require('fs').readFileSync('eas.json','utf8'));const u=e.build['production-arm64'].env.API_BASE_URL||'';console.log('  API_BASE_URL length:',u.length);console.log('  API_BASE_URL prefix:',u.substring(0,15)+'***');console.log('  EAS_PROJECT_ID set:',!!e.build['production-arm64'].env.EAS_PROJECT_ID)"
           # EAS build uses git state, so we must commit the changes locally
           git config user.email "ci@github.com"
           git config user.name "GitHub Actions"
