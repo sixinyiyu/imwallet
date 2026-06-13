@@ -9,12 +9,18 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "API_BASE_URL": "http://52.198.165.132:3000/api/v1"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "API_BASE_URL": "http://52.198.165.132:3000/api/v1"
       }
     },
     "production-arm64": {
@@ -22,7 +28,8 @@
         "buildType": "apk"
       },
       "env": {
-        "BUILD_ABI": "arm64-v8a"
+        "BUILD_ABI": "arm64-v8a",
+        "API_BASE_URL": "http://52.198.165.132:3000/api/v1"
       }
     },
     "production-armv7": {
@@ -30,7 +37,8 @@
         "buildType": "apk"
       },
       "env": {
-        "BUILD_ABI": "armeabi-v7a"
+        "BUILD_ABI": "armeabi-v7a",
+        "API_BASE_URL": "http://52.198.165.132:3000/api/v1"
       }
     },
     "production-x86": {
@@ -38,7 +46,8 @@
         "buildType": "apk"
       },
       "env": {
-        "BUILD_ABI": "x86"
+        "BUILD_ABI": "x86",
+        "API_BASE_URL": "http://52.198.165.132:3000/api/v1"
       }
     },
     "production-x86_64": {
@@ -46,7 +55,8 @@
         "buildType": "apk"
       },
       "env": {
-        "BUILD_ABI": "x86_64"
+        "BUILD_ABI": "x86_64",
+        "API_BASE_URL": "http://52.198.165.132:3000/api/v1"
       }
     }
   },

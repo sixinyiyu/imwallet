@@ -22,7 +22,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "jsEngine": "hermes"
+      "usesCleartextTraffic": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -32,7 +32,7 @@
       "./plugins/withAbiFilter"
     ],
     "extra": {
-      "apiBaseUrl": "",
+      "apiBaseUrl": "http://52.198.165.132:3000/api/v1",
       "eas": {
         "projectId": ""
       }
