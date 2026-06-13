@@ -63,6 +63,11 @@ jobs:
             }
             fs.writeFileSync('eas.json', JSON.stringify(eas, null, 2) + '\n');
           "
+          # Verify injection
+          echo "📋 Injected eas.json content:"
+          cat eas.json
+          echo ""
+          echo "✅ API_BASE_URL length: $(node -e "const e=JSON.parse(require('fs').readFileSync('eas.json','utf8'));console.log((e.build['production-arm64'].env.API_BASE_URL||'').length)")"
           # EAS build uses git state, so we must commit the changes locally
           git config user.email "ci@github.com"
           git config user.name "GitHub Actions"
@@ -77,7 +82,8 @@ jobs:
           eas build \
             --platform android \
             --profile ${{ matrix.profile }} \
-            --non-interactive
+            --non-interactive \
+            --clear-cache
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

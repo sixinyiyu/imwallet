@@ -10,6 +10,10 @@ const BASE_URL =
   Constants.expoConfig?.extra?.apiBaseUrl ||
   "http://localhost:3000/api/v1";
 
+// Debug: log the actual API base URL to verify injection
+console.log("🔗 API_BASE_URL from extra:", Constants.expoConfig?.extra?.apiBaseUrl);
+console.log("🔗 Actual BASE_URL used:", BASE_URL);
+
 const api = axios.create({
   baseURL: BASE_URL,
   timeout: 15000,
