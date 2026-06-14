@@ -151,7 +151,8 @@ export default function TransferScreen() {
         fee: tx.fee,
       });
     } catch (err: any) {
-      setResult({ success: false, error: err.message || "转账失败" });
+      const serverError = err.response?.data?.error || err.response?.data?.details?.[0]?.message || err.message;
+      setResult({ success: false, error: serverError || "转账失败" });
     } finally {
       setSubmitting(false);
     }

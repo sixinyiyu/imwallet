@@ -36,7 +36,7 @@ router.get(
 router.put(
   "/users/:id/activate",
   asyncHandler(async (req: Request, res: Response) => {
-    const result = await authService.activateUser(req.params.id as string);
+    const result = await authService.activateUser(req.params.id as string, req.user?.userId);
     res.json(result);
   })
 );
@@ -45,7 +45,7 @@ router.put(
 router.put(
   "/users/:id/reject",
   asyncHandler(async (req: Request, res: Response) => {
-    const result = await authService.rejectUser(req.params.id as string);
+    const result = await authService.rejectUser(req.params.id as string, req.user?.userId);
     res.json(result);
   })
 );
@@ -54,7 +54,7 @@ router.put(
 router.put(
   "/users/:id/deactivate",
   asyncHandler(async (req: Request, res: Response) => {
-    const result = await authService.deactivateUser(req.params.id as string);
+    const result = await authService.deactivateUser(req.params.id as string, req.user?.userId);
     res.json(result);
   })
 );
@@ -63,7 +63,7 @@ router.put(
 router.delete(
   "/users/:id",
   asyncHandler(async (req: Request, res: Response) => {
-    const result = await authService.softDeleteUser(req.params.id as string);
+    const result = await authService.softDeleteUser(req.params.id as string, req.user?.userId);
     res.json(result);
   })
 );

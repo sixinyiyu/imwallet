@@ -4,6 +4,7 @@ import prisma from "../config/prisma";
 import { createError } from "../middleware/errorHandler";
 import { config } from "../config";
 import type { FeeMode } from "../config";
+import { logger } from "../utils/logger";
 import * as notificationService from "./notificationService";
 
 const FEE_RATE = config.fee.rate;
@@ -63,12 +64,15 @@ export async function transfer(
 ): Promise<TransactionResult> {
   const amount = input.amount;
 
+  logger.info("TRANSFER", `转账请求开始: fromWallet=${input.fromWalletId}, toAddress=${input.toAddress}, amount=${amount}, tokenId=${input.tokenId}`);
+
   // Validate token exists
   const token = await prisma.token.findUnique({
     where: { id: input.tokenId },
   });
 
   if (!token) {
+    logger.warn("TRANSFER", `转账失败: 代币不存在 - tokenId=${input.tokenId}`);
     throw createError(404, "Token not found");
   }
 
@@ -77,6 +81,7 @@ export async function transfer(
   });
 
   if (!toWallet) {
+    logger.warn("TRANSFER", `转账失败: 收款钱包不存在 - toAddress=${input.toAddress}`);
     throw createError(404, "Recipient wallet not found");
   }
 
@@ -85,10 +90,12 @@ export async function transfer(
   });
 
   if (!fromWallet) {
+    logger.warn("TRANSFER", `转账失败: 发送钱包不存在 - fromWalletId=${input.fromWalletId}`);
     throw createError(404, "Sender wallet not found");
   }
 
   if (fromWallet.id === toWallet.id) {
+    logger.warn("TRANSFER", `转账失败: 不能向自己转账 - walletId=${fromWallet.id}`);
     throw createError(400, "Cannot transfer to the same wallet");
   }
 
@@ -100,6 +107,7 @@ export async function transfer(
   });
 
   if (!senderWalletToken) {
+    logger.warn("TRANSFER", `转账失败: 发送方无该代币余额 - fromWalletId=${input.fromWalletId}, tokenId=${input.tokenId}`);
     throw createError(400, "No balance found for this token in sender wallet");
   }
 
@@ -121,7 +129,9 @@ export async function transfer(
     requiredBalance = amountNum;
   }
 
-  if (parseFloat(senderWalletToken.balance.toString()) < requiredBalance) {
+  const currentBalance = parseFloat(senderWalletToken.balance.toString());
+  if (currentBalance < requiredBalance) {
+    logger.warn("TRANSFER", `转账失败: 余额不足 - 当前余额=${currentBalance}, 需要=${requiredBalance}, fromWalletId=${input.fromWalletId}`);
     throw createError(400, "Insufficient balance");
   }
 
@@ -175,6 +185,8 @@ export async function transfer(
       },
     });
   });
+
+  logger.info("TRANSFER", `转账成功: txHash=${txHash}, from=${input.fromWalletId}, to=${toWallet.id}, amount=${amount}, fee=${fee}, received=${recipientReceived.toFixed(8)}, feeMode=${FEE_MODE}`);
 
   const [fromUsername, toUsername] = await Promise.all([
     resolveUsername(tx.fromWalletId),

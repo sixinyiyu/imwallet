@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { logger } from "../utils/logger";
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -7,7 +8,7 @@ export interface AppError extends Error {
 
 export function errorHandler(
   err: AppError,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ): void {
@@ -15,8 +16,32 @@ export function errorHandler(
   const message =
     statusCode === 500 ? "Internal server error" : err.message;
 
+  // Log all errors (not just 500)
   if (statusCode === 500) {
-    console.error("[ERROR]", err);
+    logger.error(
+      "ERROR",
+      `服务端内部错误: ${req.method} ${req.originalUrl}`,
+      {
+        error: err.message,
+        stack: err.stack,
+        userId: req.user?.userId,
+      },
+      req
+    );
+  } else {
+    // Log 4xx errors with useful context for debugging
+    logger.warn(
+      "ERROR",
+      `请求错误 [${statusCode}]: ${req.method} ${req.originalUrl} - ${err.message}`,
+      {
+        statusCode,
+        message: err.message,
+        code: err.code,
+        userId: req.user?.userId,
+        body: req.body,
+      },
+      req
+    );
   }
 
   res.status(statusCode).json({

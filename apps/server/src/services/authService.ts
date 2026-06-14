@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import prisma from "../config/prisma";
 import { config } from "../config";
 import { createError } from "../middleware/errorHandler";
+import { logger } from "../utils/logger";
 import type { AuthPayload } from "../middleware/auth";
 
 // 内置默认用户，不可删除/停用
@@ -39,11 +40,14 @@ export interface RegisterResult {
 }
 
 export async function register(input: RegisterInput): Promise<RegisterResult> {
+  logger.info("AUTH", `用户注册请求: username=${input.username}`);
+
   const existing = await prisma.user.findUnique({
     where: { username: input.username },
   });
 
   if (existing) {
+    logger.warn("AUTH", `用户注册失败: 用户名已存在 - username=${input.username}`);
     throw createError(409, "Username already exists", "USERNAME_EXISTS");
   }
 
@@ -62,6 +66,8 @@ export async function register(input: RegisterInput): Promise<RegisterResult> {
     },
   });
 
+  logger.info("AUTH", `用户注册成功: username=${user.username}, id=${user.id}, status=PENDING`);
+
   return {
     message: "Registration successful, pending admin approval",
     user: { id: user.id, username: user.username, status: user.status },
@@ -69,25 +75,31 @@ export async function register(input: RegisterInput): Promise<RegisterResult> {
 }
 
 export async function login(input: LoginInput): Promise<AuthResult> {
+  logger.info("AUTH", `用户登录请求: username=${input.username}`);
+
   const user = await prisma.user.findUnique({
     where: { username: input.username },
   });
 
   if (!user) {
+    logger.warn("AUTH", `用户登录失败: 用户名不存在 - username=${input.username}`);
     throw createError(401, "用户名不存在", "USER_NOT_FOUND");
   }
 
   // 检查软删除
   if (user.deletedAt) {
+    logger.warn("AUTH", `用户登录失败: 账号已删除 - username=${input.username}`);
     throw createError(401, "该账号已被删除", "ACCOUNT_DELETED");
   }
 
   // 检查账号状态
   if (user.status === "PENDING") {
+    logger.warn("AUTH", `用户登录失败: 账号待审核 - username=${input.username}`);
     throw createError(403, "账号待审核，请等待管理员激活", "ACCOUNT_PENDING");
   }
 
   if (user.status === "REJECTED") {
+    logger.warn("AUTH", `用户登录失败: 账号已被拒绝 - username=${input.username}`);
     throw createError(403, "账号已被拒绝，请联系管理员", "ACCOUNT_REJECTED");
   }
 
@@ -97,10 +109,13 @@ export async function login(input: LoginInput): Promise<AuthResult> {
   const valid = await bcrypt.compare(plainPassword, user.passwordHash);
 
   if (!valid) {
+    logger.warn("AUTH", `用户登录失败: 密码错误 - username=${input.username}`);
     throw createError(401, "密码错误", "PASSWORD_WRONG");
   }
 
   const token = generateToken(user.id, user.username, user.role);
+
+  logger.info("AUTH", `用户登录成功: username=${user.username}, id=${user.id}, role=${user.role}`);
 
   return {
     token,
@@ -190,7 +205,7 @@ export async function getAllUsers() {
 }
 
 /** 管理员：激活用户 */
-export async function activateUser(userId: string) {
+export async function activateUser(userId: string, operatorId?: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     throw createError(404, "User not found", "USER_NOT_FOUND");
@@ -207,6 +222,8 @@ export async function activateUser(userId: string) {
     select: { id: true, username: true, status: true, role: true },
   });
 
+  logger.info("ADMIN", `用户审核-激活: username=${user.username}, id=${userId}, operator=${operatorId || "unknown"}`);
+
   // 发送通知
   await prisma.notification.create({
     data: {
@@ -221,7 +238,7 @@ export async function activateUser(userId: string) {
 }
 
 /** 管理员：拒绝用户 */
-export async function rejectUser(userId: string) {
+export async function rejectUser(userId: string, operatorId?: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     throw createError(404, "User not found", "USER_NOT_FOUND");
@@ -238,6 +255,8 @@ export async function rejectUser(userId: string) {
     select: { id: true, username: true, status: true, role: true },
   });
 
+  logger.info("ADMIN", `用户审核-拒绝: username=${user.username}, id=${userId}, operator=${operatorId || "unknown"}`);
+
   // 发送通知
   await prisma.notification.create({
     data: {
@@ -252,7 +271,7 @@ export async function rejectUser(userId: string) {
 }
 
 /** 管理员：停用用户（将ACTIVE改为PENDING） */
-export async function deactivateUser(userId: string) {
+export async function deactivateUser(userId: string, operatorId?: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     throw createError(404, "User not found", "USER_NOT_FOUND");
@@ -266,6 +285,9 @@ export async function deactivateUser(userId: string) {
   if (user.status !== "ACTIVE") {
     throw createError(400, "Only active users can be deactivated", "INVALID_STATUS");
   }
+
+  logger.info("ADMIN", `用户审核-停用: username=${user.username}, id=${userId}, operator=${operatorId || "unknown"}`);
+
   return prisma.user.update({
     where: { id: userId },
     data: { status: "PENDING" },
@@ -274,7 +296,7 @@ export async function deactivateUser(userId: string) {
 }
 
 /** 管理员：软删除用户 */
-export async function softDeleteUser(userId: string) {
+export async function softDeleteUser(userId: string, operatorId?: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     throw createError(404, "User not found", "USER_NOT_FOUND");
@@ -285,6 +307,9 @@ export async function softDeleteUser(userId: string) {
   if (user.deletedAt) {
     throw createError(400, "该用户已被删除", "ALREADY_DELETED");
   }
+
+  logger.info("ADMIN", `用户审核-删除: username=${user.username}, id=${userId}, operator=${operatorId || "unknown"}`);
+
   return prisma.user.update({
     where: { id: userId },
     data: { deletedAt: new Date() },

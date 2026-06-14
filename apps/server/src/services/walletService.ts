@@ -2,6 +2,7 @@ import { v4 as uuid } from "uuid";
 import { createHash } from "crypto";
 import prisma from "../config/prisma";
 import { createError } from "../middleware/errorHandler";
+import { logger } from "../utils/logger";
 
 export interface WalletTokenBalance {
   id: string;
@@ -93,6 +94,8 @@ export async function createWallet(
   userId: string,
   alias: string
 ): Promise<WalletDetail> {
+  logger.info("WALLET", `创建钱包: userId=${userId}, alias=${alias}`);
+
   const seed = `user-${userId}-${Date.now()}`;
   const address = deriveAddress(seed, 0);
 
@@ -131,6 +134,8 @@ export async function createWallet(
     });
   }
 
+  logger.info("WALLET", `创建钱包成功: walletId=${wallet.id}, address=${address}, userId=${userId}`);
+
   const { tokenBalances, totalBalanceCny } = await computeTokenBalances(wallet.id);
 
   return {
@@ -152,6 +157,8 @@ export async function importWallet(
   alias: string,
   privateKey?: string
 ): Promise<WalletDetail> {
+  logger.info("WALLET", `导入钱包: userId=${userId}, alias=${alias}`);
+
   const seed = mnemonic || privateKey || `import-${Date.now()}`;
   const address = deriveAddress(seed, 0);
 
@@ -189,6 +196,8 @@ export async function importWallet(
       })),
     });
   }
+
+  logger.info("WALLET", `导入钱包成功: walletId=${wallet.id}, address=${address}, userId=${userId}`);
 
   const { tokenBalances, totalBalanceCny } = await computeTokenBalances(wallet.id);
 
@@ -282,6 +291,8 @@ export async function deleteWallet(
     throw createError(404, "Wallet not found");
   }
 
+  logger.info("WALLET", `删除钱包: walletId=${walletId}, userId=${userId}`);
+
   await prisma.wallet.delete({
     where: { id: walletId },
   });
@@ -300,6 +311,8 @@ export async function activateWallet(
   if (!userWallet) {
     throw createError(404, "Wallet not found");
   }
+
+  logger.info("WALLET", `激活钱包: walletId=${walletId}, userId=${userId}`);
 
   await prisma.$transaction([
     prisma.userWallet.updateMany({

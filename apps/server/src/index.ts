@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import { config } from "./config";
 import { errorHandler } from "./middleware/errorHandler";
+import { requestLogger } from "./middleware/requestLogger";
 import authRoutes from "./routes/auth";
 import walletRoutes from "./routes/wallet";
 import transactionRoutes from "./routes/transaction";
@@ -13,12 +14,16 @@ import configRoutes from "./routes/config";
 import adminRoutes from "./routes/admin";
 import notificationRoutes from "./routes/notification";
 import { initRSAKeys } from "./services/rsaService";
+import { logger } from "./utils/logger";
 
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Request logging middleware - log all HTTP requests
+app.use(requestLogger);
 
 // Health check
 app.get("/health", (_req, res) => {
@@ -44,8 +49,8 @@ app.use(errorHandler);
 if (config.nodeEnv !== "test") {
   initRSAKeys();
   app.listen(config.port, () => {
-    console.log(`🚀 imwallet server running on http://localhost:${config.port}`);
-    console.log(`📋 Environment: ${config.nodeEnv}`);
+    logger.info("SERVER", `🚀 imwallet server running on http://localhost:${config.port}`);
+    logger.info("SERVER", `📋 Environment: ${config.nodeEnv}`);
   });
 }
 
