@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useAuthStore } from "../stores/authStore";
@@ -21,8 +21,8 @@ interface MenuItem {
 export default function ProfileScreen() {
   const navigation = useNavigation<Nav>();
   const { user, logout } = useAuthStore();
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [unreadCount, setUnreadCount] = React.useState(0);
+  const [showLogoutModal, setShowLogoutModal] = React.useState(false);
 
   const isAdmin = user?.role === "ADMIN";
 
@@ -35,10 +35,8 @@ export default function ProfileScreen() {
     }
   };
 
-import { useFocusEffect } from "@react-navigation/native";
-
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       fetchUnreadCount();
       const interval = setInterval(fetchUnreadCount, 30000);
       return () => clearInterval(interval);
