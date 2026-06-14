@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -6,7 +6,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-  Share,
+  Alert,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
@@ -21,6 +21,8 @@ import SuccessIcon from "../components/icons/SuccessIcon";
 import FailureIcon from "../components/icons/FailureIcon";
 import PendingIcon from "../components/icons/PendingIcon";
 import USDTIcon from "../components/icons/USDTIcon";
+import { captureRef } from "react-native-view-shot";
+import * as Sharing from "expo-sharing";
 
 type Route = RouteProp<RootStackParamList, "TradeDetail">;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -51,6 +53,7 @@ export default function TradeDetailScreen() {
   const [tx, setTx] = useState<Transaction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const detailRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     if (!route.params?.tradeId) return;
@@ -62,6 +65,28 @@ export default function TradeDetailScreen() {
       .finally(() => setLoading(false));
   }, [route.params?.tradeId]);
 
+  const handleShare = async () => {
+    try {
+      const uri = await captureRef(detailRef, {
+        format: "png",
+        quality: 1,
+      });
+
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "image/png",
+          dialogTitle: "分享交易详情",
+        });
+      } else {
+        const { Share } = require("react-native");
+        await Share.share({ message: `imwallet 交易详情\n金额: ${tx?.amount} USDT\n状态: ${tx?.status}` });
+      }
+    } catch (err: any) {
+      Alert.alert("分享失败", err.message || "请尝试截图后手动分享");
+    }
+  };
+
   // 设置导航栏右侧分享按钮
   useEffect(() => {
     if (tx) {
@@ -69,11 +94,7 @@ export default function TradeDetailScreen() {
         headerRight: () => (
           <TouchableOpacity
             style={{ marginRight: 16 }}
-            onPress={() => {
-              Share.share({
-                message: `imwallet 交易详情\n状态: ${tx.status === "CONFIRMED" ? "成功" : tx.status === "PENDING" ? "处理中" : "失败"}\n金额: ${tx.amount} USDT\n发送方: ${tx.fromWallet.alias}\n接收方: ${tx.toContactName || tx.toWallet.alias}`,
-              });
-            }}
+            onPress={handleShare}
           >
             <ShareIcon size={20} color="#374151" />
           </TouchableOpacity>
@@ -116,7 +137,7 @@ export default function TradeDetailScreen() {
   const senderTotal = isFeeDeducted ? amountNum : amountNum + feeNum;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
+    <ScrollView ref={detailRef} style={styles.container} contentContainerStyle={styles.scroll} collapsable={false}>
       {/* 状态区 */}
       <View style={styles.statusSection}>
         {tx.status === "CONFIRMED" && <SuccessIcon size={72} />}

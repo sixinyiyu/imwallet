@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -11,8 +11,10 @@ import {
   ScrollView,
   Modal,
   FlatList,
-  Share,
+  Alert,
 } from "react-native";
+import { captureRef } from "react-native-view-shot";
+import * as Sharing from "expo-sharing";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
@@ -71,6 +73,7 @@ export default function TransferScreen() {
     feeRate: 0.005,
     feeMode: "DEDUCTED",
   });
+  const resultRef = useRef<View>(null);
 
   // 获取手续费配置
   useEffect(() => {
@@ -158,6 +161,27 @@ export default function TransferScreen() {
     }
   };
 
+  const handleShare = async () => {
+    try {
+      const uri = await captureRef(resultRef, {
+        format: "png",
+        quality: 1,
+      });
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "image/png",
+          dialogTitle: "分享转账结果",
+        });
+      } else {
+        const { Share } = require("react-native");
+        await Share.share({ message: `imwallet 转账 ${amount} USDT\nTX: ${result?.txHash}` });
+      }
+    } catch (err: any) {
+      Alert.alert("分享失败", err.message || "请尝试截图后手动分享");
+    }
+  };
+
   // ── Success / Fail result ──
   if (result) {
     navigation.setOptions({
@@ -165,11 +189,7 @@ export default function TransferScreen() {
         ? () => (
             <TouchableOpacity
               style={{ marginRight: 16 }}
-              onPress={() =>
-                Share.share({
-                  message: `imwallet 转账 ${amount} USDT\nTX: ${result.txHash}`,
-                })
-              }
+              onPress={handleShare}
             >
               <ShareIcon size={20} color="#374151" />
             </TouchableOpacity>
@@ -185,7 +205,7 @@ export default function TransferScreen() {
       : fee;
 
     return (
-      <View style={z.resultContainer}>
+      <View style={z.resultContainer} ref={resultRef} collapsable={false}>
         {result.success ? <SuccessIcon size={80} /> : <FailureIcon size={80} />}
         <Text style={z.resultTitle}>
           {result.success ? "转账成功" : "转账失败"}

@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   Alert,
+  TouchableOpacity,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -48,14 +49,14 @@ export default function ScanScreen() {
         const url = new URL(data);
         const address = url.searchParams.get("address");
         if (address) {
-          navigation.navigate("Transfer", { toAddress: address });
+          navigation.replace("Transfer", { toAddress: address });
           return;
         }
       }
 
       // Try parsing as a plain address: 0x... (42-char hex)
       if (/^0x[a-fA-F0-9]{40}$/.test(data.trim())) {
-        navigation.navigate("Transfer", { toAddress: data.trim() });
+        navigation.replace("Transfer", { toAddress: data.trim() });
         return;
       }
 
@@ -63,9 +64,9 @@ export default function ScanScreen() {
       Alert.alert("扫描结果", data, [
         {
           text: "作为地址填入转账",
-          onPress: () => navigation.navigate("Transfer", { toAddress: data }),
+          onPress: () => navigation.replace("Transfer", { toAddress: data }),
         },
-        { text: "取消" },
+        { text: "取消", onPress: () => setScanned(false) },
       ]);
     } catch {
       Alert.alert("无法识别", "请扫描有效的钱包地址 QR 码");
@@ -84,6 +85,14 @@ export default function ScanScreen() {
         onBarcodeScanned={scanned ? undefined : handleScanned}
       >
         <View style={styles.overlay}>
+          {/* 关闭按钮 */}
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.closeBtnText}>✕</Text>
+          </TouchableOpacity>
+
           <View style={styles.overlayTop}>
             <Text style={styles.hintText}>将 QR 码对准取景框</Text>
           </View>
@@ -112,6 +121,19 @@ const styles = StyleSheet.create({
   permissionBtnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   camera: { flex: 1 },
   overlay: { flex: 1 },
+  closeBtn: {
+    position: "absolute",
+    top: 56,
+    left: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  closeBtnText: { color: "#fff", fontSize: 20, fontWeight: "600" },
   overlayTop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
