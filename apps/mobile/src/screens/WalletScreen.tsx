@@ -30,6 +30,7 @@ export default function WalletScreen() {
     wallets,
     activeWallet,
     totalBalanceCny,
+    totalBalanceUsd,
     tokens,
     loading,
     fetchWallets,
@@ -153,6 +154,7 @@ export default function WalletScreen() {
         {/* Balance Card */}
         <BalanceCard
           totalBalanceCny={totalBalanceCny}
+          totalBalanceUsd={totalBalanceUsd}
           address={activeWallet?.address ?? ""}
           onCopy={handleCopyAddress}
         />

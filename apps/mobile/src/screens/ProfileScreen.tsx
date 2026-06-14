@@ -35,11 +35,15 @@ export default function ProfileScreen() {
     }
   };
 
-  useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000);
-    return () => clearInterval(interval);
-  }, []);
+import { useFocusEffect } from "@react-navigation/native";
+
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchUnreadCount();
+      const interval = setInterval(fetchUnreadCount, 30000);
+      return () => clearInterval(interval);
+    }, [])
+  );
 
   const handleLogout = async () => {
     setShowLogoutModal(false);

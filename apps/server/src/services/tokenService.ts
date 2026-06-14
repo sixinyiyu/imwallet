@@ -108,7 +108,7 @@ export async function getOrCreateWalletToken(
 
 export async function getWalletBalance(
   walletId: string
-): Promise<{ totalBalanceCny: string; address: string }> {
+): Promise<{ totalBalanceCny: string; totalBalanceUsd: string; address: string }> {
   const wallet = await prisma.wallet.findUnique({
     where: { id: walletId },
   });
@@ -123,16 +123,23 @@ export async function getWalletBalance(
     include: { token: true },
   });
 
-  const cnyFiat = await prisma.fiatCurrency.findUnique({ where: { code: "CNY" } });
+  const [usdtFiat, cnyFiat] = await Promise.all([
+    prisma.fiatCurrency.findUnique({ where: { code: "USD" } }),
+    prisma.fiatCurrency.findUnique({ where: { code: "CNY" } }),
+  ]);
+  const usdRate = usdtFiat ? parseFloat(usdtFiat.rate.toString()) : 1;
   const cnyRate = cnyFiat ? parseFloat(cnyFiat.rate.toString()) : 7.25;
 
   let totalCny = 0;
+  let totalUsd = 0;
   for (const wt of walletTokens) {
     totalCny += parseFloat(wt.balance.toString()) * cnyRate;
+    totalUsd += parseFloat(wt.balance.toString()) * usdRate;
   }
 
   return {
     totalBalanceCny: totalCny.toFixed(2),
+    totalBalanceUsd: totalUsd.toFixed(2),
     address: wallet.address,
   };
 }

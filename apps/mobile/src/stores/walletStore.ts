@@ -7,6 +7,7 @@ interface WalletState {
   wallets: Wallet[];
   activeWallet: Wallet | null;
   totalBalanceCny: string;
+  totalBalanceUsd: string;
   tokens: TokenBalance[];
   loading: boolean;
   hasFetched: boolean;
@@ -21,6 +22,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   wallets: [],
   activeWallet: null,
   totalBalanceCny: "0",
+  totalBalanceUsd: "0",
   tokens: [],
   loading: false,
   hasFetched: false,
@@ -67,6 +69,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       ]);
       set({
         totalBalanceCny: balanceData.totalBalanceCny,
+        totalBalanceUsd: balanceData.totalBalanceUsd || "0",
         tokens: tokensData.tokens,
       });
     } catch {

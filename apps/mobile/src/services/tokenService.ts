@@ -5,7 +5,7 @@ import { transactionService } from "./transactionService";
 export const tokenService = {
   async getBalance(
     walletId: string
-  ): Promise<{ totalBalanceCny: string; address: string }> {
+  ): Promise<{ totalBalanceCny: string; totalBalanceUsd: string; address: string }> {
     const { data } = await api.get(`/tokens/${walletId}/balance`);
     return data;
   },

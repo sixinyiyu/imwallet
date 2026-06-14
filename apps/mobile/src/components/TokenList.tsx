@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import type { TokenBalance } from "../types";
 import { USDTIcon } from "./icons";
 import TronIcon from "./icons/TronIcon";
+import { useFiatStore } from "../stores/fiatStore";
 
 interface Props {
   tokens: TokenBalance[];
@@ -10,6 +11,8 @@ interface Props {
 }
 
 export default function TokenList({ tokens, onTokenPress }: Props) {
+  const { currency } = useFiatStore();
+
   if (tokens.length === 0) {
     return (
       <View style={styles.empty}>
@@ -17,6 +20,13 @@ export default function TokenList({ tokens, onTokenPress }: Props) {
       </View>
     );
   }
+
+  const getDisplayValue = (token: TokenBalance) => {
+    if (currency.code === "USD") return token.usdValue;
+    if (currency.code === "CNY") return token.cnyValue;
+    // For other currencies, use CNY as fallback
+    return token.cnyValue;
+  };
 
   return (
     <View style={styles.container}>
@@ -42,8 +52,9 @@ export default function TokenList({ tokens, onTokenPress }: Props) {
           </View>
           <View style={styles.balance}>
             <Text style={styles.balanceText}>{token.balance}</Text>
-            <Text style={styles.cnyValue}>≈ ¥{token.cnyValue}</Text>
-            <Text style={styles.usdValue}>≈ ${token.usdValue}</Text>
+            <Text style={styles.fiatValue}>
+              ≈ {currency.symbol}{getDisplayValue(token)}
+            </Text>
           </View>
         </TouchableOpacity>
       ))}
@@ -86,8 +97,7 @@ const styles = StyleSheet.create({
   name: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
   balance: { alignItems: "flex-end" },
   balanceText: { fontSize: 16, fontWeight: "600", color: "#1F2937" },
-  cnyValue: { fontSize: 12, color: "#1F2937", marginTop: 2, fontWeight: "500" },
-  usdValue: { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  fiatValue: { fontSize: 12, color: "#1F2937", marginTop: 2, fontWeight: "500" },
   empty: { alignItems: "center", padding: 32 },
   emptyText: { fontSize: 14, color: "#9CA3AF" },
 });

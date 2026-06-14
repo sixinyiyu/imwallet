@@ -1,22 +1,31 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { useFiatStore } from "../stores/fiatStore";
 
 interface Props {
   totalBalanceCny: string;
+  totalBalanceUsd: string;
   address: string;
   onCopy: () => void;
 }
 
-export default function BalanceCard({ totalBalanceCny, address, onCopy }: Props) {
+export default function BalanceCard({ totalBalanceCny, totalBalanceUsd, address, onCopy }: Props) {
+  const { currency } = useFiatStore();
   const shortAddr = address
     ? `${address.slice(0, 10)}...${address.slice(-8)}`
     : "—";
 
+  const displayValue = currency.code === "USD"
+    ? totalBalanceUsd
+    : totalBalanceCny;
+
+  const currencyLabel = currency.code === "USD" ? "USD" : "CNY";
+
   return (
     <View style={styles.card}>
-      <Text style={styles.balanceLabel}>总余额 (CNY)</Text>
+      <Text style={styles.balanceLabel}>总余额 ({currencyLabel})</Text>
       <Text style={styles.balanceValue} adjustsFontSizeToFit numberOfLines={1}>
-        ¥ {totalBalanceCny ? parseFloat(totalBalanceCny).toFixed(2) : "0.00"}
+        {currency.symbol} {displayValue ? parseFloat(displayValue).toFixed(2) : "0.00"}
       </Text>
       <View style={styles.addressRow}>
         <Text style={styles.addressLabel}>钱包地址</Text>
