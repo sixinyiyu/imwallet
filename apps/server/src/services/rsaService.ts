@@ -1,48 +1,53 @@
-import { generateKeyPairSync, publicEncrypt, privateDecrypt, constants } from "crypto";
+import { generateKeyPairSync, privateDecrypt, constants } from "crypto";
+import { readFileSync, existsSync } from "fs";
 
 let privateKey: string;
 let publicKey: string;
 
 /**
  * Normalize a PEM key string to ensure proper newlines.
- * Handles cases where systemd EnvironmentFile stripped backslashes:
- * - .env has \n → systemd strips \ → becomes literal "n"
- * - .env has \\n → systemd strips one \ → becomes \n → replace works
- * Also handles dotenv converting \n to real newlines.
+ * Handles cases where systemd EnvironmentFile stripped backslashes.
  */
 function normalizePem(pem: string): string {
-  // 1. Replace escaped \n (backslash + n) with real newlines
   let result = pem.replace(/\\n/g, "\n");
-
-  // 2. Fix broken PEM where systemd ate the backslash:
-  //    "-----BEGIN PUBLIC KEY-----nMIIBIj..." → "-----BEGIN PUBLIC KEY-----\nMIIBIj..."
-  //    This happens when .env has \n but systemd strips the \
   result = result.replace(/-----BEGIN [A-Z ]+-----n/g, (m) => m.replace(/n$/, "\n"));
   result = result.replace(/-----END [A-Z ]+-----n/g, (m) => m.replace(/n$/, "\n"));
-
-  // 3. Fix "n" between base64 lines (PEM spec: 64-char lines + newline)
-  //    "...AQABn-----END" or "...base64nbase64"
   result = result.replace(/([A-Za-z0-9+/=]{64})n/g, "$1\n");
-
-  // 4. Ensure newline before END marker
   result = result.replace(/\n*-----END/g, "\n-----END");
-
-  // 5. Ensure trailing newline
   if (!result.endsWith("\n")) {
     result += "\n";
   }
-
   return result;
 }
 
 /**
  * Initialize RSA key pair.
- * Priority: environment variables > auto-generate in memory
- * In production, keys should be set via RSA_PRIVATE_KEY and RSA_PUBLIC_KEY env vars.
- * In development, keys are auto-generated and kept in memory only.
+ * Priority:
+ *   1. File paths (RSA_PRIVATE_KEY_PATH / RSA_PUBLIC_KEY_PATH) — recommended for production
+ *   2. Inline strings (RSA_PRIVATE_KEY / RSA_PUBLIC_KEY) — prone to newline escaping issues
+ *   3. Auto-generate in memory — development only
  */
 export function initRSAKeys(): void {
-  // 1. Try loading from environment variables (production)
+  // 1. Try loading from file paths (recommended for production)
+  const privateKeyPath = process.env.RSA_PRIVATE_KEY_PATH;
+  const publicKeyPath = process.env.RSA_PUBLIC_KEY_PATH;
+
+  if (privateKeyPath && publicKeyPath) {
+    if (!existsSync(privateKeyPath)) {
+      console.error(`🔑 RSA private key file not found: ${privateKeyPath}`);
+    }
+    if (!existsSync(publicKeyPath)) {
+      console.error(`🔑 RSA public key file not found: ${publicKeyPath}`);
+    }
+    if (existsSync(privateKeyPath) && existsSync(publicKeyPath)) {
+      privateKey = readFileSync(privateKeyPath, "utf-8");
+      publicKey = readFileSync(publicKeyPath, "utf-8");
+      console.log(`🔑 RSA keys loaded from files (${privateKeyPath}, ${publicKeyPath})`);
+      return;
+    }
+  }
+
+  // 2. Try loading from environment variables (inline strings)
   const envPrivateKey = process.env.RSA_PRIVATE_KEY;
   const envPublicKey = process.env.RSA_PUBLIC_KEY;
 
@@ -53,7 +58,7 @@ export function initRSAKeys(): void {
     return;
   }
 
-  // 2. Auto-generate (development / first run)
+  // 3. Auto-generate (development / first run)
   const { publicKey: pub, privateKey: priv } = generateKeyPairSync("rsa", {
     modulusLength: 2048,
     publicKeyEncoding: {
@@ -68,7 +73,7 @@ export function initRSAKeys(): void {
 
   privateKey = priv;
   publicKey = pub;
-  console.log("🔑 RSA keys auto-generated (set RSA_PRIVATE_KEY/RSA_PUBLIC_KEY env vars for production)");
+  console.log("🔑 RSA keys auto-generated (set RSA_PRIVATE_KEY_PATH/RSA_PUBLIC_KEY_PATH for production)");
 }
 
 /**

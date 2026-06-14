@@ -72,9 +72,13 @@ JWT_SECRET=CHANGE_ME_TO_A_STRONG_RANDOM_STRING
 JWT_EXPIRES_IN=7d
 
 # RSA 密钥 (生产环境必须设置，否则每次重启会重新生成)
-# 生成方式: ssh-keygen -t rsa -b 2048 -m PEM -f private.pem
-# RSA_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----
-# RSA_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----
+# 推荐方式: 使用文件路径，避免换行符转义问题
+# 生成方式: ssh-keygen -t rsa -b 2048 -m PEM -f /opt/imwallet-server/keys/private.pem
+# RSA_PRIVATE_KEY_PATH=/opt/imwallet-server/keys/private.pem
+# RSA_PUBLIC_KEY_PATH=/opt/imwallet-server/keys/public.pem
+# 备选方式: 内联字符串 (systemd 会吃掉反斜杠，需要用 \\n)
+# RSA_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----
+# RSA_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----\\n...\\n-----END PUBLIC KEY-----
 
 # 种子数据密码 (首次 db:seed 时使用)
 SEED_PASSWORD=CHANGE_ME

@@ -65,6 +65,8 @@ imwallet/
 | `JWT_EXPIRES_IN` | Token 过期时间 | `7d` |
 | `RSA_PRIVATE_KEY` | RSA 私钥（PEM格式，`\n`转义） | `-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----` |
 | `RSA_PUBLIC_KEY` | RSA 公钥（PEM格式，`\n`转义） | `-----BEGIN PUBLIC KEY-----\\n...\\n-----END PUBLIC KEY-----` |
+| `RSA_PRIVATE_KEY_PATH` | RSA 私钥文件路径（推荐，无转义问题） | `/opt/imwallet-server/keys/private.pem` |
+| `RSA_PUBLIC_KEY_PATH` | RSA 公钥文件路径（推荐，无转义问题） | `/opt/imwallet-server/keys/public.pem` |
 | `SEED_PASSWORD` | 种子数据密码（damotou 初始密码） | 自定义密码 |
 | `FEE_RATE` | 手续费率 | `0.005` |
 | `FEE_MODE` | 手续费模式 | `EXTRA` 或 `DEDUCTED` |

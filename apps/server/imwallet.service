@@ -24,6 +24,9 @@ ProtectHome=true
 ReadWritePaths=/opt/imwallet-server /var/log/imwallet
 PrivateTmp=true
 
+# 允许读取密钥文件目录
+ReadOnlyPaths=/opt/imwallet-server/keys
+
 # 日志: 同时写入 journal 和文件
 StandardOutput=journal+file:/var/log/imwallet/imwallet.log
 StandardError=journal+file:/var/log/imwallet/imwallet-error.log
