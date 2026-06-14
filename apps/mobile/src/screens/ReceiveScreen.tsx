@@ -1,7 +1,9 @@
-import React, { useMemo } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Share } from "react-native";
+import React, { useMemo, useRef } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import QRCode from "react-native-qrcode-svg";
+import { captureRef } from "react-native-view-shot";
+import * as Sharing from "expo-sharing";
 import { useWalletStore } from "../stores/walletStore";
 import { CopyIcon, ShareIcon, USDTIcon } from "../components/icons";
 import TronIcon from "../components/icons/TronIcon";
@@ -18,6 +20,7 @@ export default function ReceiveScreen() {
   const route = useRoute<ReceiveRouteProp>();
   const { activeWallet, tokens } = useWalletStore();
   const address = activeWallet?.address ?? "";
+  const qrWrapperRef = useRef<View>(null);
 
   const tokenSymbol = route.params?.tokenSymbol || "USDT";
   const tokenId = route.params?.tokenId;
@@ -45,16 +48,31 @@ export default function ReceiveScreen() {
   };
 
   const handleShare = async () => {
-    if (address) {
-      try {
-        await Share.share({ message: address });
-      } catch {}
+    if (!qrWrapperRef.current) return;
+    try {
+      const uri = await captureRef(qrWrapperRef, {
+        format: "png",
+        quality: 1,
+      });
+
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "image/png",
+          dialogTitle: "分享收款二维码",
+        });
+      } else {
+        const { Share } = require("react-native");
+        await Share.share({ message: `${currentToken.symbol} 收款地址: ${address}` });
+      }
+    } catch (err: any) {
+      Alert.alert("分享失败", err.message || "请尝试复制地址后手动分享");
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* 代币 icon + 名称 — 在 QR 码上方区域 */}
+      {/* 代币 icon + 名称 */}
       <View style={styles.tokenHeader}>
         <View style={styles.tokenIconWrap}>
           {renderTokenIcon(currentToken.symbol, 36)}
@@ -65,15 +83,15 @@ export default function ReceiveScreen() {
       {/* QR Code */}
       <View style={styles.qrContainer}>
         {address ? (
-          <View style={styles.qrWrapper}>
+          <View ref={qrWrapperRef} style={styles.qrWrapper} collapsable={false}>
             <QRCode
               value={qrValue || address}
-              size={200}
+              size={220}
               color="#1F2937"
               backgroundColor="#FFFFFF"
             />
             <Text style={styles.qrAddressLabel}>钱包地址</Text>
-            <Text style={styles.qrAddress} selectable>
+            <Text style={styles.qrAddress} selectable adjustsFontSizeToFit numberOfLines={1}>
               {address}
             </Text>
           </View>
@@ -112,7 +130,6 @@ export default function ReceiveScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: "center", padding: 24, backgroundColor: "#F9FAFB" },
-  // 代币头部 — 在 QR 上方
   tokenHeader: {
     alignItems: "center",
     marginTop: 24,
@@ -135,7 +152,7 @@ const styles = StyleSheet.create({
   qrContainer: { alignItems: "center" },
   qrWrapper: {
     alignItems: "center",
-    padding: 24,
+    padding: 28,
     backgroundColor: "#fff",
     borderRadius: 16,
     elevation: 3,
@@ -146,15 +163,15 @@ const styles = StyleSheet.create({
   },
   qrAddressLabel: { fontSize: 12, color: "#6B7280", marginTop: 16, marginBottom: 4 },
   qrAddress: {
-    fontSize: 11,
+    fontSize: 12,
     color: "#374151",
     fontFamily: "monospace",
     textAlign: "center",
-    maxWidth: 240,
+    maxWidth: 280,
   },
   qrPlaceholder: {
-    width: 240,
-    height: 240,
+    width: 276,
+    height: 276,
     backgroundColor: "#fff",
     borderRadius: 16,
     alignItems: "center",

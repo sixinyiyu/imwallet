@@ -38,10 +38,14 @@ export default function TransferScreen() {
   const [selectedToken, setSelectedToken] = useState<TokenBalance | null>(null);
   const [showTokenPicker, setShowTokenPicker] = useState(false);
 
-  // 初始化选中代币
+  // 初始化选中代币：优先匹配路由传入的 tokenSymbol
   useEffect(() => {
     if (tokens.length > 0 && !selectedToken) {
-      setSelectedToken(tokens[0]);
+      const paramSymbol = route.params?.tokenSymbol;
+      const matched = paramSymbol
+        ? tokens.find((t) => t.symbol === paramSymbol)
+        : null;
+      setSelectedToken(matched || tokens[0]);
     }
   }, [tokens]);
 
@@ -347,17 +351,16 @@ export default function TransferScreen() {
             keyboardType="decimal-pad"
           />
           <View style={z.tokenInfoRow}>
-            <Text style={z.balanceText}>
-              可用余额: {selectedBalance} {selectedToken?.symbol || "USDT"} (≈ ${balance.toFixed(2)})
-            </Text>
+            <Text style={z.infoLabel}>可用余额</Text>
+            <Text style={z.infoValue}>{selectedBalance} {selectedToken?.symbol || "USDT"} (≈ ${balance.toFixed(2)})</Text>
           </View>
           <View style={z.tokenInfoRow}>
-            <Text style={z.feeText}>
-              手续费率 {feeRate * 100}%（{feeModeDesc}）
-            </Text>
-            <Text style={z.receiveText}>
-              预计到账 ≈ {actualReceive.toFixed(6)}
-            </Text>
+            <Text style={z.infoLabel}>手续费率</Text>
+            <Text style={z.infoValue}>{feeRate * 100}%<Text style={z.feeModeDesc}>（{feeModeDesc}）</Text></Text>
+          </View>
+          <View style={z.tokenInfoRow}>
+            <Text style={z.infoLabel}>预计到账</Text>
+            <Text style={z.receiveValue}>≈ {actualReceive.toFixed(6)}</Text>
           </View>
         </View>
 
@@ -614,10 +617,11 @@ const z = StyleSheet.create({
     color: "#1F2937",
     marginBottom: 12,
   },
-  tokenInfoRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
-  balanceText: { fontSize: 13, color: "#6B7280" },
-  feeText: { fontSize: 13, color: "#6B7280" },
-  receiveText: { fontSize: 13, color: "#10B981", fontWeight: "500" },
+  tokenInfoRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6 },
+  infoLabel: { fontSize: 13, color: "#6B7280" },
+  infoValue: { fontSize: 13, color: "#374151", fontWeight: "500" },
+  feeModeDesc: { fontSize: 11, color: "#9CA3AF", fontWeight: "400" },
+  receiveValue: { fontSize: 13, color: "#10B981", fontWeight: "600" },
   // Input
   input: {
     backgroundColor: "#fff",

@@ -9,18 +9,20 @@ interface Props {
 
 export default function BalanceCard({ totalBalanceCny, address, onCopy }: Props) {
   const shortAddr = address
-    ? `${address.slice(0, 8)}...${address.slice(-6)}`
+    ? `${address.slice(0, 10)}...${address.slice(-8)}`
     : "—";
 
   return (
     <View style={styles.card}>
       <Text style={styles.balanceLabel}>总余额 (CNY)</Text>
-      <Text style={styles.balanceValue}>
+      <Text style={styles.balanceValue} adjustsFontSizeToFit numberOfLines={1}>
         ¥ {totalBalanceCny ? parseFloat(totalBalanceCny).toFixed(2) : "0.00"}
       </Text>
       <View style={styles.addressRow}>
         <Text style={styles.addressLabel}>钱包地址</Text>
-        <Text style={styles.addressText}>{shortAddr}</Text>
+        <Text style={styles.addressText} adjustsFontSizeToFit numberOfLines={1}>
+          {shortAddr}
+        </Text>
         <TouchableOpacity style={styles.copyButton} onPress={onCopy}>
           <Text style={styles.copyText}>复制</Text>
         </TouchableOpacity>
@@ -43,7 +45,7 @@ const styles = StyleSheet.create({
   },
   balanceLabel: { fontSize: 14, color: "rgba(255,255,255,0.8)", marginBottom: 4 },
   balanceValue: {
-    fontSize: 36,
+    fontSize: 28,
     fontWeight: "700",
     color: "#fff",
     marginBottom: 20,
@@ -58,7 +60,7 @@ const styles = StyleSheet.create({
   addressLabel: { fontSize: 12, color: "rgba(255,255,255,0.7)", marginRight: 8 },
   addressText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12,
     color: "#fff",
     fontFamily: "monospace",
   },
@@ -67,6 +69,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 6,
+    marginLeft: 8,
   },
   copyText: { fontSize: 12, color: "#fff", fontWeight: "600" },
 });

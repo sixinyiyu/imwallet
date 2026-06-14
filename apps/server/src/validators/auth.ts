@@ -9,7 +9,7 @@ export const registerSchema = z.object({
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")
-    .max(128, "Password must be at most 128 characters"),
+    .max(512, "Password must be at most 512 characters"),
   deviceInfo: z.string().optional(),
 });
 

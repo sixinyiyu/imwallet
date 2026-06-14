@@ -5,7 +5,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useAuthStore } from "../stores/authStore";
 import { notificationService } from "../services/authService";
-import { WalletIcon, AboutIcon, LogoutIcon, CopyIcon, UserIcon } from "../components/icons";
+import { WalletIcon, AboutIcon, LogoutIcon, CopyIcon } from "../components/icons";
 import AdminIcon from "../components/icons/AdminIcon";
 import BellIcon from "../components/icons/BellIcon";
 
@@ -69,13 +69,12 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <UserIcon size={20} color="#374151" />
         <Text style={styles.headerTitle}>我</Text>
         <TouchableOpacity
           style={styles.bellButton}
           onPress={() => navigation.navigate("Notifications")}
         >
-          <BellIcon size={24} color="#374151" />
+          <BellIcon size={22} color="#374151" />
           {unreadCount > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>
@@ -140,11 +139,10 @@ const styles = StyleSheet.create({
   header: {
     paddingTop: 56,
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingBottom: 12,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
-    flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -152,12 +150,16 @@ const styles = StyleSheet.create({
   bellButton: {
     position: "absolute",
     right: 16,
+    top: 56,
+    bottom: 12,
+    justifyContent: "center",
+    alignItems: "center",
     padding: 4,
   },
   badge: {
     position: "absolute",
-    top: -4,
-    right: -6,
+    top: 0,
+    right: 0,
     backgroundColor: "#EF4444",
     borderRadius: 10,
     minWidth: 18,
