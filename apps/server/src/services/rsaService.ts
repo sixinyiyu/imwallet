@@ -4,6 +4,38 @@ let privateKey: string;
 let publicKey: string;
 
 /**
+ * Normalize a PEM key string to ensure proper newlines.
+ * Handles cases where systemd EnvironmentFile stripped backslashes:
+ * - .env has \n → systemd strips \ → becomes literal "n"
+ * - .env has \\n → systemd strips one \ → becomes \n → replace works
+ * Also handles dotenv converting \n to real newlines.
+ */
+function normalizePem(pem: string): string {
+  // 1. Replace escaped \n (backslash + n) with real newlines
+  let result = pem.replace(/\\n/g, "\n");
+
+  // 2. Fix broken PEM where systemd ate the backslash:
+  //    "-----BEGIN PUBLIC KEY-----nMIIBIj..." → "-----BEGIN PUBLIC KEY-----\nMIIBIj..."
+  //    This happens when .env has \n but systemd strips the \
+  result = result.replace(/-----BEGIN [A-Z ]+-----n/g, (m) => m.replace(/n$/, "\n"));
+  result = result.replace(/-----END [A-Z ]+-----n/g, (m) => m.replace(/n$/, "\n"));
+
+  // 3. Fix "n" between base64 lines (PEM spec: 64-char lines + newline)
+  //    "...AQABn-----END" or "...base64nbase64"
+  result = result.replace(/([A-Za-z0-9+/=]{64})n/g, "$1\n");
+
+  // 4. Ensure newline before END marker
+  result = result.replace(/\n*-----END/g, "\n-----END");
+
+  // 5. Ensure trailing newline
+  if (!result.endsWith("\n")) {
+    result += "\n";
+  }
+
+  return result;
+}
+
+/**
  * Initialize RSA key pair.
  * Priority: environment variables > auto-generate in memory
  * In production, keys should be set via RSA_PRIVATE_KEY and RSA_PUBLIC_KEY env vars.
@@ -15,8 +47,8 @@ export function initRSAKeys(): void {
   const envPublicKey = process.env.RSA_PUBLIC_KEY;
 
   if (envPrivateKey && envPublicKey) {
-    privateKey = envPrivateKey.replace(/\\n/g, "\n");
-    publicKey = envPublicKey.replace(/\\n/g, "\n");
+    privateKey = normalizePem(envPrivateKey);
+    publicKey = normalizePem(envPublicKey);
     console.log("🔑 RSA keys loaded from environment variables");
     return;
   }
