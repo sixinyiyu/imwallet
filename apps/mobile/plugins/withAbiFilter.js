@@ -1,4 +1,4 @@
-const { withAppBuildGradle, withDangerousMod, withAndroidManifest } = require("expo/config-plugins");
+const { withAppBuildGradle, withDangerousMod } = require("expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
 
@@ -8,7 +8,6 @@ const path = require("path");
  * 2. Enables minification (R8) and resource shrinking for release builds
  * 3. Reads API_BASE_URL env var and injects into app.json extra.apiBaseUrl
  * 4. Reads EAS_PROJECT_ID env var and injects into app.json extra.eas.projectId
- * 5. Sets android:usesCleartextTraffic="true" in AndroidManifest.xml for HTTP support
  */
 function withAbiFilter(config) {
   const abi = process.env.BUILD_ABI;
@@ -70,16 +69,6 @@ function withAbiFilter(config) {
         /(\s+release\s*\{)/,
         `$1\n            ndk {\n                abiFilters '${abi}'\n            }`
       );
-    }
-    return config;
-  });
-
-  // 3. Set usesCleartextTraffic in AndroidManifest.xml for HTTP support
-  config = withAndroidManifest(config, (config) => {
-    const mainApplication = config.modResults.manifest.application[0];
-    if (mainApplication) {
-      mainApplication.$ = mainApplication.$ || {};
-      mainApplication.$["android:usesCleartextTraffic"] = "true";
     }
     return config;
   });

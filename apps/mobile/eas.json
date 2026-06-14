@@ -11,7 +11,7 @@
         "buildType": "apk"
       },
       "env": {
-        "API_BASE_URL": "http://52.198.165.132:3000/api/v1"
+        "API_BASE_URL": "https://imwallet.dpdns.org/api/v1"
       }
     },
     "preview": {
@@ -20,7 +20,7 @@
         "buildType": "apk"
       },
       "env": {
-        "API_BASE_URL": "http://52.198.165.132:3000/api/v1"
+        "API_BASE_URL": "https://imwallet.dpdns.org/api/v1"
       }
     },
     "production-arm64": {
@@ -29,7 +29,7 @@
       },
       "env": {
         "BUILD_ABI": "arm64-v8a",
-        "API_BASE_URL": "http://52.198.165.132:3000/api/v1"
+        "API_BASE_URL": "https://imwallet.dpdns.org/api/v1"
       }
     },
     "production-armv7": {
@@ -38,7 +38,7 @@
       },
       "env": {
         "BUILD_ABI": "armeabi-v7a",
-        "API_BASE_URL": "http://52.198.165.132:3000/api/v1"
+        "API_BASE_URL": "https://imwallet.dpdns.org/api/v1"
       }
     },
     "production-x86": {
@@ -47,7 +47,7 @@
       },
       "env": {
         "BUILD_ABI": "x86",
-        "API_BASE_URL": "http://52.198.165.132:3000/api/v1"
+        "API_BASE_URL": "https://imwallet.dpdns.org/api/v1"
       }
     },
     "production-x86_64": {
@@ -56,7 +56,7 @@
       },
       "env": {
         "BUILD_ABI": "x86_64",
-        "API_BASE_URL": "http://52.198.165.132:3000/api/v1"
+        "API_BASE_URL": "https://imwallet.dpdns.org/api/v1"
       }
     }
   },

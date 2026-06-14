@@ -5,10 +5,10 @@ import Constants from "expo-constants";
 const TOKEN_KEY = "imwallet_token";
 
 // Read API base URL from expo extra config (injected via EAS env at build time)
-// Fallback to localhost for development
+// Fallback to production server for development
 const BASE_URL =
   Constants.expoConfig?.extra?.apiBaseUrl ||
-  "http://localhost:3000/api/v1";
+  "https://imwallet.dpdns.org/api/v1";
 
 // Debug: log the actual API base URL to verify injection
 console.log("🔗 API_BASE_URL from extra:", Constants.expoConfig?.extra?.apiBaseUrl);

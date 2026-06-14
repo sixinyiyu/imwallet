@@ -77,7 +77,7 @@ imwallet/
 
 | 变量 | 说明 | 示例 |
 |------|------|------|
-| `API_BASE_URL` | Server API 地址 | `http://EC2公网IP:3000/api/v1` |
+| `API_BASE_URL` | Server API 地址 | `https://imwallet.dpdns.org/api/v1` |
 | `BUILD_ABI` | 目标 CPU 架构 | `arm64-v8a` / `armeabi-v7a` / `x86` / `x86_64` |
 | `EAS_PROJECT_ID` | Expo 项目 ID | 从 Expo 控制台获取 |
 
@@ -388,7 +388,28 @@ node_modules/
 
 ---
 
-## 7. 功能需求索引
+## 7. ⚠️ 构建发布规则
+
+> **重要：每次思考时必须考虑此规则，避免遗漏！**
+
+### 规则一：APP 构建必须经用户确认
+
+- **推送 `mobile-v*` tag 触发 Android/iOS 构建前，必须先获得用户确认**
+- EAS 构建额度有限，不要频繁触发小版本构建
+- 尽量积累改动，构建一个大版本，一次性包含所有变更
+- 未经确认不得擅自推送 tag 触发构建
+
+### 规则二：构建前全面检查
+
+每次触发 APP 构建前，必须确认以下事项：
+1. 所有需要注入的环境变量（`API_BASE_URL`、`EAS_PROJECT_ID`）是否通过 `--env` 正确传递给 EAS
+2. APP 端代码是否有遗漏的改动
+3. 服务端与 APP 端 API 对接是否一致
+4. 用户是否已确认可以构建
+
+---
+
+## 8. 功能需求索引
 
 | # | 功能 | 状态 |
 |---|------|------|

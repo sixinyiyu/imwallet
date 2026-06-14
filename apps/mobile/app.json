@@ -31,7 +31,7 @@
       "./plugins/withAbiFilter"
     ],
     "extra": {
-      "apiBaseUrl": "http://52.198.165.132:3000/api/v1",
+      "apiBaseUrl": "https://imwallet.dpdns.org/api/v1",
       "eas": {
         "projectId": ""
       }
