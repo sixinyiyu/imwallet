@@ -1,4 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
 import { fiatService } from "../services/fiatService";
 
@@ -10,10 +10,9 @@ export interface FiatOption {
 
 const FIAT_KEY = "imwallet_fiat_currency";
 
-const DEFAULT_FIAT: FiatOption = { code: "CNY", name: "人民币", symbol: "¥" };
+const DEFAULT_FIAT: FiatOption = { code: "USD", name: "美元", symbol: "$" };
 
 const FIAT_NAMES: Record<string, string> = {
-  CNY: "人民币",
   USD: "美元",
   EUR: "欧元",
   JPY: "日元",
@@ -35,14 +34,14 @@ export const useFiatStore = create<FiatState>((set, get) => ({
     const { availableCurrencies } = get();
     const found = availableCurrencies.find((c) => c.code === code);
     if (found) {
-      await AsyncStorage.setItem(FIAT_KEY, code);
+      await SecureStore.setItemAsync(FIAT_KEY, code);
       set({ currency: found });
     }
   },
 
   loadCurrency: async () => {
     try {
-      const saved = await AsyncStorage.getItem(FIAT_KEY);
+      const saved = await SecureStore.getItemAsync(FIAT_KEY);
       if (saved) {
         const { availableCurrencies } = get();
         const found = availableCurrencies.find((c) => c.code === saved);
@@ -58,14 +57,16 @@ export const useFiatStore = create<FiatState>((set, get) => ({
   fetchAvailableCurrencies: async () => {
     try {
       const rates = await fiatService.getFiatRates();
-      const currencies: FiatOption[] = rates.map((r) => ({
+      // 过滤掉 CNY
+      const filtered = rates.filter((r) => r.code !== "CNY");
+      const currencies: FiatOption[] = filtered.map((r) => ({
         code: r.code,
         name: FIAT_NAMES[r.code] || r.name,
         symbol: r.symbol,
       }));
       set({ availableCurrencies: currencies });
       // Re-apply saved currency if available
-      const saved = await AsyncStorage.getItem(FIAT_KEY);
+      const saved = await SecureStore.getItemAsync(FIAT_KEY);
       if (saved) {
         const found = currencies.find((c) => c.code === saved);
         if (found) set({ currency: found });

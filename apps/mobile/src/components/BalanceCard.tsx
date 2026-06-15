@@ -3,36 +3,29 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useFiatStore } from "../stores/fiatStore";
 
 interface Props {
-  totalBalanceCny: string;
   totalBalanceUsd: string;
   address: string;
   onCopy: () => void;
 }
 
-export default function BalanceCard({ totalBalanceCny, totalBalanceUsd, address, onCopy }: Props) {
+export default function BalanceCard({ totalBalanceUsd, address, onCopy }: Props) {
   const { currency } = useFiatStore();
   const shortAddr = address
     ? `${address.slice(0, 10)}...${address.slice(-8)}`
     : "—";
 
-  const displayValue = currency.code === "USD"
-    ? totalBalanceUsd
-    : totalBalanceCny;
-
-  const currencyLabel = currency.code === "USD" ? "USD" : "CNY";
-
   return (
     <View style={styles.card}>
-      <Text style={styles.balanceLabel}>总余额 ({currencyLabel})</Text>
+      <Text style={styles.balanceLabel}>总余额 ({currency.code})</Text>
       <Text style={styles.balanceValue} adjustsFontSizeToFit numberOfLines={1}>
-        {currency.symbol} {displayValue ? parseFloat(displayValue).toFixed(2) : "0.00"}
+        {currency.symbol} {totalBalanceUsd ? parseFloat(totalBalanceUsd).toFixed(2) : "0.00"}
       </Text>
       <View style={styles.addressRow}>
         <Text style={styles.addressLabel}>钱包地址</Text>
         <Text style={styles.addressText} adjustsFontSizeToFit numberOfLines={1}>
           {shortAddr}
         </Text>
-        <TouchableOpacity style={styles.copyButton} onPress={onCopy}>
+        <TouchableOpacity onPress={onCopy} style={styles.copyBtn}>
           <Text style={styles.copyText}>复制</Text>
         </TouchableOpacity>
       </View>
@@ -42,43 +35,17 @@ export default function BalanceCard({ totalBalanceCny, totalBalanceUsd, address,
 
 const styles = StyleSheet.create({
   card: {
-    margin: 16,
-    padding: 24,
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#fff",
     borderRadius: 16,
-    elevation: 3,
-    shadowColor: "#3B82F6",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
-  balanceLabel: { fontSize: 14, color: "rgba(255,255,255,0.8)", marginBottom: 4 },
-  balanceValue: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#fff",
-    marginBottom: 20,
-  },
-  addressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.15)",
-    padding: 12,
-    borderRadius: 10,
-  },
-  addressLabel: { fontSize: 12, color: "rgba(255,255,255,0.7)", marginRight: 8 },
-  addressText: {
-    flex: 1,
-    fontSize: 12,
-    color: "#fff",
-    fontFamily: "monospace",
-  },
-  copyButton: {
-    backgroundColor: "rgba(255,255,255,0.25)",
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginLeft: 8,
-  },
-  copyText: { fontSize: 12, color: "#fff", fontWeight: "600" },
+  balanceLabel: { fontSize: 14, color: "#6B7280", marginBottom: 8 },
+  balanceValue: { fontSize: 28, fontWeight: "700", color: "#1F2937", marginBottom: 16 },
+  addressRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  addressLabel: { fontSize: 13, color: "#6B7280" },
+  addressText: { fontSize: 13, color: "#374151", fontFamily: "monospace", flex: 1, marginLeft: 8 },
+  copyBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: "#EFF6FF" },
+  copyText: { color: "#3B82F6", fontSize: 13, fontWeight: "500" },
 });

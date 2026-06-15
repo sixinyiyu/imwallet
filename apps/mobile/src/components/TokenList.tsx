@@ -22,10 +22,7 @@ export default function TokenList({ tokens, onTokenPress }: Props) {
   }
 
   const getDisplayValue = (token: TokenBalance) => {
-    if (currency.code === "USD") return token.usdValue;
-    if (currency.code === "CNY") return token.cnyValue;
-    // For other currencies, use CNY as fallback
-    return token.cnyValue;
+    return token.usdValue;
   };
 
   return (

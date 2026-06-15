@@ -94,7 +94,7 @@ export default function TokenDetailScreen() {
       <View style={styles.infoCard}>
         <InfoRow label="总余额" value={`${token?.balance ?? "0"} ${tokenSymbol}`} />
         <View style={styles.infoDivider} />
-        <InfoRow label="估值(CNY)" value={`¥${token?.cnyValue ?? "0.00"}`} />
+        <InfoRow label="估值(USD)" value={`$${token?.usdValue ?? "0.00"}`} />
         <View style={styles.infoDivider} />
         <InfoRow label="代币精度" value="6" />
         <View style={styles.infoDivider} />

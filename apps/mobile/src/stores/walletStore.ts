@@ -6,7 +6,6 @@ import type { Wallet, TokenBalance } from "../types";
 interface WalletState {
   wallets: Wallet[];
   activeWallet: Wallet | null;
-  totalBalanceCny: string;
   totalBalanceUsd: string;
   tokens: TokenBalance[];
   loading: boolean;
@@ -21,7 +20,6 @@ interface WalletState {
 export const useWalletStore = create<WalletState>((set, get) => ({
   wallets: [],
   activeWallet: null,
-  totalBalanceCny: "0",
   totalBalanceUsd: "0",
   tokens: [],
   loading: false,
@@ -68,7 +66,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         tokenService.getTokenList(walletId),
       ]);
       set({
-        totalBalanceCny: balanceData.totalBalanceCny,
         totalBalanceUsd: balanceData.totalBalanceUsd || "0",
         tokens: tokensData.tokens,
       });
