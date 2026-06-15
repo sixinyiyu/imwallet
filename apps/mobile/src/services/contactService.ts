@@ -7,6 +7,14 @@ export const contactService = {
     return data.contacts;
   },
 
+  /** 根据钱包地址查找对应的用户名 */
+  async lookupAddress(address: string): Promise<string> {
+    const { data } = await api.get("/contacts/lookup", {
+      params: { address },
+    });
+    return data.username || "";
+  },
+
   async createContact(contact: {
     name: string;
     address: string;

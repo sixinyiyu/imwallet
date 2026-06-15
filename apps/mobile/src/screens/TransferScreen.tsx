@@ -62,6 +62,8 @@ export default function TransferScreen() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [showContactPicker, setShowContactPicker] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [addressInContacts, setAddressInContacts] = useState(false);
+  const [addingToContacts, setAddingToContacts] = useState(false);
   const [result, setResult] = useState<{
     success: boolean;
     txHash?: string;
@@ -98,6 +100,21 @@ export default function TransferScreen() {
   };
 
   const addressValid = useMemo(() => isValidAddress(toAddress), [toAddress]);
+
+  // 当地址校验成功时，判断是否在地址本中
+  useEffect(() => {
+    if (!addressValid || !toAddress.trim()) {
+      setAddressInContacts(false);
+      return;
+    }
+    contactService.getContacts().then((list) => {
+      setContacts(list);
+      const found = list.some((c) => c.address.toLowerCase() === toAddress.trim().toLowerCase());
+      setAddressInContacts(found);
+    }).catch(() => {
+      setAddressInContacts(false);
+    });
+  }, [addressValid, toAddress]);
   const amountNum = parseFloat(amount);
   const amountValid = !isNaN(amountNum) && amountNum > 0;
 
@@ -128,6 +145,29 @@ export default function TransferScreen() {
     if (!toAddress.trim()) return null;
     return addressValid ? "✓ 地址验证通过" : "✗ 无效的地址";
   }, [toAddress, addressValid]);
+
+  /** 点击"添加到地址本"快捷链接 */
+  const handleAddToContacts = async () => {
+    if (!addressValid || addingToContacts) return;
+    setAddingToContacts(true);
+    try {
+      // 从后台获取地址对应的用户名
+      const username = await contactService.lookupAddress(toAddress.trim());
+      const contactName = username || toAddress.trim().slice(0, 10);
+      await contactService.createContact({
+        name: contactName,
+        address: toAddress.trim(),
+      });
+      setAddressInContacts(true);
+      // 刷新联系人列表
+      const list = await contactService.getContacts();
+      setContacts(list);
+    } catch (err: any) {
+      Alert.alert("提示", "添加到地址本失败: " + (err.message || "未知错误"));
+    } finally {
+      setAddingToContacts(false);
+    }
+  };
   const btnState = submitting ? "submitting" : !canProceed ? "disabled" : "enabled";
 
   // 手续费模式说明文字
@@ -328,6 +368,23 @@ export default function TransferScreen() {
           <Text style={[z.statusText, { color: addressValid ? "#10B981" : "#EF4444" }]}>
             {addressStatus}
           </Text>
+        )}
+        {/* 地址不在地址本中时，显示"添加到地址本"快捷链接 */}
+        {addressValid && !addressInContacts && toAddress.trim() && (
+          <TouchableOpacity
+            style={z.addToContactLink}
+            onPress={handleAddToContacts}
+            disabled={addingToContacts}
+          >
+            {addingToContacts ? (
+              <ActivityIndicator size="small" color="#3B82F6" />
+            ) : (
+              <Text style={z.addToContactLinkText}>＋ 添加到地址本</Text>
+            )}
+          </TouchableOpacity>
+        )}
+        {addressValid && addressInContacts && toAddress.trim() && (
+          <Text style={z.alreadyInContactText}>已在地址本中</Text>
         )}
 
         {/* ── 代币 ── */}
@@ -602,6 +659,9 @@ const z = StyleSheet.create({
   },
   inputValid: { borderColor: "#10B981" },
   statusText: { fontSize: 13, marginTop: 6, marginLeft: 4 },
+  addToContactLink: { marginTop: 6, marginLeft: 4, paddingVertical: 4 },
+  addToContactLinkText: { fontSize: 13, color: "#3B82F6", fontWeight: "500" },
+  alreadyInContactText: { fontSize: 13, marginTop: 6, marginLeft: 4, color: "#6B7280" },
   // Token
   tokenCard: {
     backgroundColor: "#fff",

@@ -96,3 +96,29 @@ export async function deleteContact(
     where: { id: contactId },
   });
 }
+
+/** 根据钱包地址查找对应的用户名信息 */
+export async function lookupAddress(address: string): Promise<{ username: string } | null> {
+  const wallet = await prisma.wallet.findUnique({
+    where: { address },
+  });
+
+  if (!wallet) {
+    return null;
+  }
+
+  const userWallet = await prisma.userWallet.findFirst({
+    where: { walletId: wallet.id },
+    include: {
+      user: {
+        select: { username: true },
+      },
+    },
+  });
+
+  if (!userWallet) {
+    return null;
+  }
+
+  return { username: userWallet.user.username };
+}

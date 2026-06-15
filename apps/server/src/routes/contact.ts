@@ -8,6 +8,16 @@ const router = Router();
 
 router.use(authMiddleware);
 
+/** 根据钱包地址查找对应的用户名 */
+router.get("/lookup", async (req: Request, res: Response) => {
+  const address = (req.query.address as string || "").trim();
+  if (!address) {
+    return res.status(400).json({ error: "Address is required" });
+  }
+  const result = await contactService.lookupAddress(address);
+  res.json(result || { username: "" });
+});
+
 router.get("/", async (req: Request, res: Response) => {
   const contacts = await contactService.getContacts(req.user!.userId);
   res.json({ contacts });
