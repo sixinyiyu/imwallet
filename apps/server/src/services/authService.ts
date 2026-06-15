@@ -82,14 +82,14 @@ export async function login(input: LoginInput): Promise<AuthResult> {
   });
 
   if (!user) {
-    logger.warn("AUTH", `用户登录失败: 用户名不存在 - username=${input.username}`);
-    throw createError(401, "用户名不存在", "USER_NOT_FOUND");
+    logger.warn("AUTH", `用户登录失败: 用户名不存在或密码错误 - username=${input.username}`);
+    throw createError(401, "用户名或密码错误", "AUTH_FAILED");
   }
 
   // 检查软删除
   if (user.deletedAt) {
     logger.warn("AUTH", `用户登录失败: 账号已删除 - username=${input.username}`);
-    throw createError(401, "该账号已被删除", "ACCOUNT_DELETED");
+    throw createError(401, "用户名或密码错误", "AUTH_FAILED");
   }
 
   // 检查账号状态
@@ -110,7 +110,7 @@ export async function login(input: LoginInput): Promise<AuthResult> {
 
   if (!valid) {
     logger.warn("AUTH", `用户登录失败: 密码错误 - username=${input.username}`);
-    throw createError(401, "密码错误", "PASSWORD_WRONG");
+    throw createError(401, "用户名或密码错误", "AUTH_FAILED");
   }
 
   const token = generateToken(user.id, user.username, user.role);

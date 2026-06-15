@@ -66,7 +66,6 @@ export default function TransferScreen() {
   const [addressInContacts, setAddressInContacts] = useState(false);
   const [addingToContacts, setAddingToContacts] = useState(false);
   const [addressExists, setAddressExists] = useState(false);
-  const [addressLookupName, setAddressLookupName] = useState("");
   const [addressChecking, setAddressChecking] = useState(false);
   const [result, setResult] = useState<{
     success: boolean;
@@ -109,7 +108,6 @@ export default function TransferScreen() {
   useEffect(() => {
     if (!addressFormatValid || !toAddress.trim()) {
       setAddressExists(false);
-      setAddressLookupName("");
       setAddressInContacts(false);
       setAddressChecking(false);
       return;
@@ -118,16 +116,13 @@ export default function TransferScreen() {
     Promise.all([
       contactService.lookupAddress(toAddress.trim()),
       contactService.getContacts(),
-    ]).then(([username, list]) => {
-      const exists = !!username;
+    ]).then(([exists, list]) => {
       setAddressExists(exists);
-      setAddressLookupName(username);
       setContacts(list);
       const found = list.some((c) => c.address.toLowerCase() === toAddress.trim().toLowerCase());
       setAddressInContacts(found);
     }).catch(() => {
       setAddressExists(false);
-      setAddressLookupName("");
       setAddressInContacts(false);
     }).finally(() => {
       setAddressChecking(false);
@@ -168,7 +163,7 @@ export default function TransferScreen() {
     if (!addressValid || addingToContacts) return;
     setAddingToContacts(true);
     try {
-      const contactName = addressLookupName || toAddress.trim().slice(0, 10);
+      const contactName = toAddress.trim().slice(0, 10);
       await contactService.createContact({
         name: contactName,
         address: toAddress.trim(),

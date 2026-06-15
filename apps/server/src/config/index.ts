@@ -16,7 +16,11 @@ export const config = {
   port: parseInt(process.env.PORT || "3000", 10),
   nodeEnv: process.env.NODE_ENV || "development",
   jwt: {
-    secret: process.env.JWT_SECRET || "dev_jwt_secret_change_in_production",
+    secret: process.env.JWT_SECRET || (
+      (process.env.NODE_ENV || "development") === "production"
+        ? (() => { throw new Error("JWT_SECRET must be set in production"); })()
+        : "dev_jwt_secret_change_in_production"
+    ),
     expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   },
   bcrypt: {

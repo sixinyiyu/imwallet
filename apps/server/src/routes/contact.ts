@@ -14,8 +14,8 @@ router.get("/lookup", async (req: Request, res: Response) => {
   if (!address) {
     return res.status(400).json({ error: "Address is required" });
   }
-  const result = await contactService.lookupAddress(address);
-  res.json(result || { username: "" });
+  const exists = await contactService.lookupAddress(address);
+  res.json({ exists });
 });
 
 router.get("/", async (req: Request, res: Response) => {

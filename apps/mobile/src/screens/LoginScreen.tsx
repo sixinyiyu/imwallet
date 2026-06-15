@@ -43,10 +43,8 @@ export default function LoginScreen() {
       const message = err?.response?.data?.error || err.message || "登录失败";
       const code = err?.response?.data?.code || "";
 
-      if (code === "USER_NOT_FOUND") {
-        Alert.alert("登录失败", "用户名不存在，请检查后重试");
-      } else if (code === "PASSWORD_WRONG") {
-        Alert.alert("登录失败", "密码错误，请检查后重试");
+      if (code === "AUTH_FAILED") {
+        Alert.alert("登录失败", "用户名或密码错误，请检查后重试");
       } else if (code === "ACCOUNT_PENDING") {
         Alert.alert(
           "账号待审核",

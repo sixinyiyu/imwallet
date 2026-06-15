@@ -33,6 +33,12 @@ export async function createContact(
   userId: string,
   input: ContactInput
 ): Promise<ContactResult> {
+  // 检查联系人数量上限
+  const count = await prisma.contact.count({ where: { userId } });
+  if (count >= 99) {
+    throw createError(400, "Contact limit reached (max 99)");
+  }
+
   return prisma.contact.create({
     data: {
       userId,
@@ -98,13 +104,13 @@ export async function deleteContact(
 }
 
 /** 根据钱包地址查找对应的用户名信息 */
-export async function lookupAddress(address: string): Promise<{ username: string } | null> {
+export async function lookupAddress(address: string): Promise<boolean> {
   const wallet = await prisma.wallet.findUnique({
     where: { address },
   });
 
   if (!wallet) {
-    return null;
+    return false;
   }
 
   const userWallet = await prisma.userWallet.findFirst({
@@ -116,9 +122,5 @@ export async function lookupAddress(address: string): Promise<{ username: string
     },
   });
 
-  if (!userWallet) {
-    return null;
-  }
-
-  return { username: userWallet.user.username };
+  return !!userWallet;
 }

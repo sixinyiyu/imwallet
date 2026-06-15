@@ -19,15 +19,24 @@ import { logger } from "./utils/logger";
 const app = express();
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: [
+    "https://imwallet.dpdns.org",
+    "http://localhost:8081",
+    "http://localhost:19006",
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+}));
+app.use(express.json({ limit: "100kb" }));
 
 // Request logging middleware - log all HTTP requests
 app.use(requestLogger);
 
 // Health check
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({ status: "ok" });
 });
 
 // API routes

@@ -6,6 +6,7 @@ import {
   importWalletSchema,
 } from "../validators/wallet";
 import * as walletService from "../services/walletService";
+import prisma from "../config/prisma";
 
 const router = Router();
 
@@ -43,10 +44,18 @@ router.post(
 );
 
 router.get("/:id", async (req: Request, res: Response) => {
-  const wallet = await walletService.getWalletDetail(
-    req.params.id as string,
-    req.user!.userId
-  );
+  const walletId = req.params.id as string;
+  // 管理员可查看任意钱包详情，普通用户只能查看自己的
+  if (req.user?.role !== "ADMIN") {
+    const userWallet = await prisma.userWallet.findFirst({
+      where: { walletId, userId: req.user!.userId },
+    });
+    if (!userWallet) {
+      res.status(403).json({ error: "You do not have permission to view this wallet" });
+      return;
+    }
+  }
+  const wallet = await walletService.getWalletDetail(walletId, req.user!.userId);
   res.json(wallet);
 });
 

@@ -7,12 +7,12 @@ export const contactService = {
     return data.contacts;
   },
 
-  /** 根据钱包地址查找对应的用户名 */
-  async lookupAddress(address: string): Promise<string> {
+  /** 根据钱包地址查找是否存在于系统 */
+  async lookupAddress(address: string): Promise<boolean> {
     const { data } = await api.get("/contacts/lookup", {
       params: { address },
     });
-    return data.username || "";
+    return !!data.exists;
   },
 
   async createContact(contact: {

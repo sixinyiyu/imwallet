@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import { authService } from "../services/authService";
 import type { User } from "../types";
 
@@ -25,8 +25,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   login: async (username: string, password: string) => {
     const result = await authService.login(username, password);
-    await AsyncStorage.setItem(TOKEN_KEY, result.token);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(result.user));
+    // 使用 SecureStore 存储 Token（iOS Keychain / Android Keystore 加密存储）
+    await SecureStore.setItemAsync(TOKEN_KEY, result.token);
+    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(result.user));
     set({ token: result.token, user: result.user, isLoggedIn: true });
   },
 
@@ -35,15 +36,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
-    await AsyncStorage.removeItem(TOKEN_KEY);
-    await AsyncStorage.removeItem(USER_KEY);
+    await SecureStore.deleteItemAsync(TOKEN_KEY);
+    await SecureStore.deleteItemAsync(USER_KEY);
     set({ token: null, user: null, isLoggedIn: false });
   },
 
   loadSession: async () => {
     try {
-      const token = await AsyncStorage.getItem(TOKEN_KEY);
-      const userStr = await AsyncStorage.getItem(USER_KEY);
+      const token = await SecureStore.getItemAsync(TOKEN_KEY);
+      const userStr = await SecureStore.getItemAsync(USER_KEY);
       if (token && userStr) {
         const user = JSON.parse(userStr) as User;
         set({ token, user, isLoggedIn: true, loading: false });

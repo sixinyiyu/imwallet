@@ -6,8 +6,11 @@ export const transferSchema = z.object({
   amount: z
     .string()
     .refine(
-      (val) => /^\d+(\.\d{1,8})?$/.test(val) && parseFloat(val) > 0,
-      "Amount must be a positive number with up to 8 decimal places"
+      (val) => {
+        const num = parseFloat(val);
+        return /^\d+(\.\d{1,8})?$/.test(val) && num >= 0.01 && num <= 999999999;
+      },
+      "Amount must be between 0.01 and 999,999,999 with up to 8 decimal places"
     ),
   tokenId: z.string().min(1, "Token ID is required"),
   memo: z.string().max(256).optional(),

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { config } from "../config";
 import { logger } from "../utils/logger";
+import prisma from "../config/prisma";
 
 export interface AuthPayload {
   userId: string;
@@ -39,8 +40,24 @@ export function authMiddleware(
 
   try {
     const payload = jwt.verify(token, config.jwt.secret) as AuthPayload;
-    req.user = payload;
-    next();
+
+    // 校验用户实时状态：是否活跃且未被删除
+    prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { status: true, deletedAt: true },
+    }).then((user) => {
+      if (!user || user.deletedAt || user.status !== "ACTIVE") {
+        logger.warn("AUTH", `认证失败: 用户状态异常 - userId=${payload.userId}, status=${user?.status}`);
+        res.status(401).json({ error: "Account is not active" });
+        return;
+      }
+      req.user = payload;
+      next();
+    }).catch((dbErr) => {
+      logger.error("AUTH", `数据库查询失败: ${dbErr.message}`);
+      res.status(500).json({ error: "Internal server error" });
+    });
+
   } catch (err: any) {
     const reason = err.name === "TokenExpiredError" ? "Token已过期" : "Token无效";
     logger.warn(

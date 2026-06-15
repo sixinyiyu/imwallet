@@ -1,5 +1,5 @@
 import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
 
 const TOKEN_KEY = "imwallet_token";
@@ -22,7 +22,7 @@ const api = axios.create({
 
 // Attach auth token to every request
 api.interceptors.request.use(async (config) => {
-  const token = await AsyncStorage.getItem(TOKEN_KEY);
+  const token = await SecureStore.getItemAsync(TOKEN_KEY);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -35,7 +35,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Token expired — store will handle logout
-      AsyncStorage.removeItem(TOKEN_KEY);
+      SecureStore.deleteItemAsync(TOKEN_KEY);
     }
     return Promise.reject(error);
   }

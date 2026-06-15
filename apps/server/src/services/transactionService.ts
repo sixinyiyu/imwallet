@@ -60,11 +60,21 @@ async function resolveUsername(walletId: string): Promise<string> {
 }
 
 export async function transfer(
-  input: TransferInput
+  input: TransferInput,
+  userId: string
 ): Promise<TransactionResult> {
   const amount = input.amount;
 
   logger.info("TRANSFER", `转账请求开始: fromWallet=${input.fromWalletId}, toAddress=${input.toAddress}, amount=${amount}, tokenId=${input.tokenId}`);
+
+  // 校验发送钱包属于当前用户
+  const userWallet = await prisma.userWallet.findFirst({
+    where: { walletId: input.fromWalletId, userId },
+  });
+  if (!userWallet) {
+    logger.warn("TRANSFER", `转账失败: 钱包不属于当前用户 - fromWalletId=${input.fromWalletId}, userId=${userId}`);
+    throw createError(403, "Wallet does not belong to you");
+  }
 
   // Validate token exists
   const token = await prisma.token.findUnique({

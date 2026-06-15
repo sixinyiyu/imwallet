@@ -93,7 +93,8 @@ export function decryptPassword(encryptedBase64: string): string {
   const decrypted = privateDecrypt(
     {
       key: privateKey,
-      padding: constants.RSA_PKCS1_PADDING,
+      padding: constants.RSA_PKCS1_OAEP_PADDING,
+    oaepHash: "sha256",
     },
     buffer
   );

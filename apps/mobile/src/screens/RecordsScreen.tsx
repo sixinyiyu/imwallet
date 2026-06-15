@@ -11,12 +11,14 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
+import { useRoute, RouteProp } from "@react-navigation/native";
 import { useWalletStore } from "../stores/walletStore";
 import { transactionService, type TransactionFilter } from "../services/transactionService";
 import type { Transaction } from "../types";
 import { SearchIcon, USDTIcon } from "../components/icons";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+type RecordsRoute = RouteProp<RootStackParamList, "Records">;
 
 type TypeFilter = "all" | "send" | "receive";
 type TimeFilter = "today" | "7d" | "30d" | "90d";
@@ -46,7 +48,11 @@ function shortenAddress(addr: string): string {
 
 export default function RecordsScreen() {
   const navigation = useNavigation<Nav>();
+  const route = useRoute<RecordsRoute>();
   const { activeWallet } = useWalletStore();
+  // 支持路由传入 walletId（管理员查看其他用户交易记录时使用）
+  const currentWalletId = route.params?.walletId || activeWallet?.id;
+  const currentWalletAddress = activeWallet?.address || "";
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -76,10 +82,10 @@ export default function RecordsScreen() {
 
   const loadTransactions = useCallback(
     async (p: number, append = false) => {
-      if (!activeWallet) return;
+      if (!currentWalletId) return;
       try {
         const filter: TransactionFilter = {
-          walletId: activeWallet.id,
+          walletId: currentWalletId,
           page: p,
           limit: 20,
           type: typeFilter,
@@ -99,10 +105,10 @@ export default function RecordsScreen() {
 
   // 筛选条件变化时重新加载
   useEffect(() => {
-    if (!activeWallet) return;
+    if (!currentWalletId) return;
     setLoading(true);
     loadTransactions(1).finally(() => setLoading(false));
-  }, [typeFilter, timeFilter, searchText, activeWallet]);
+  }, [typeFilter, timeFilter, searchText, currentWalletId]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -117,7 +123,7 @@ export default function RecordsScreen() {
     }
   };
 
-  if (!activeWallet) {
+  if (!currentWalletId) {
     return (
       <View style={styles.centerEmpty}>
         <Text style={styles.emptyIcon}>👛</Text>
@@ -215,7 +221,7 @@ export default function RecordsScreen() {
           renderItem={({ item }) => (
             <TransactionCard
               transaction={item}
-              currentAddress={activeWallet.address}
+              currentAddress={currentWalletAddress}
               onPress={(tx) => navigation.navigate("TradeDetail", { tradeId: tx.id })}
             />
           )}
