@@ -61,15 +61,15 @@ export async function register(input: RegisterInput): Promise<RegisterResult> {
       username: input.username,
       passwordHash,
       deviceInfo: input.deviceInfo || "",
-      status: "PENDING", // 新注册用户默认待审核
+      status: "ACTIVE", // 注册即激活，无需管理员审核
       role: "NORMAL",
     },
   });
 
-  logger.info("AUTH", `用户注册成功: username=${user.username}, id=${user.id}, status=PENDING`);
+  logger.info("AUTH", `用户注册成功: username=${user.username}, id=${user.id}, status=ACTIVE`);
 
   return {
-    message: "Registration successful, pending admin approval",
+    message: "Registration successful",
     user: { id: user.id, username: user.username, status: user.status },
   };
 }
@@ -92,15 +92,10 @@ export async function login(input: LoginInput): Promise<AuthResult> {
     throw createError(401, "用户名或密码错误", "AUTH_FAILED");
   }
 
-  // 检查账号状态
-  if (user.status === "PENDING") {
-    logger.warn("AUTH", `用户登录失败: 账号待审核 - username=${input.username}`);
-    throw createError(403, "账号待审核，请等待管理员激活", "ACCOUNT_PENDING");
-  }
-
-  if (user.status === "REJECTED") {
-    logger.warn("AUTH", `用户登录失败: 账号已被拒绝 - username=${input.username}`);
-    throw createError(403, "账号已被拒绝，请联系管理员", "ACCOUNT_REJECTED");
+  // 检查账号状态（非ACTIVE则拒绝登录）
+  if (user.status !== "ACTIVE") {
+    logger.warn("AUTH", `用户登录失败: 账号状态异常 - username=${input.username}, status=${user.status}`);
+    throw createError(403, "账号已被停用，请联系管理员", "ACCOUNT_DISABLED");
   }
 
   // Decrypt RSA-encrypted password from client

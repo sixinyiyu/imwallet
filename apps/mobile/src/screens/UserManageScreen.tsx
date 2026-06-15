@@ -37,9 +37,7 @@ interface UserItem {
 const BUILT_IN_USERS = ["admin", "damotou"];
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
-  PENDING: { label: "待审核", color: "#D97706", bgColor: "#FEF3C7" },
-  ACTIVE: { label: "已激活", color: "#059669", bgColor: "#D1FAE5" },
-  REJECTED: { label: "已拒绝", color: "#DC2626", bgColor: "#FEE2E2" },
+  ACTIVE: { label: "正常", color: "#059669", bgColor: "#D1FAE5" },
 };
 
 export default function UserManageScreen() {
@@ -67,43 +65,6 @@ export default function UserManageScreen() {
     setRefreshing(true);
     await fetchUsers();
     setRefreshing(false);
-  };
-
-  const handleActivate = (userId: string, username: string) => {
-    Alert.alert("激活用户", `确定要激活用户 "${username}" 吗？`, [
-      { text: "取消", style: "cancel" },
-      {
-        text: "激活",
-        onPress: async () => {
-          try {
-            await adminService.activateUser(userId);
-            Alert.alert("成功", `用户 "${username}" 已激活`);
-            fetchUsers();
-          } catch (err: any) {
-            Alert.alert("错误", err?.response?.data?.error || err.message || "操作失败");
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleReject = (userId: string, username: string) => {
-    Alert.alert("拒绝用户", `确定要拒绝用户 "${username}" 吗？`, [
-      { text: "取消", style: "cancel" },
-      {
-        text: "拒绝",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await adminService.rejectUser(userId);
-            Alert.alert("成功", `用户 "${username}" 已拒绝`);
-            fetchUsers();
-          } catch (err: any) {
-            Alert.alert("错误", err?.response?.data?.error || err.message || "操作失败");
-          }
-        },
-      },
-    ]);
   };
 
   const handleDeactivate = (userId: string, username: string) => {
@@ -172,36 +133,12 @@ export default function UserManageScreen() {
             </View>
           </View>
           <View style={styles.cardTopRight}>
-            {item.status === "PENDING" && (
-              <>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.activateBtn]}
-                  onPress={() => handleActivate(item.id, item.username)}
-                >
-                  <Text style={styles.activateBtnText}>激活</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.rejectBtn]}
-                  onPress={() => handleReject(item.id, item.username)}
-                >
-                  <Text style={styles.rejectBtnText}>拒绝</Text>
-                </TouchableOpacity>
-              </>
-            )}
             {item.status === "ACTIVE" && (
               <TouchableOpacity
                 style={[styles.actionBtn, styles.deactivateBtn]}
                 onPress={() => handleDeactivate(item.id, item.username)}
-                >
-                <Text style={styles.deactivateBtnText}>停用</Text>
-              </TouchableOpacity>
-            )}
-            {item.status === "REJECTED" && (
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.activateBtn]}
-                onPress={() => handleActivate(item.id, item.username)}
               >
-                <Text style={styles.activateBtnText}>激活</Text>
+                <Text style={styles.deactivateBtnText}>停用</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -210,8 +147,7 @@ export default function UserManageScreen() {
             >
               <Text style={styles.deleteBtnText}>删除</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </View>        </View>
 
         {/* 下半部分：钱包余额 */}
         {item.wallets.length > 0 ? (
@@ -305,10 +241,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
   },
-  activateBtn: { backgroundColor: "#D1FAE5" },
-  activateBtnText: { color: "#059669", fontWeight: "600", fontSize: 13 },
-  rejectBtn: { backgroundColor: "#FEE2E2" },
-  rejectBtnText: { color: "#DC2626", fontWeight: "600", fontSize: 13 },
   deactivateBtn: { backgroundColor: "#FEF3C7" },
   deactivateBtnText: { color: "#D97706", fontWeight: "600", fontSize: 13 },
   deleteBtn: { backgroundColor: "#FEE2E2" },

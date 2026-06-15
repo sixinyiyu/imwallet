@@ -45,23 +45,10 @@ export default function LoginScreen() {
 
       if (code === "AUTH_FAILED") {
         Alert.alert("登录失败", "用户名或密码错误，请检查后重试");
-      } else if (code === "ACCOUNT_PENDING") {
-        Alert.alert(
-          "账号待审核",
-          "您的账号尚未通过管理员审核激活，请耐心等待审核通过后再登录。"
-        );
-      } else if (code === "ACCOUNT_REJECTED") {
-        Alert.alert(
-          "账号已拒绝",
-          "您的账号审核未通过，请联系管理员了解详情。"
-        );
+      } else if (code === "ACCOUNT_DISABLED") {
+        Alert.alert("账号已停用", "该账号已被管理员停用，请联系管理员。");
       } else if (code === "ACCOUNT_DELETED") {
         Alert.alert("账号已删除", "该账号已被管理员删除，无法登录。");
-      } else if (message.includes("pending") || message.includes("审核")) {
-        Alert.alert(
-          "账号待审核",
-          "您的账号尚未通过管理员审核激活，请耐心等待审核通过后再登录。"
-        );
       } else {
         Alert.alert("登录失败", message);
       }
