@@ -29,8 +29,9 @@ import type { Contact, TokenBalance } from "../types";
 type Nav = NativeStackNavigationProp<RootStackParamList, "Transfer">;
 type RouteType = RouteProp<RootStackParamList, "Transfer">;
 
-function isValidAddress(addr: string): boolean {
-  return /^0x[a-fA-F0-9]{40}$/.test(addr.trim());
+function isValidAddressFormat(addr: string): boolean {
+  // 放宽格式校验：0x + 40位字母数字（系统地址可能含非hex字符如 DAMOTOU）
+  return /^0x[a-zA-Z0-9]{40}$/.test(addr.trim());
 }
 
 export default function TransferScreen() {
@@ -64,6 +65,9 @@ export default function TransferScreen() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [addressInContacts, setAddressInContacts] = useState(false);
   const [addingToContacts, setAddingToContacts] = useState(false);
+  const [addressExists, setAddressExists] = useState(false);
+  const [addressLookupName, setAddressLookupName] = useState("");
+  const [addressChecking, setAddressChecking] = useState(false);
   const [result, setResult] = useState<{
     success: boolean;
     txHash?: string;
@@ -99,22 +103,39 @@ export default function TransferScreen() {
     setShowContactPicker(false);
   };
 
-  const addressValid = useMemo(() => isValidAddress(toAddress), [toAddress]);
+  const addressFormatValid = useMemo(() => isValidAddressFormat(toAddress), [toAddress]);
 
-  // 当地址校验成功时，判断是否在地址本中
+  // 当地址格式正确时，调用后端校验地址是否真实存在
   useEffect(() => {
-    if (!addressValid || !toAddress.trim()) {
+    if (!addressFormatValid || !toAddress.trim()) {
+      setAddressExists(false);
+      setAddressLookupName("");
       setAddressInContacts(false);
+      setAddressChecking(false);
       return;
     }
-    contactService.getContacts().then((list) => {
+    setAddressChecking(true);
+    Promise.all([
+      contactService.lookupAddress(toAddress.trim()),
+      contactService.getContacts(),
+    ]).then(([username, list]) => {
+      const exists = !!username;
+      setAddressExists(exists);
+      setAddressLookupName(username);
       setContacts(list);
       const found = list.some((c) => c.address.toLowerCase() === toAddress.trim().toLowerCase());
       setAddressInContacts(found);
     }).catch(() => {
+      setAddressExists(false);
+      setAddressLookupName("");
       setAddressInContacts(false);
+    }).finally(() => {
+      setAddressChecking(false);
     });
-  }, [addressValid, toAddress]);
+  }, [addressFormatValid, toAddress]);
+
+  // 地址是否真正有效（格式正确 + 后端确认存在）
+  const addressValid = addressFormatValid && addressExists;
   const amountNum = parseFloat(amount);
   const amountValid = !isNaN(amountNum) && amountNum > 0;
 
@@ -141,25 +162,18 @@ export default function TransferScreen() {
 
   const insufficientBalance = amountNum > requiredBalance;
   const canProceed = addressValid && amountValid && !insufficientBalance && !!activeWallet;
-  const addressStatus = useMemo(() => {
-    if (!toAddress.trim()) return null;
-    return addressValid ? "✓ 地址验证通过" : "✗ 无效的地址";
-  }, [toAddress, addressValid]);
 
   /** 点击"添加到地址本"快捷链接 */
   const handleAddToContacts = async () => {
     if (!addressValid || addingToContacts) return;
     setAddingToContacts(true);
     try {
-      // 从后台获取地址对应的用户名
-      const username = await contactService.lookupAddress(toAddress.trim());
-      const contactName = username || toAddress.trim().slice(0, 10);
+      const contactName = addressLookupName || toAddress.trim().slice(0, 10);
       await contactService.createContact({
         name: contactName,
         address: toAddress.trim(),
       });
       setAddressInContacts(true);
-      // 刷新联系人列表
       const list = await contactService.getContacts();
       setContacts(list);
     } catch (err: any) {
@@ -306,7 +320,7 @@ export default function TransferScreen() {
                 data={contacts}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
-                  <TouchableOpacity style={z.contactItem} onPress={() => selectContact(item)}>
+                  <TouchableOpacity style={[z.contactItem, item.address.toLowerCase() === toAddress.trim().toLowerCase() && z.contactItemActive]} onPress={() => selectContact(item)}>
                     <Text style={z.contactName}>{item.name}</Text>
                     <Text style={z.contactAddr}>
                       {item.address.slice(0, 12)}...{item.address.slice(-8)}
@@ -364,27 +378,29 @@ export default function TransferScreen() {
             <ScanIcon size={22} color="#374151" />
           </TouchableOpacity>
         </View>
-        {addressStatus && (
-          <Text style={[z.statusText, { color: addressValid ? "#10B981" : "#EF4444" }]}>
-            {addressStatus}
-          </Text>
-        )}
-        {/* 地址不在地址本中时，显示"添加到地址本"快捷链接 */}
-        {addressValid && !addressInContacts && toAddress.trim() && (
-          <TouchableOpacity
-            style={z.addToContactLink}
-            onPress={handleAddToContacts}
-            disabled={addingToContacts}
-          >
-            {addingToContacts ? (
-              <ActivityIndicator size="small" color="#3B82F6" />
+        {/* 地址校验状态行 */}
+        {toAddress.trim() && (
+          <View style={z.statusRow}>
+            {addressChecking ? (
+              <ActivityIndicator size="small" color="#3B82F6" style={z.statusSpinner} />
+            ) : !addressFormatValid ? (
+              <Text style={[z.statusText, { color: "#EF4444" }]}>✗ 无效的地址格式</Text>
+            ) : !addressExists ? (
+              <Text style={[z.statusText, { color: "#EF4444" }]}>✗ 地址不存在</Text>
             ) : (
-              <Text style={z.addToContactLinkText}>＋ 添加到地址本</Text>
+              <>
+                <Text style={[z.statusText, { color: "#10B981" }]}>✓ 地址验证通过</Text>
+                {!addressInContacts && !addingToContacts && (
+                  <TouchableOpacity onPress={handleAddToContacts}>
+                    <Text style={z.addToContactLinkText}>＋ 添加到地址本</Text>
+                  </TouchableOpacity>
+                )}
+                {addingToContacts && (
+                  <ActivityIndicator size="small" color="#3B82F6" />
+                )}
+              </>
             )}
-          </TouchableOpacity>
-        )}
-        {addressValid && addressInContacts && toAddress.trim() && (
-          <Text style={z.alreadyInContactText}>已在地址本中</Text>
+          </View>
         )}
 
         {/* ── 代币 ── */}
@@ -498,7 +514,7 @@ export default function TransferScreen() {
               data={contacts}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
-                <TouchableOpacity style={z.contactItem} onPress={() => selectContact(item)}>
+                <TouchableOpacity style={[z.contactItem, item.address.toLowerCase() === toAddress.trim().toLowerCase() && z.contactItemActive]} onPress={() => selectContact(item)}>
                   <View style={z.contactAvatar}>
                     <Text style={z.contactAvatarText}>👤</Text>
                   </View>
@@ -658,10 +674,10 @@ const z = StyleSheet.create({
     borderColor: "#D1D5DB",
   },
   inputValid: { borderColor: "#10B981" },
-  statusText: { fontSize: 13, marginTop: 6, marginLeft: 4 },
-  addToContactLink: { marginTop: 6, marginLeft: 4, paddingVertical: 4 },
+  statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6, marginLeft: 4 },
+  statusSpinner: { marginLeft: 4 },
+  statusText: { fontSize: 13 },
   addToContactLinkText: { fontSize: 13, color: "#3B82F6", fontWeight: "500" },
-  alreadyInContactText: { fontSize: 13, marginTop: 6, marginLeft: 4, color: "#6B7280" },
   // Token
   tokenCard: {
     backgroundColor: "#fff",
@@ -781,6 +797,10 @@ const z = StyleSheet.create({
     padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
+  },
+  contactItemActive: {
+    backgroundColor: "#EFF6FF",
+    borderRadius: 8,
   },
   contactAvatar: {
     width: 36,
