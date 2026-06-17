@@ -122,7 +122,7 @@ export default function WalletAddAccountScreen() {
     setDrawerVisible(false);
     setCreating(false);
     // 跳转到钱包备份引导页
-    navigation.replace("BackupGuide", { walletId });
+    navigation.replace("BackupGuide", { walletId, source: "create" });
   };
 
   const hasSelection = selectedTokenIds.size > 0;

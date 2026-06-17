@@ -492,7 +492,7 @@ export default function WalletDetailScreen() {
                   const verified = await walletService.verifyWalletPassword(walletId, backupPassword.trim());
                   if (verified) {
                     setShowPasswordModal(false);
-                    navigation.navigate("BackupGuide", { walletId: wallet.id });
+                    navigation.navigate("BackupGuide", { walletId: wallet.id, source: "detail" });
                   } else {
                     setShowPasswordModal(false);
                     setPasswordErrorContext("backup");
@@ -525,7 +525,7 @@ export default function WalletDetailScreen() {
                   const verified = await walletService.verifyWalletPassword(walletId, backupPassword.trim());
                   if (verified) {
                     setShowPasswordModal(false);
-                    navigation.navigate("BackupGuide", { walletId: wallet.id });
+                    navigation.navigate("BackupGuide", { walletId: wallet.id, source: "detail" });
                   } else {
                     setShowPasswordModal(false);
                     setPasswordErrorContext("backup");

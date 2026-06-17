@@ -91,7 +91,7 @@ export function RootStack() {
       <Stack.Screen
         name="BackupGuide"
         component={BackupGuideScreen}
-        options={{ ...CENTERED_HEADER, title: "备份引导" }}
+        options={{ headerShown: true, headerTitle: "", headerBackTitle: "", headerTintColor: "#374151" }}
       />
       <Stack.Screen
         name="BackupMnemonic"

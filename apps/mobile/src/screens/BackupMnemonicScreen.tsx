@@ -146,13 +146,15 @@ export default function BackupMnemonicScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={styles.mnemonicGrid}>
-          {mnemonic.map((word, index) => (
-            <View key={index} style={styles.wordCell}>
-              <Text style={styles.wordIndex}>{index + 1}</Text>
-              <Text style={styles.wordText}>{word}</Text>
-            </View>
-          ))}
+        <View style={styles.mnemonicCard}>
+          <View style={styles.mnemonicGrid}>
+            {mnemonic.map((word, index) => (
+              <View key={index} style={styles.wordCell}>
+                <Text style={styles.wordIndex}>{index + 1}</Text>
+                <Text style={styles.wordText}>{word}</Text>
+              </View>
+            ))}
+          </View>
         </View>
       )}
 
@@ -211,11 +213,21 @@ const styles = StyleSheet.create({
   warningDesc: { fontSize: 14, color: "#6B7280", textAlign: "center", lineHeight: 22, marginBottom: 20 },
   showBtn: { backgroundColor: "#3B82F6", borderRadius: 10, paddingVertical: 14, paddingHorizontal: 32, alignItems: "center" },
   showBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
-  mnemonicGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 24 },
+  mnemonicCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  mnemonicGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   wordCell: {
-    width: "31%", backgroundColor: "#FFFFFF", borderRadius: 8, paddingVertical: 10, paddingHorizontal: 8,
+    width: "31%", borderRadius: 8, paddingVertical: 10, paddingHorizontal: 8,
     flexDirection: "row", alignItems: "center", gap: 4,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1,
   },
   wordIndex: { fontSize: 12, color: "#9CA3AF", fontWeight: "500" },
   wordText: { fontSize: 14, color: "#1F2937", fontWeight: "600", flex: 1 },

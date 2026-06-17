@@ -23,7 +23,7 @@ export type RootStackParamList = {
   UserManage: undefined;
   Notifications: undefined;
   BackupConfirm: { walletId: string };
-  BackupGuide: { walletId: string };
+  BackupGuide: { walletId: string; source?: "create" | "detail" };
   BackupMnemonic: { walletId: string };
   ConfirmMnemonic: { walletId: string; mnemonic: string };
   ForgotPassword: { walletId: string };
