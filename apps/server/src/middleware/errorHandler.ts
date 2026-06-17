@@ -25,7 +25,7 @@ export function errorHandler(
       {
         error: err.message,
         stack: err.stack,
-        userId: req.user?.userId,
+        deviceId: (req as any).device?.deviceId?.slice(0, 8) + '...',
       },
       req
     );
@@ -38,7 +38,7 @@ export function errorHandler(
         statusCode,
         message: err.message,
         code: err.code,
-        userId: req.user?.userId,
+        deviceId: (req as any).device?.deviceId?.slice(0, 8) + '...',
         body: req.body,
       },
       req

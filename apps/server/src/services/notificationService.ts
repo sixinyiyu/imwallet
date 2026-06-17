@@ -1,7 +1,8 @@
 import prisma from "../config/prisma";
 import { createError } from "../middleware/errorHandler";
+import { logger } from "../utils/logger";
 
-export interface NotificationItem {
+export interface NotificationResult {
   id: string;
   title: string;
   content: string;
@@ -10,78 +11,31 @@ export interface NotificationItem {
   createdAt: Date;
 }
 
-export async function createNotification(
-  userId: string,
-  title: string,
-  content: string,
-  type: string
-): Promise<NotificationItem> {
-  const notification = await prisma.notification.create({
-    data: {
-      userId,
-      title,
-      content,
-      type: type as any,
-    },
+/** 获取设备的通知列表 */
+export async function getDeviceNotifications(deviceDbId: number): Promise<NotificationResult[]> {
+  const notifications = await prisma.notification.findMany({
+    where: { device_id: deviceDbId },
+    orderBy: { createdAt: "desc" },
   });
-  return {
-    id: notification.id,
-    title: notification.title,
-    content: notification.content,
-    type: notification.type,
-    isRead: notification.isRead,
-    createdAt: notification.createdAt,
-  };
+
+  return notifications.map((n: any) => ({
+    id: n.id,
+    title: n.title,
+    content: n.content,
+    type: n.type,
+    isRead: n.isRead,
+    createdAt: n.createdAt,
+  }));
 }
 
-export async function getUserNotifications(
-  userId: string,
-  page?: number,
-  limit?: number
-): Promise<{ notifications: NotificationItem[]; total: number }> {
-  const p = page || 1;
-  const l = Math.min(limit || 20, 100);
-
-  const [notifications, total] = await Promise.all([
-    prisma.notification.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      skip: (p - 1) * l,
-      take: l,
-    }),
-    prisma.notification.count({ where: { userId } }),
-  ]);
-
-  return {
-    notifications: notifications.map((n: any) => ({
-      id: n.id,
-      title: n.title,
-      content: n.content,
-      type: n.type,
-      isRead: n.isRead,
-      createdAt: n.createdAt,
-    })),
-    total,
-  };
-}
-
-export async function getUnreadCount(userId: string): Promise<number> {
-  return prisma.notification.count({
-    where: { userId, isRead: false },
-  });
-}
-
-export async function markAsRead(notificationId: string, userId: string): Promise<void> {
+/** 标记通知已读 */
+export async function markAsRead(notificationId: string, deviceDbId: number): Promise<void> {
   const notification = await prisma.notification.findUnique({
     where: { id: notificationId },
   });
 
-  if (!notification) {
+  if (!notification || notification.device_id !== deviceDbId) {
     throw createError(404, "Notification not found");
-  }
-
-  if (notification.userId !== userId) {
-    throw createError(403, "Not your notification");
   }
 
   await prisma.notification.update({
@@ -90,9 +44,10 @@ export async function markAsRead(notificationId: string, userId: string): Promis
   });
 }
 
-export async function markAllAsRead(userId: string): Promise<void> {
+/** 标记所有通知已读 */
+export async function markAllAsRead(deviceDbId: number): Promise<void> {
   await prisma.notification.updateMany({
-    where: { userId, isRead: false },
+    where: { device_id: deviceDbId, isRead: false },
     data: { isRead: true },
   });
 }

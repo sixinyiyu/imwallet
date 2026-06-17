@@ -1,72 +1,174 @@
-import { Router, Request, Response } from "express";
-import { authMiddleware } from "../middleware/auth";
+import { Router, Request, Response, NextFunction } from "express";
+import { deviceAuthMiddleware } from "../middleware/deviceAuth";
 import { validate } from "../middleware/validate";
 import {
-  createWalletSchema,
-  importWalletSchema,
+  walletSchema,
+  resetPasswordSchema,
 } from "../validators/wallet";
 import * as walletService from "../services/walletService";
 import prisma from "../config/prisma";
 
 const router = Router();
 
-router.use(authMiddleware);
+const asyncHandler =
+  (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
+  (req: Request, res: Response, next: NextFunction) =>
+    fn(req, res, next).catch(next);
 
-router.get("/", async (req: Request, res: Response) => {
-  const wallets = await walletService.getUserWallets(req.user!.userId);
+// 所有钱包操作需要设备签名验证
+router.use(deviceAuthMiddleware);
+
+// 获取当前设备的钱包列表
+router.get("/", asyncHandler(async (req: Request, res: Response) => {
+  const wallets = await walletService.getDeviceWallets(req.device!.deviceId);
   res.json({ wallets });
-});
+}));
 
+// 创建/导入钱包（统一接口，通过 source 字段区分）
 router.post(
   "/",
-  validate(createWalletSchema),
-  async (req: Request, res: Response) => {
-    const wallet = await walletService.createWallet(
-      req.user!.userId,
-      req.body.alias
-    );
-    res.status(201).json(wallet);
-  }
-);
-
-router.post(
-  "/import",
-  validate(importWalletSchema),
-  async (req: Request, res: Response) => {
-    const wallet = await walletService.importWallet(
-      req.user!.userId,
-      req.body.mnemonic,
+  validate(walletSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const wallet = await walletService.createOrImportWallet(
+      req.device!.deviceId,
+      req.body.source,
       req.body.alias,
+      req.body.password,
+      req.body.passwordHint,
+      req.body.mnemonic,
       req.body.privateKey
     );
     res.status(201).json(wallet);
-  }
+  })
 );
 
-router.get("/:id", async (req: Request, res: Response) => {
-  const walletId = req.params.id as string;
-  // 管理员可查看任意钱包详情，普通用户只能查看自己的
-  if (req.user?.role !== "ADMIN") {
-    const userWallet = await prisma.userWallet.findFirst({
-      where: { walletId, userId: req.user!.userId },
+// 重置钱包密码（通过助记词验证身份后更新密码）
+router.put(
+  "/:id/reset-password",
+  validate(resetPasswordSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const walletId = req.params.id as string;
+
+    // 验证设备与钱包关联
+    const subscription = await prisma.walletSubscription.findFirst({
+      where: {
+        wallet_id: walletId,
+        device: { device_id: req.device!.deviceId },
+      },
     });
-    if (!userWallet) {
+    if (!subscription && !req.device!.isAdmin) {
+      res.status(403).json({ error: "You do not have permission to reset this wallet password" });
+      return;
+    }
+
+    const wallet = await walletService.resetWalletPassword(
+      walletId,
+      req.body.mnemonic,
+      req.body.password,
+      req.body.passwordHint
+    );
+    res.json(wallet);
+  })
+);
+
+// 获取钱包详情（需验证设备与钱包关联）
+router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
+  const walletId = req.params.id as string;
+
+  // 管理员可查看任意钱包，普通设备需验证关联
+  if (!req.device!.isAdmin) {
+    const subscription = await prisma.walletSubscription.findFirst({
+      where: {
+        wallet_id: walletId,
+        device: { device_id: req.device!.deviceId },
+      },
+    });
+    if (!subscription) {
       res.status(403).json({ error: "You do not have permission to view this wallet" });
       return;
     }
   }
-  const wallet = await walletService.getWalletDetail(walletId, req.user!.userId);
+
+  const wallet = await walletService.getWalletDetail(walletId, req.device!.deviceId);
   res.json(wallet);
-});
+}));
 
-router.delete("/:id", async (req: Request, res: Response) => {
-  await walletService.deleteWallet(req.params.id as string, req.user!.userId);
+// 删除钱包（取消当前设备的订阅）
+router.delete("/:id", asyncHandler(async (req: Request, res: Response) => {
+  await walletService.deleteWallet(req.params.id as string, req.device!.deviceId);
   res.status(204).send();
-});
+}));
 
-router.put("/:id/activate", async (req: Request, res: Response) => {
-  await walletService.activateWallet(req.user!.userId, req.params.id as string);
-  res.json({ message: "Wallet activated" });
-});
+// 更新钱包别名
+router.put("/:id", asyncHandler(async (req: Request, res: Response) => {
+  const walletId = req.params.id as string;
+  const { alias } = req.body;
+  if (!alias || typeof alias !== "string") {
+    res.status(400).json({ error: "alias is required" });
+    return;
+  }
+
+  // 验证设备与钱包关联
+  const subscription = await prisma.walletSubscription.findFirst({
+    where: {
+      wallet_id: walletId,
+      device: { device_id: req.device!.deviceId },
+    },
+  });
+  if (!subscription) {
+    res.status(403).json({ error: "You do not have permission to update this wallet" });
+    return;
+  }
+
+  const wallet = await walletService.updateWalletAlias(walletId, alias);
+  res.json(wallet);
+}));
+
+// 验证钱包密码
+router.post(
+  "/:id/verify-password",
+  asyncHandler(async (req: Request, res: Response) => {
+    const walletId = req.params.id as string;
+    const { password } = req.body;
+    if (!password || typeof password !== "string") {
+      res.status(400).json({ error: "password is required" });
+      return;
+    }
+
+    // 验证设备与钱包关联
+    const subscription = await prisma.walletSubscription.findFirst({
+      where: {
+        wallet_id: walletId,
+        device: { device_id: req.device!.deviceId },
+      },
+    });
+    if (!subscription && !req.device!.isAdmin) {
+      res.status(403).json({ error: "You do not have permission to verify this wallet" });
+      return;
+    }
+
+    const verified = await walletService.verifyWalletPassword(walletId, password);
+    res.json({ verified });
+  })
+);
+
+// 标记钱包已备份
+router.put("/:id/backup", asyncHandler(async (req: Request, res: Response) => {
+  const walletId = req.params.id as string;
+
+  const subscription = await prisma.walletSubscription.findFirst({
+    where: {
+      wallet_id: walletId,
+      device: { device_id: req.device!.deviceId },
+    },
+  });
+  if (!subscription) {
+    res.status(403).json({ error: "You do not have permission to backup this wallet" });
+    return;
+  }
+
+  await walletService.backupWallet(walletId);
+  res.json({ message: "Wallet backed up" });
+}));
 
 export default router;

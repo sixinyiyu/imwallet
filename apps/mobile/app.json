@@ -1,22 +1,22 @@
 {
   "expo": {
-    "name": "imwallet",
-    "slug": "imwallet",
-    "version": "1.0.0",
+    "name": "AquaD",
+    "slug": "aquad",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "bundleIdentifier": "com.imwallet.app",
+      "bundleIdentifier": "com.aquad.app",
       "supportsTablet": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.imwallet.app",
+      "package": "com.aquad.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0A1628",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -35,7 +35,6 @@
       "eas": {
         "projectId": ""
       }
-    },
-
+    }
   }
 }

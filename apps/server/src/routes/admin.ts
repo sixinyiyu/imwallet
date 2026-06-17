@@ -1,70 +1,52 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { authMiddleware } from "../middleware/auth";
-import { roleMiddleware } from "../middleware/role";
-import * as authService from "../services/authService";
+import { deviceAuthMiddleware } from "../middleware/deviceAuth";
+import { adminMiddleware } from "../middleware/auth";
+import * as adminService from "../services/adminService";
 
 const router = Router();
-
-// 所有管理员路由需要登录 + ADMIN 角色
-router.use(authMiddleware);
-router.use(roleMiddleware("ADMIN"));
 
 const asyncHandler =
   (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
   (req: Request, res: Response, next: NextFunction) =>
     fn(req, res, next).catch(next);
 
-/** GET /users - 获取所有用户列表（排除软删除） */
+// 所有管理员路由需要设备签名验证 + Admin 表验证
+router.use(deviceAuthMiddleware);
+router.use(adminMiddleware);
+
+/** GET /devices - 获取所有设备列表 */
 router.get(
-  "/users",
+  "/devices",
   asyncHandler(async (req: Request, res: Response) => {
-    const users = await authService.getAllUsers();
-    res.json({ users });
+    const devices = await adminService.getAllDevices();
+    res.json({ devices });
   })
 );
 
-/** GET /users/pending - 获取待审核用户列表 */
+/** GET /wallets - 获取所有钱包列表 */
 router.get(
-  "/users/pending",
+  "/wallets",
   asyncHandler(async (req: Request, res: Response) => {
-    const users = await authService.getPendingUsers();
-    res.json({ users });
+    const wallets = await adminService.getAllWallets();
+    res.json({ wallets });
   })
 );
 
-/** PUT /users/:id/activate - 激活用户 */
-router.put(
-  "/users/:id/activate",
+/** GET /subscriptions - 获取所有钱包-设备订阅关系 */
+router.get(
+  "/subscriptions",
   asyncHandler(async (req: Request, res: Response) => {
-    const result = await authService.activateUser(req.params.id as string, req.user?.userId);
-    res.json(result);
+    const subs = await adminService.getAllSubscriptions();
+    res.json({ subscriptions: subs });
   })
 );
 
-/** PUT /users/:id/reject - 拒绝用户 */
-router.put(
-  "/users/:id/reject",
+/** GET /transactions - 获取所有交易记录 */
+router.get(
+  "/transactions",
   asyncHandler(async (req: Request, res: Response) => {
-    const result = await authService.rejectUser(req.params.id as string, req.user?.userId);
-    res.json(result);
-  })
-);
-
-/** PUT /users/:id/deactivate - 停用用户 */
-router.put(
-  "/users/:id/deactivate",
-  asyncHandler(async (req: Request, res: Response) => {
-    const result = await authService.deactivateUser(req.params.id as string, req.user?.userId);
-    res.json(result);
-  })
-);
-
-/** DELETE /users/:id - 软删除用户 */
-router.delete(
-  "/users/:id",
-  asyncHandler(async (req: Request, res: Response) => {
-    const result = await authService.softDeleteUser(req.params.id as string, req.user?.userId);
-    res.json(result);
+    const txs = await adminService.getAllTransactions();
+    res.json({ transactions: txs });
   })
 );
 

@@ -1,5 +1,6 @@
 import prisma from "../config/prisma";
 import { createError } from "../middleware/errorHandler";
+import { logger } from "../utils/logger";
 
 export interface ContactInput {
   name: string;
@@ -11,116 +12,95 @@ export interface ContactResult {
   id: string;
   name: string;
   address: string;
-  memo: string | null;
+  memo: string;
   createdAt: Date;
+  updatedAt: Date;
 }
 
-export async function getContacts(userId: string): Promise<ContactResult[]> {
-  return prisma.contact.findMany({
-    where: { userId },
+/** 获取设备的联系人列表 */
+export async function getDeviceContacts(deviceDbId: number): Promise<ContactResult[]> {
+  const contacts = await prisma.contact.findMany({
+    where: { device_id: deviceDbId },
     orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      address: true,
-      memo: true,
-      createdAt: true,
-    },
   });
+
+  return contacts.map((c: any) => ({
+    id: c.id,
+    name: c.name,
+    address: c.address,
+    memo: c.memo,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+  }));
 }
 
-export async function createContact(
-  userId: string,
-  input: ContactInput
-): Promise<ContactResult> {
-  // 检查联系人数量上限
-  const count = await prisma.contact.count({ where: { userId } });
-  if (count >= 99) {
-    throw createError(400, "Contact limit reached (max 99)");
-  }
+/** 创建联系人 */
+export async function createContact(deviceDbId: number, input: ContactInput): Promise<ContactResult> {
+  logger.info("CONTACT", `创建联系人: device_id=${deviceDbId}, name=${input.name}`);
 
-  return prisma.contact.create({
+  const contact = await prisma.contact.create({
     data: {
-      userId,
+      device_id: deviceDbId,
       name: input.name,
       address: input.address,
       memo: input.memo || "",
     },
-    select: {
-      id: true,
-      name: true,
-      address: true,
-      memo: true,
-      createdAt: true,
-    },
   });
+
+  return {
+    id: contact.id,
+    name: contact.name,
+    address: contact.address,
+    memo: contact.memo,
+    createdAt: contact.createdAt,
+    updatedAt: contact.updatedAt,
+  };
 }
 
+/** 更新联系人 */
 export async function updateContact(
   contactId: string,
-  userId: string,
+  deviceDbId: number,
   input: Partial<ContactInput>
 ): Promise<ContactResult> {
-  const contact = await prisma.contact.findFirst({
-    where: { id: contactId, userId },
+  const contact = await prisma.contact.findUnique({
+    where: { id: contactId },
   });
 
-  if (!contact) {
+  if (!contact || contact.device_id !== deviceDbId) {
     throw createError(404, "Contact not found");
   }
 
-  return prisma.contact.update({
+  const updated = await prisma.contact.update({
     where: { id: contactId },
     data: {
-      ...(input.name !== undefined && { name: input.name }),
-      ...(input.address !== undefined && { address: input.address }),
-      ...(input.memo !== undefined && { memo: input.memo }),
-    },
-    select: {
-      id: true,
-      name: true,
-      address: true,
-      memo: true,
-      createdAt: true,
+      name: input.name,
+      address: input.address,
+      memo: input.memo,
     },
   });
+
+  return {
+    id: updated.id,
+    name: updated.name,
+    address: updated.address,
+    memo: updated.memo,
+    createdAt: updated.createdAt,
+    updatedAt: updated.updatedAt,
+  };
 }
 
-export async function deleteContact(
-  contactId: string,
-  userId: string
-): Promise<void> {
-  const contact = await prisma.contact.findFirst({
-    where: { id: contactId, userId },
+/** 删除联系人 */
+export async function deleteContact(contactId: string, deviceDbId: number): Promise<void> {
+  const contact = await prisma.contact.findUnique({
+    where: { id: contactId },
   });
 
-  if (!contact) {
+  if (!contact || contact.device_id !== deviceDbId) {
     throw createError(404, "Contact not found");
   }
 
   await prisma.contact.delete({
     where: { id: contactId },
   });
-}
-
-/** 根据钱包地址查找对应的用户名信息 */
-export async function lookupAddress(address: string): Promise<boolean> {
-  const wallet = await prisma.wallet.findUnique({
-    where: { address },
-  });
-
-  if (!wallet) {
-    return false;
-  }
-
-  const userWallet = await prisma.userWallet.findFirst({
-    where: { walletId: wallet.id },
-    include: {
-      user: {
-        select: { username: true },
-      },
-    },
-  });
-
-  return !!userWallet;
 }

@@ -8,6 +8,11 @@
     "apps/mobile"
   ],
   "scripts": {
+    "local": "pwsh -File scripts/local.ps1 start",
+    "local:server": "pwsh -File scripts/local.ps1 server",
+    "local:mobile": "pwsh -File scripts/local.ps1 mobile",
+    "local:stop": "pwsh -File scripts/local.ps1 stop",
+    "local:status": "pwsh -File scripts/local.ps1 status",
     "dev:server": "npm run dev --workspace=apps/server",
     "dev:mobile": "npm run start --workspace=apps/mobile",
     "build:server": "npm run build --workspace=apps/server",
@@ -16,6 +21,8 @@
     "lint": "npm run lint --workspaces --if-present",
     "db:migrate": "npm run db:migrate --workspace=apps/server",
     "db:generate": "npm run db:generate --workspace=apps/server",
+    "db:push": "npm run db:push --workspace=apps/server",
+    "db:seed": "npm run db:seed --workspace=apps/server",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down"
   },

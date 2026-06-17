@@ -25,7 +25,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
         status,
         duration,
         ip: req.ip,
-        userId: req.user?.userId,
+        deviceId: (req as any).device?.deviceId?.slice(0, 8) + '...',
       },
       req
     );

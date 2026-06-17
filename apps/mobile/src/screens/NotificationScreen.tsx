@@ -19,11 +19,12 @@ export default function NotificationScreen() {
 
   const fetchNotifications = async (p: number = 1) => {
     try {
-      const result = await notificationService.getNotifications(p, 20);
+      const result = await notificationService.getNotifications();
+      const list = Array.isArray(result) ? result : [];
       if (p === 1) {
-        setNotifications(result.notifications);
+        setNotifications(list);
       } else {
-        setNotifications(prev => [...prev, ...result.notifications]);
+        setNotifications(prev => [...prev, ...list]);
       }
       setTotal(result.total);
       setPage(p);

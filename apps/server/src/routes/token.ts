@@ -1,47 +1,52 @@
-import { Router, Request, Response } from "express";
-import { authMiddleware } from "../middleware/auth";
+import { Router, Request, Response, NextFunction } from "express";
+import { deviceAuthMiddleware } from "../middleware/deviceAuth";
 import * as tokenService from "../services/tokenService";
 import prisma from "../config/prisma";
 
 const router = Router();
 
-router.use(authMiddleware);
+const asyncHandler =
+  (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
+  (req: Request, res: Response, next: NextFunction) =>
+    fn(req, res, next).catch(next);
+
+router.use(deviceAuthMiddleware);
 
 // GET / — list all active tokens
-router.get("/", async (req: Request, res: Response) => {
+router.get("/", asyncHandler(async (req: Request, res: Response) => {
   const tokens = await tokenService.getAllTokens();
   res.json({ tokens });
-});
+}));
 
-// 权限校验辅助函数：管理员可查看任意钱包，普通用户只能查看自己的
-async function checkWalletPermission(walletId: string, userId: string, role: string): Promise<boolean> {
-  if (role === "ADMIN") return true;
-  const userWallet = await prisma.userWallet.findFirst({
-    where: { walletId, userId },
+// 权限校验辅助函数：管理员可查看任意钱包，普通设备需验证关联
+async function checkWalletPermission(walletId: string, deviceId: string, isAdmin: boolean): Promise<boolean> {
+  if (isAdmin) return true;
+  const subscription = await prisma.walletSubscription.findFirst({
+    where: { wallet_id: walletId, device: { device_id: deviceId } },
   });
-  return !!userWallet;
+  return !!subscription;
 }
 
-router.get("/:walletId/balance", async (req: Request, res: Response) => {
+router.get("/:walletId/balance", asyncHandler(async (req: Request, res: Response) => {
   const walletId = req.params.walletId as string;
-  const hasPermission = await checkWalletPermission(walletId, req.user!.userId, req.user!.role);
+  const hasPermission = await checkWalletPermission(walletId, req.device!.deviceId, req.device!.isAdmin);
   if (!hasPermission) {
     res.status(403).json({ error: "You do not have permission to view this wallet" });
     return;
   }
   const result = await tokenService.getWalletBalance(walletId);
   res.json(result);
-});
+}));
 
-router.get("/:walletId/list", async (req: Request, res: Response) => {
+router.get("/:walletId/list", asyncHandler(async (req: Request, res: Response) => {
   const walletId = req.params.walletId as string;
-  const hasPermission = await checkWalletPermission(walletId, req.user!.userId, req.user!.role);
+  const hasPermission = await checkWalletPermission(walletId, req.device!.deviceId, req.device!.isAdmin);
   if (!hasPermission) {
     res.status(403).json({ error: "You do not have permission to view this wallet" });
     return;
   }
   const tokens = await tokenService.getTokenBalances(walletId);
   res.json({ tokens });
-});
+}));
 
 export default router;

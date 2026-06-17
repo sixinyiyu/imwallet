@@ -5,7 +5,6 @@ import { createError } from "../middleware/errorHandler";
 import { config } from "../config";
 import type { FeeMode } from "../config";
 import { logger } from "../utils/logger";
-import * as notificationService from "./notificationService";
 
 const FEE_RATE = config.fee.rate;
 const FEE_MODE: FeeMode = config.fee.mode;
@@ -33,47 +32,34 @@ export interface TransactionResult {
   createdAt: Date;
   fromWallet: { alias: string; address: string };
   toWallet: { alias: string; address: string };
-  fromUsername: string;
-  toUsername: string;
   fromContactName: string;
   toContactName: string;
   tokenSymbol: string;
   tokenName: string;
 }
 
-export interface TransactionListQuery {
-  walletId: string;
-  page?: number;
-  limit?: number;
-}
-
-async function resolveUsername(walletId: string): Promise<string> {
-  const userWallet = await prisma.userWallet.findFirst({
-    where: { walletId },
-    include: {
-      user: {
-        select: { username: true, status: true },
-      },
-    },
-  });
-  return userWallet?.user?.username || "";
-}
-
 export async function transfer(
   input: TransferInput,
-  userId: string
+  deviceId: string
 ): Promise<TransactionResult> {
   const amount = input.amount;
 
   logger.info("TRANSFER", `转账请求开始: fromWallet=${input.fromWalletId}, toAddress=${input.toAddress}, amount=${amount}, tokenId=${input.tokenId}`);
 
-  // 校验发送钱包属于当前用户
-  const userWallet = await prisma.userWallet.findFirst({
-    where: { walletId: input.fromWalletId, userId },
+  // 校验发送钱包属于当前设备
+  const device = await prisma.device.findUnique({
+    where: { device_id: deviceId },
   });
-  if (!userWallet) {
-    logger.warn("TRANSFER", `转账失败: 钱包不属于当前用户 - fromWalletId=${input.fromWalletId}, userId=${userId}`);
-    throw createError(403, "Wallet does not belong to you");
+  if (!device) {
+    throw createError(404, "Device not found", "DEVICE_NOT_FOUND");
+  }
+
+  const subscription = await prisma.walletSubscription.findFirst({
+    where: { wallet_id: input.fromWalletId, device_id: device.id },
+  });
+  if (!subscription) {
+    logger.warn("TRANSFER", `转账失败: 钱包不属于当前设备 - fromWalletId=${input.fromWalletId}, deviceId=${deviceId.slice(0, 8)}...`);
+    throw createError(403, "Wallet does not belong to this device");
   }
 
   // Validate token exists
@@ -198,36 +184,42 @@ export async function transfer(
 
   logger.info("TRANSFER", `转账成功: txHash=${txHash}, from=${input.fromWalletId}, to=${toWallet.id}, amount=${amount}, fee=${fee}, received=${recipientReceived.toFixed(8)}, feeMode=${FEE_MODE}`);
 
-  const [fromUsername, toUsername] = await Promise.all([
-    resolveUsername(tx.fromWalletId),
-    resolveUsername(tx.toWalletId),
+  // Send notifications to devices that subscribe the involved wallets
+  const [fromDeviceSubs, toDeviceSubs] = await Promise.all([
+    prisma.walletSubscription.findMany({
+      where: { wallet_id: tx.fromWalletId },
+      select: { device_id: true },
+    }),
+    prisma.walletSubscription.findMany({
+      where: { wallet_id: tx.toWalletId },
+      select: { device_id: true },
+    }),
   ]);
 
-  // Send notifications
-  const [fromUserWallets, toUserWallets] = await Promise.all([
-    prisma.userWallet.findMany({ where: { walletId: tx.fromWalletId }, select: { userId: true } }),
-    prisma.userWallet.findMany({ where: { walletId: tx.toWalletId }, select: { userId: true } }),
-  ]);
-
-  const toName = toUsername || tx.toWallet.address.slice(0, 10);
-  const fromName = fromUsername || tx.fromWallet.address.slice(0, 10);
+  const toName = tx.toWallet.alias || tx.toWallet.address.slice(0, 10);
+  const fromName = tx.fromWallet.alias || tx.fromWallet.address.slice(0, 10);
   const tokenSymbol = token.symbol;
 
-  for (const uw of fromUserWallets) {
-    await notificationService.createNotification(
-      uw.userId,
-      "转账成功",
-      `您已向 ${toName} 转出 ${amount} ${tokenSymbol}`,
-      "TRANSFER_OUT"
-    );
+  for (const sub of fromDeviceSubs) {
+    await prisma.notification.create({
+      data: {
+        device_id: sub.device_id,
+        title: "转账成功",
+        content: `您已向 ${toName} 转出 ${amount} ${tokenSymbol}`,
+        type: "TRANSFER_OUT",
+      },
+    });
   }
-  for (const uw of toUserWallets) {
-    await notificationService.createNotification(
-      uw.userId,
-      "收到转账",
-      `您收到来自 ${fromName} 的 ${recipientReceived.toFixed(8)} ${tokenSymbol}`,
-      "TRANSFER_IN"
-    );
+
+  for (const sub of toDeviceSubs) {
+    await prisma.notification.create({
+      data: {
+        device_id: sub.device_id,
+        title: "收到转账",
+        content: `您收到来自 ${fromName} 的 ${recipientReceived.toFixed(8)} ${tokenSymbol}`,
+        type: "TRANSFER_IN",
+      },
+    });
   }
 
   return {
@@ -245,8 +237,6 @@ export async function transfer(
     createdAt: tx.createdAt,
     fromWallet: tx.fromWallet,
     toWallet: tx.toWallet,
-    fromUsername,
-    toUsername,
     fromContactName: "",
     toContactName: "",
     tokenSymbol: token.symbol,
@@ -324,13 +314,9 @@ export async function getTransactions(
       },
       select: { address: true },
     });
-    const matchingUsers = await prisma.user.findMany({
-      where: { username: { contains: keyword, mode: "insensitive" } },
-      include: { wallets: { select: { walletId: true } } },
-    });
-    const userWalletIds = matchingUsers.flatMap((u: any) => u.wallets.map((w: any) => w.walletId));
-    const walletIds = [...matchingWallets.map((w: any) => w.id), ...userWalletIds];
+    const walletIds = matchingWallets.map((w: any) => w.id);
     const contactAddresses = matchingContacts.map((c: any) => c.address);
+
     const typeConditions = filter.type === "send" ? [{ fromWalletId: walletId }] : filter.type === "receive" ? [{ toWalletId: walletId }] : [{ fromWalletId: walletId }, { toWalletId: walletId }];
     where.OR = typeConditions.map((cond) => ({
       ...cond,
@@ -365,35 +351,20 @@ export async function getTransactions(
   ]);
 
   const addresses = new Set<string>();
-  const walletIds = new Set<string>();
   for (const tx of transactions) {
     addresses.add(tx.fromWallet.address);
     addresses.add(tx.toWallet.address);
-    walletIds.add(tx.fromWalletId);
-    walletIds.add(tx.toWalletId);
   }
 
-  const [contacts, userWallets] = await Promise.all([
-    prisma.contact.findMany({
-      where: { address: { in: [...addresses] } },
-      select: { address: true, name: true },
-    }),
-    prisma.userWallet.findMany({
-      where: { walletId: { in: [...walletIds] } },
-      include: { user: { select: { username: true } } },
-    }),
-  ]);
+  const contacts = await prisma.contact.findMany({
+    where: { address: { in: [...addresses] } },
+    select: { address: true, name: true },
+  });
 
   const contactMap = new Map<string, string>(contacts.map((c: any) => [c.address, c.name]));
-  const usernameMap = new Map<string, string>();
-  for (const uw of userWallets) {
-    if (!usernameMap.has(uw.walletId)) {
-      usernameMap.set(uw.walletId, uw.user.username);
-    }
-  }
 
   return {
-    transactions: transactions.map((tx: any) => formatTransaction(tx, contactMap, usernameMap)),
+    transactions: transactions.map((tx: any) => formatTransaction(tx, contactMap)),
     total,
   };
 }
@@ -415,37 +386,22 @@ export async function getTransactionDetail(
   }
 
   const addresses = [tx.fromWallet.address, tx.toWallet.address];
-  const walletIds = [tx.fromWalletId, tx.toWalletId];
 
-  const [contacts, userWallets] = await Promise.all([
-    prisma.contact.findMany({
-      where: { address: { in: addresses } },
-      select: { address: true, name: true },
-    }),
-    prisma.userWallet.findMany({
-      where: { walletId: { in: walletIds } },
-      include: { user: { select: { username: true } } },
-    }),
-  ]);
+  const contacts = await prisma.contact.findMany({
+    where: { address: { in: addresses } },
+    select: { address: true, name: true },
+  });
 
   const contactMap = new Map<string, string>(contacts.map((c: any) => [c.address, c.name]));
-  const usernameMap = new Map<string, string>();
-  for (const uw of userWallets) {
-    if (!usernameMap.has(uw.walletId)) {
-      usernameMap.set(uw.walletId, uw.user.username);
-    }
-  }
 
-  return formatTransaction(tx, contactMap, usernameMap);
+  return formatTransaction(tx, contactMap);
 }
 
 function formatTransaction(
   tx: any,
-  contactMap?: Map<string, string>,
-  usernameMap?: Map<string, string>
+  contactMap?: Map<string, string>
 ): TransactionResult {
   const cMap = contactMap || new Map<string, string>();
-  const uMap = usernameMap || new Map<string, string>();
   const amountNum = parseFloat(tx.amount.toString());
   const feeNum = parseFloat(tx.fee.toString());
 
@@ -471,8 +427,6 @@ function formatTransaction(
     createdAt: tx.createdAt,
     fromWallet: tx.fromWallet,
     toWallet: tx.toWallet,
-    fromUsername: uMap.get(tx.fromWalletId) || "",
-    toUsername: uMap.get(tx.toWalletId) || "",
     fromContactName: cMap.get(tx.fromWallet.address) || "",
     toContactName: cMap.get(tx.toWallet.address) || "",
     tokenSymbol: tx.token?.symbol || "",

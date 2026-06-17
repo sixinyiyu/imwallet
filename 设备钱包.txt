@@ -1,0 +1,111 @@
+当前可能需要做重大改动，user表都没有用了，新加一个设备表device
+
+生产环境platform web不可用
+devices 表:
+    id (SERIAL, 自增主键)
+    device_id (VARCHAR(64), UNIQUE) ← 公钥hex，即客户端的 deviceId
+    platform (ios/android/web)
+    platform_store (appStore/googlePlay/fdroid/...)
+    os, model, locale, version, currency
+    token (push token)
+    is_push_enabled, is_price_alerts_enabled
+    subscriptions_version
+    created_at, updated_at
+
+    wallets_subscriptions 表 (关联表):
+    id (SERIAL, 自增主键)
+    wallet_id → wallets.id
+    device_id → devices.id
+    chain → chains.id
+    address_id → wallets_addresses.id
+    UNIQUE(wallet_id, device_id, chain, address_id)
+
+  • 一个设备可以关联多个钱包（通过 wallets_subscriptions）
+  • 一个钱包可以被多个设备关联（同一个钱包在不同手机上导入）
+  • 关联关系是 device_id + wallet_id + chain + address_id 的组合唯一约束
+  • 验证钱包归属设备时：get_wallet_by_device_and_identifier(device_id, wallet_identifier) 查询 wallets_subscriptions 表确认该钱包是否订阅在该设备上    
+
+  核心机制：设备标识 = 设备密钥对的公钥（hex 格式）
+
+  设备标识不是使用 iOS/Android 系统提供的硬件标识符（如 IDFV、IMEI 等），而是由钱包 App 自己在首次安装时生成的密码学密钥对的公钥。
+
+  IOS: 首次启动时，生成 Curve25519.Signing 密钥对
+  • 存储位置：iOS Keychain（通过 KeychainDefault）
+  • 密钥算法：Curve25519.Signing（Ed25519 签名）
+  • deviceId 长度：64 字符（32字节公钥的 hex 表示）
+
+   Android 端 Ed25519Sign.KeyPair.newKeyPair()
+
+   • 存储位置：Android DataStore（preferencesDataStore(name = "device_keys")），通过 Tink 加密（AES-256-GCM），密钥由 Android Keystore 管理
+  • 密钥算法：Ed25519Sign.KeyPair（Google Tink 的 Ed25519 实现）
+  • deviceId 长度：64 字符（32字节公钥的 hex 表示）
+
+
+
+  设备标识在整个系统中承担以下职责：
+
+  1. API 请求认证：每个请求通过 x-device-id header 或 Gem-Auth Authorization header 携带 deviceId，并用设备私钥对请求签名（timestamp + method + path + walletId + bodyHash），服务端用对应的公钥（deviceId）验证
+  2. 设备注册与同步：首次启动时调用 POST /v2/devices 注册设备，后续通过 PUT /v2/devices 更新设备信息（平台、OS、型号、locale、push token 等）
+  3. 钱包-设备关联：通过 wallets_subscriptions 表建立钱包与设备的多对多关系
+
+  #### 新换手机导入钱包时，设备信息的变化
+
+  这是你最关心的问题。让我逐步分析：
+
+  场景：用户在旧手机 A 上有钱包 W，换到新手机 B 后通过助记词导入钱包 W
+
+  旧手机 A 的状态（导入前）：
+
+  • 设备 A 有自己的密钥对 → deviceId_A（公钥hex_A）
+  • 服务端 devices 表有 deviceId_A 的记录
+  • 服务端 wallets_subscriptions 表有 (wallet_W, device_A, chain, address) 的关联记录
+
+  新手机 B 导入钱包 W 的过程：
+
+  1. 新手机 B 首次启动 App：
+    • App 在 B 上生成全新的密钥对 → deviceId_B（全新的公钥hex_B）
+    • deviceId_B ≠ deviceId_A（因为密钥对是随机生成的）
+    • 调用 POST /v2/devices 注册新设备 B
+    • 服务端 devices 表新增一条 deviceId_B 的记录
+  2. 用户在 B 上导入钱包 W：
+    • 用户输入助记词 → 重建钱包 W（相同的 identifier/walletId，因为地址相同）
+    • 导入过程中，客户端调用 POST /v2/devices/wallets（或 subscriptions 相关 API）将钱包 W 与新设备 B 建立关联
+• • 服务端 wallets_subscriptions 表新增 (wallet_W, device_B, chain, address) 的记录
+
+  3. 导入后的最终状态：
+
+   数据                       变化
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   devices 表                 新增 device_B 记录；device_A 记录仍然保留
+   wallets 表                 wallet_W 记录不变（identifier 不变）
+   wallets_subscriptions 表   新增 (wallet_W, device_B) 的关联；(wallet_W, device_A) 的关联仍然保留
+
+  关键结论：
+
+  • ✅ 钱包关联的最新设备信息变成了新设备 B：deviceId 从 deviceId_A 变为 deviceId_B，平台信息、OS、型号等都变为新手机的信息
+  • ✅ 历史设备信息不会丢失：旧设备 A 的记录和关联仍然存在于服务端数据库中
+  • ✅ 同一个钱包可以同时被多个设备"订阅"：wallets_subscriptions 表是追加式的，不是替换式的
+  • ⚠️ 旧设备 A 的关联不会自动删除：除非用户在旧手机上主动删除钱包，或者服务端有清理逻辑
+  • ⚠️ 新设备 B 使用全新的 deviceId：因为密钥对是在新手机上重新生成的，无法继承旧手机的密钥对
+
+ 维度                    旧手机 A                               新手机 B（导入后）
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   deviceId                deviceId_A（公钥hex_A）                deviceId_B（全新的公钥hex_B）
+   设备密钥对              A 上生成的 Ed25519/Curve25519 密钥对   B 上全新生成的密钥对
+   密钥存储                iOS Keychain / Android Keystore+Tink   同上（但内容完全不同）
+   服务端 devices 表       device_A 记录保留                      新增 device_B 记录
+   服务端 wallets 表       wallet_W 不变                          wallet_W 不变（同一个 identifier）
+   wallets_subscriptions   (wallet_W, device_A) 保留              新增 (wallet_W, device_B)
+   钱包最新关联设备        —                                      变为 device_B
+   API 请求签名            用 A 的私钥签名                        用 B 的私钥签名（公钥=deviceId_B）
+
+  核心要点：
+
+  1. deviceId 是密码学公钥，不是硬件标识符，换手机 = 全新的 deviceId
+  2. 钱包与设备是多对多关系，导入不会替换旧关联，而是追加新关联
+  3. 钱包的最新设备信息 = 新设备的全部信息（新 deviceId、新平台、新 OS、新型号等）
+  4. 旧设备的关联历史保留在服务端，不会自动清除
+
+  管理员的逻辑，可以保留一个极简admin表，到时候直接更改数据库，更新admin对应的设备标识
+
+

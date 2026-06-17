@@ -1,9 +1,10 @@
 import { NavigatorScreenParams } from "@react-navigation/native";
 
 export type RootStackParamList = {
-  Login: undefined;
-  Register: undefined;
+  Start: undefined;
   WalletCreate: undefined;
+  WalletImport: undefined;
+  WalletAddAccount: { walletId: string };
   Main: NavigatorScreenParams<MainTabParamList>;
   Scan: undefined;
   TradeDetail: { tradeId: string };
@@ -12,6 +13,8 @@ export type RootStackParamList = {
   Receive: { walletId?: string; tokenSymbol?: string; tokenId?: string };
   Records: { walletId?: string };
   WalletManage: undefined;
+  WalletDetail: { walletId: string };
+  AccountManage: { walletId: string };
   AddressBook: { selectMode?: boolean; onSelectAddress?: string } | undefined;
   Settings: undefined;
   Security: undefined;
@@ -19,6 +22,12 @@ export type RootStackParamList = {
   Admin: undefined;
   UserManage: undefined;
   Notifications: undefined;
+  BackupConfirm: { walletId: string };
+  BackupGuide: { walletId: string };
+  BackupMnemonic: { walletId: string };
+  ConfirmMnemonic: { walletId: string; mnemonic: string };
+  ForgotPassword: { walletId: string };
+  ResetPassword: { walletId: string };
 };
 
 export type MainTabParamList = {

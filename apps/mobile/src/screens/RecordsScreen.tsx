@@ -269,10 +269,9 @@ export function TransactionCard({
 
   // 对方信息
   const counterpartyWallet = isReceive ? transaction.fromWallet : transaction.toWallet;
-  const counterpartyUsername = isReceive ? transaction.fromUsername : transaction.toUsername;
   const counterpartyContactName = isReceive ? transaction.fromContactName : transaction.toContactName;
-  // 优先级：联系人名 > 用户名 > 钱包别名 > 缩略地址
-  const displayName = counterpartyContactName || counterpartyUsername || counterpartyWallet.alias || shortenAddress(counterpartyWallet.address);
+  // 优先级：联系人名 > 钱包别名 > 缩略地址
+  const displayName = counterpartyContactName || counterpartyWallet.alias || shortenAddress(counterpartyWallet.address);
 
   const feeNum = parseFloat(transaction.fee) || 0;
 

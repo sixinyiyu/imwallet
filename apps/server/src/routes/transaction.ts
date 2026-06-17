@@ -1,5 +1,5 @@
-import { Router, Request, Response } from "express";
-import { authMiddleware } from "../middleware/auth";
+import { Router, Request, Response, NextFunction } from "express";
+import { deviceAuthMiddleware } from "../middleware/deviceAuth";
 import { validate } from "../middleware/validate";
 import { transferSchema } from "../validators/transaction";
 import * as transactionService from "../services/transactionService";
@@ -7,30 +7,38 @@ import prisma from "../config/prisma";
 
 const router = Router();
 
-router.use(authMiddleware);
+const asyncHandler =
+  (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
+  (req: Request, res: Response, next: NextFunction) =>
+    fn(req, res, next).catch(next);
+
+router.use(deviceAuthMiddleware);
 
 router.post(
   "/transfer",
   validate(transferSchema),
-  async (req: Request, res: Response) => {
-    const tx = await transactionService.transfer(req.body, req.user!.userId);
+  asyncHandler(async (req: Request, res: Response) => {
+    const tx = await transactionService.transfer(req.body, req.device!.deviceId);
     res.status(201).json(tx);
-  }
+  })
 );
 
-router.get("/", async (req: Request, res: Response) => {
+router.get("/", asyncHandler(async (req: Request, res: Response) => {
   const walletId = req.query.walletId as string;
   if (!walletId) {
     res.status(400).json({ error: "walletId query parameter is required" });
     return;
   }
 
-  // 权限校验：管理员可查看所有钱包交易，普通用户只能查看自己的
-  if (req.user?.role !== "ADMIN") {
-    const userWallet = await prisma.userWallet.findFirst({
-      where: { walletId, userId: req.user!.userId },
+  // 权限校验：管理员可查看所有钱包交易，普通设备需验证关联
+  if (!req.device!.isAdmin) {
+    const subscription = await prisma.walletSubscription.findFirst({
+      where: {
+        wallet_id: walletId,
+        device: { device_id: req.device!.deviceId },
+      },
     });
-    if (!userWallet) {
+    if (!subscription) {
       res.status(403).json({ error: "You do not have permission to view this wallet's transactions" });
       return;
     }
@@ -53,19 +61,19 @@ router.get("/", async (req: Request, res: Response) => {
     search: search || undefined,
   });
   res.json(result);
-});
+}));
 
-router.get("/:id", async (req: Request, res: Response) => {
+router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   const txId = req.params.id as string;
   const tx = await transactionService.getTransactionDetail(txId);
 
-  // 权限校验：管理员可查看任意交易，普通用户只能查看与自己钱包相关的交易
-  if (req.user?.role !== "ADMIN") {
-    const userWallets = await prisma.userWallet.findMany({
-      where: { userId: req.user!.userId },
-      select: { walletId: true },
+  // 权限校验：管理员可查看任意交易，普通设备需验证关联
+  if (!req.device!.isAdmin) {
+    const deviceSubs = await prisma.walletSubscription.findMany({
+      where: { device: { device_id: req.device!.deviceId } },
+      select: { wallet_id: true },
     });
-    const myWalletIds = userWallets.map((uw: any) => uw.walletId);
+    const myWalletIds = deviceSubs.map((s: any) => s.wallet_id);
     if (!myWalletIds.includes(tx.fromWalletId) && !myWalletIds.includes(tx.toWalletId)) {
       res.status(403).json({ error: "You do not have permission to view this transaction" });
       return;
@@ -73,6 +81,6 @@ router.get("/:id", async (req: Request, res: Response) => {
   }
 
   res.json(tx);
-});
+}));
 
 export default router;

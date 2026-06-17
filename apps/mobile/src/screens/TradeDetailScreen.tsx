@@ -14,7 +14,6 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import type { Transaction } from "../types";
 import { transactionService } from "../services/transactionService";
-import { useAuthStore } from "../stores/authStore";
 import { useWalletStore } from "../stores/walletStore";
 import { ShareIcon } from "../components/icons";
 import SuccessIcon from "../components/icons/SuccessIcon";
@@ -48,7 +47,6 @@ function shortenAddress(addr: string): string {
 export default function TradeDetailScreen() {
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
-  const { user } = useAuthStore();
   const { activeWallet } = useWalletStore();
   const [tx, setTx] = useState<Transaction | null>(null);
   const [loading, setLoading] = useState(true);
@@ -122,9 +120,9 @@ export default function TradeDetailScreen() {
   const feeNum = parseFloat(tx.fee) || 0;
   const amountNum = parseFloat(tx.amount) || 0;
   const total = amountNum + feeNum;
-  // 优先级：联系人名 > 用户名 > 钱包别名
-  const fromName = tx.fromContactName || tx.fromUsername || tx.fromWallet.alias;
-  const toName = tx.toContactName || tx.toUsername || tx.toWallet.alias;
+  // 优先级：联系人名 > 钱包别名
+  const fromName = tx.fromContactName || tx.fromWallet.alias;
+  const toName = tx.toContactName || tx.toWallet.alias;
 
   // 判断当前用户是否是发送方或接收方
   const currentAddress = activeWallet?.address || "";

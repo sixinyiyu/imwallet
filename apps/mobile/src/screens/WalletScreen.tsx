@@ -13,8 +13,8 @@ import {
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useWalletStore } from "../stores/walletStore";
-import { useAuthStore } from "../stores/authStore";
 import BalanceCard from "../components/BalanceCard";
 import TokenList from "../components/TokenList";
 import ActionButtons from "../components/ActionButtons";
@@ -25,7 +25,6 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function WalletScreen() {
   const navigation = useNavigation<Nav>();
-  const { user } = useAuthStore();
   const {
     wallets,
     activeWallet,
@@ -36,22 +35,13 @@ export default function WalletScreen() {
     setActiveWallet,
     fetchBalance,
   } = useWalletStore();
+  const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
 
-  const initialCheckDone = useRef(false);
-
   useFocusEffect(
     useCallback(() => {
-      fetchWallets().then(() => {
-        if (!initialCheckDone.current) {
-          initialCheckDone.current = true;
-          const { wallets, hasFetched } = useWalletStore.getState();
-          if (hasFetched && wallets.length === 0) {
-            navigation.navigate("WalletCreate");
-          }
-        }
-      });
+      fetchWallets();
     }, [])
   );
 
@@ -85,13 +75,16 @@ export default function WalletScreen() {
     });
   };
 
+  const handleTransfer = () => {
+    navigation.navigate("Transfer", {});
+  };
+
   const closeWalletMenu = () => setWalletMenuOpen(false);
 
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.username}>{user?.username ?? "未登录"}</Text>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity
           style={styles.walletSelector}
           onPress={() => setWalletMenuOpen(!walletMenuOpen)}
@@ -108,7 +101,7 @@ export default function WalletScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Wallet menu dropdown — floating overlay */}
+      {/* Wallet menu dropdown */}
       <Modal
         visible={walletMenuOpen}
         transparent
@@ -136,7 +129,7 @@ export default function WalletScreen() {
                   ]}
                   numberOfLines={1}
                 >
-                  {w.alias}
+                  {w.alias} ({w.accountCount}个账户)
                 </Text>
               </TouchableOpacity>
             ))}
@@ -144,12 +137,8 @@ export default function WalletScreen() {
         </Pressable>
       </Modal>
 
-      <ScrollView
-        style={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
+      {/* Fixed top section: Balance + Action Buttons */}
+      <View style={styles.fixedSection}>
         {/* Balance Card */}
         <BalanceCard
           totalBalanceUsd={totalBalanceUsd}
@@ -157,14 +146,23 @@ export default function WalletScreen() {
           onCopy={handleCopyAddress}
         />
 
-        {/* Action Buttons — 代币收款 */}
+        {/* Action Buttons */}
         <ActionButtons
-          onTransfer={() => navigation.navigate("Transfer", {})}
+          onTransfer={handleTransfer}
           onReceive={handleReceive}
           onRecords={() => navigation.navigate("Records", {})}
           tokens={tokens}
         />
+      </View>
 
+      {/* Scrollable bottom section: Tokens */}
+      <ScrollView
+        style={styles.scrollSection}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         {/* Token List */}
         <Text style={styles.sectionTitle}>代币</Text>
         <TokenList
@@ -179,18 +177,16 @@ export default function WalletScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F9FAFB" },
+  container: { flex: 1, backgroundColor: "#F5F6F8" },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 56,
     paddingHorizontal: 16,
     paddingBottom: 12,
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
   },
-  username: { fontSize: 14, color: "#6B7280", marginRight: 8 },
   walletSelector: {
     flex: 1,
     flexDirection: "row",
@@ -205,7 +201,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   dropdown: {
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     borderRadius: 12,
     elevation: 4,
     shadowColor: "#000",
@@ -221,22 +217,28 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F3F4F6",
   },
   dropdownItemActive: {
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "#DBEAFE",
   },
   dropdownItemText: {
     fontSize: 15,
     fontWeight: "500",
-    color: "#374151",
+    color: "#1F2937",
   },
   dropdownItemTextActive: {
     color: "#3B82F6",
     fontWeight: "700",
   },
-  content: { flex: 1 },
+  fixedSection: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  scrollSection: {
+    flex: 1,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#1F2937",
+    color: "#374151",
     paddingHorizontal: 16,
     marginTop: 20,
     marginBottom: 8,

@@ -1,56 +1,44 @@
-import { Router, Request, Response } from "express";
-import { authMiddleware } from "../middleware/auth";
+import { Router, Request, Response, NextFunction } from "express";
+import { deviceAuthMiddleware } from "../middleware/deviceAuth";
 import { validate } from "../middleware/validate";
-import { createContactSchema, updateContactSchema } from "../validators/contact";
+import { contactSchema } from "../validators/contact";
 import * as contactService from "../services/contactService";
 
 const router = Router();
 
-router.use(authMiddleware);
+const asyncHandler =
+  (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
+  (req: Request, res: Response, next: NextFunction) =>
+    fn(req, res, next).catch(next);
 
-/** 根据钱包地址查找对应的用户名 */
-router.get("/lookup", async (req: Request, res: Response) => {
-  const address = (req.query.address as string || "").trim();
-  if (!address) {
-    return res.status(400).json({ error: "Address is required" });
-  }
-  const exists = await contactService.lookupAddress(address);
-  res.json({ exists });
-});
+router.use(deviceAuthMiddleware);
 
-router.get("/", async (req: Request, res: Response) => {
-  const contacts = await contactService.getContacts(req.user!.userId);
+// 获取当前设备的联系人列表
+router.get("/", asyncHandler(async (req: Request, res: Response) => {
+  const contacts = await contactService.getDeviceContacts(req.device!.dbId);
   res.json({ contacts });
-});
+}));
 
+// 创建联系人
 router.post(
   "/",
-  validate(createContactSchema),
-  async (req: Request, res: Response) => {
-    const contact = await contactService.createContact(
-      req.user!.userId,
-      req.body
-    );
+  validate(contactSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const contact = await contactService.createContact(req.device!.dbId, req.body);
     res.status(201).json(contact);
-  }
+  })
 );
 
-router.put(
-  "/:id",
-  validate(updateContactSchema),
-  async (req: Request, res: Response) => {
-    const contact = await contactService.updateContact(
-      req.params.id as string,
-      req.user!.userId,
-      req.body
-    );
-    res.json(contact);
-  }
-);
+// 更新联系人
+router.put("/:id", asyncHandler(async (req: Request, res: Response) => {
+  const contact = await contactService.updateContact(req.params.id as string, req.device!.dbId, req.body);
+  res.json(contact);
+}));
 
-router.delete("/:id", async (req: Request, res: Response) => {
-  await contactService.deleteContact(req.params.id as string, req.user!.userId);
+// 删除联系人
+router.delete("/:id", asyncHandler(async (req: Request, res: Response) => {
+  await contactService.deleteContact(req.params.id as string, req.device!.dbId);
   res.status(204).send();
-});
+}));
 
 export default router;

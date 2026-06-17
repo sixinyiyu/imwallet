@@ -1,4 +1,4 @@
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "../utils/secureStorage";
 import { create } from "zustand";
 import { fiatService } from "../services/fiatService";
 

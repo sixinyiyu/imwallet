@@ -1,7 +1,51 @@
-export interface User {
+export interface Device {
+  id: number;
+  device_id: string;
+  platform: string;
+  platform_store: string | null;
+  os: string | null;
+  model: string | null;
+  locale: string | null;
+  version: string | null;
+  currency: string | null;
+  token: string | null;
+  is_push_enabled: boolean;
+  is_price_alerts_enabled: boolean;
+  subscriptions_version: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Wallet {
   id: string;
-  username: string;
-  role: string;
+  identifier: string;
+  alias: string;
+  address: string;
+  source: string;
+  isBackedUp: boolean;
+  accountCount: number;
+  createdAt: string;
+  updatedAt?: string;
+  tokenBalances: WalletTokenBalance[];
+  totalBalanceCny: string;
+  memo?: string;
+  passwordHint?: string;
+}
+
+export interface Account {
+  id: string;
+  walletId: string;
+  tokenId: string;
+  name: string;
+  address: string;
+  symbol: string;
+  network: string;
+  iconUrl?: string;
+  balance: string;
+  usdValue: string;
+  cnyValue: string;
+  decimals: number;
+  updatedAt?: string;
 }
 
 export interface WalletTokenBalance {
@@ -15,17 +59,6 @@ export interface WalletTokenBalance {
   decimals: number;
   network: string;
   iconUrl?: string;
-}
-
-export interface Wallet {
-  id: string;
-  alias: string;
-  address: string;
-  source: string;
-  isActive: boolean;
-  createdAt: string;
-  tokenBalances: WalletTokenBalance[];
-  totalBalanceCny: string;
 }
 
 export interface TokenBalance {
@@ -67,8 +100,6 @@ export interface Transaction {
   createdAt: string;
   fromWallet: { alias: string; address: string };
   toWallet: { alias: string; address: string };
-  fromUsername: string;
-  toUsername: string;
   fromContactName: string;
   toContactName: string;
   tokenSymbol: string;

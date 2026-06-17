@@ -1,8 +1,23 @@
 import { v4 as uuid } from "uuid";
 import { createHash } from "crypto";
+import bcrypt from "bcrypt";
 import prisma from "../config/prisma";
 import { createError } from "../middleware/errorHandler";
 import { logger } from "../utils/logger";
+import { decryptPassword as rsaDecryptPassword } from "../services/rsaService";
+import { deriveAddressFromMnemonic } from "../services/derivationService";
+
+/**
+ * Generate a wallet identifier: aqud + 32 random Base62 characters
+ */
+export function generateIdentifier(): string {
+  const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let identifier = "aqud";
+  for (let i = 0; i < 32; i++) {
+    identifier += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return identifier;
+}
 
 export interface WalletTokenBalance {
   id: string;
@@ -19,10 +34,12 @@ export interface WalletTokenBalance {
 
 export interface WalletSummary {
   id: string;
+  identifier: string;
   alias: string;
   address: string;
   source: string;
-  isActive: boolean;
+  isBackedUp: boolean;
+  accountCount: number;
   createdAt: Date;
   tokenBalances: WalletTokenBalance[];
   totalBalanceCny: string;
@@ -30,16 +47,17 @@ export interface WalletSummary {
 
 export interface WalletDetail extends WalletSummary {
   updatedAt: Date;
+  passwordHint?: string | null;
 }
 
 /**
  * Generate a deterministic wallet address from a seed.
- * In production, this would use proper HD wallet derivation (BIP32/BIP44).
- * For the private chain, we use a hash-based derivation.
+ * For CREATE wallets (no mnemonic), we use a hash-based derivation.
+ * For IMPORT wallets, use BIP39/BIP44 deterministic derivation via derivationService.
  */
-function deriveAddress(seed: string, index: number): string {
+export function deriveAddress(seed: string, index: number): string {
   const hash = createHash("sha256")
-    .update(`${seed}-${index}-${uuid()}`)
+    .update(`${seed}-${index}`)
     .digest("hex");
 
   return "0x" + hash.slice(0, 40).toUpperCase();
@@ -90,94 +108,67 @@ async function computeTokenBalances(walletId: string): Promise<{
   };
 }
 
-export async function createWallet(
-  userId: string,
-  alias: string
-): Promise<WalletDetail> {
-  logger.info("WALLET", `创建钱包: userId=${userId}, alias=${alias}`);
-
-  const seed = `user-${userId}-${Date.now()}`;
-  const address = deriveAddress(seed, 0);
-
-  const wallet = await prisma.wallet.create({
-    data: {
-      alias,
-      address,
-      source: "CREATE",
-      users: {
-        create: {
-          userId,
-          isActive: false,
-        },
-      },
-    },
-    include: {
-      users: {
-        where: { userId },
-        select: { isActive: true },
-      },
-    },
-  });
-
-  // Create WalletToken entries for all active tokens (balance=0)
-  const activeTokens = await prisma.token.findMany({
-    where: { isActive: true },
-  });
-
-  if (activeTokens.length > 0) {
-    await prisma.walletToken.createMany({
-      data: activeTokens.map((token: any) => ({
-        walletId: wallet.id,
-        tokenId: token.id,
-        balance: 0,
-      })),
-    });
-  }
-
-  logger.info("WALLET", `创建钱包成功: walletId=${wallet.id}, address=${address}, userId=${userId}`);
-
-  const { tokenBalances, totalBalanceCny } = await computeTokenBalances(wallet.id);
-
-  return {
-    id: wallet.id,
-    alias: wallet.alias,
-    address: wallet.address,
-    source: wallet.source as string,
-    isActive: wallet.users[0]?.isActive ?? false,
-    createdAt: wallet.createdAt,
-    updatedAt: wallet.updatedAt,
-    tokenBalances,
-    totalBalanceCny,
-  };
-}
-
-export async function importWallet(
-  userId: string,
-  mnemonic: string,
+/** 创建/导入钱包并自动关联设备（统一接口） */
+export async function createOrImportWallet(
+  deviceId: string,
+  source: "CREATE" | "IMPORT",
   alias: string,
+  encryptedPassword: string,
+  passwordHint?: string,
+  mnemonic?: string,
   privateKey?: string
 ): Promise<WalletDetail> {
-  logger.info("WALLET", `导入钱包: userId=${userId}, alias=${alias}`);
+  logger.info("WALLET", `${source === "IMPORT" ? "导入" : "创建"}钱包: deviceId=${deviceId.slice(0, 8)}..., alias=${alias}`);
 
-  const seed = mnemonic || privateKey || `import-${Date.now()}`;
-  const address = deriveAddress(seed, 0);
+  const device = await prisma.device.findUnique({
+    where: { device_id: deviceId },
+  });
+  if (!device) {
+    throw createError(404, "Device not found", "DEVICE_NOT_FOUND");
+  }
+
+  // 解密 RSA 加密的密码
+  let rawPassword: string;
+  try {
+    rawPassword = rsaDecryptPassword(encryptedPassword);
+  } catch {
+    throw createError(400, "Password decryption failed", "PASSWORD_DECRYPT_FAILED");
+  }
+  if (rawPassword.length < 8) {
+    throw createError(400, "Password must be at least 8 characters", "PASSWORD_TOO_SHORT");
+  }
+
+  // bcrypt 哈希
+  const passwordHash = await bcrypt.hash(rawPassword, 10);
+
+  // Derive wallet address
+  let address: string;
+  if (mnemonic) {
+    // Use BIP39/BIP44 deterministic derivation when mnemonic is provided
+    address = await deriveAddressFromMnemonic(mnemonic, "Ethereum", 0);
+  } else {
+    // Hash-based derivation for CREATE wallets without mnemonic
+    const seed = `device-${device.id}-${Date.now()}`;
+    address = deriveAddress(seed, 0);
+  }
+  const identifier = generateIdentifier();
+
+  // IMPORT wallets are considered backed up (user already has the mnemonic)
+  const isBackedUp = source === "IMPORT";
 
   const wallet = await prisma.wallet.create({
     data: {
+      identifier,
       alias,
       address,
-      source: "IMPORT",
-      users: {
+      source,
+      password: passwordHash,
+      passwordHint: passwordHint || null,
+      isBackedUp,
+      subscriptions: {
         create: {
-          userId,
-          isActive: false,
+          device_id: device.id,
         },
-      },
-    },
-    include: {
-      users: {
-        where: { userId },
-        select: { isActive: true },
       },
     },
   });
@@ -197,16 +188,19 @@ export async function importWallet(
     });
   }
 
-  logger.info("WALLET", `导入钱包成功: walletId=${wallet.id}, address=${address}, userId=${userId}`);
+  logger.info("WALLET", `${source === "IMPORT" ? "导入" : "创建"}钱包成功: walletId=${wallet.id}, identifier=${identifier}, address=${address}`);
 
   const { tokenBalances, totalBalanceCny } = await computeTokenBalances(wallet.id);
+  const accountCount = await prisma.account.count({ where: { walletId: wallet.id } });
 
   return {
     id: wallet.id,
+    identifier: wallet.identifier,
     alias: wallet.alias,
     address: wallet.address,
     source: wallet.source as string,
-    isActive: wallet.users[0]?.isActive ?? false,
+    isBackedUp: wallet.isBackedUp,
+    accountCount,
     createdAt: wallet.createdAt,
     updatedAt: wallet.updatedAt,
     tokenBalances,
@@ -214,28 +208,98 @@ export async function importWallet(
   };
 }
 
-export async function getUserWallets(
-  userId: string
-): Promise<WalletSummary[]> {
-  const userWallets = await prisma.userWallet.findMany({
-    where: { userId },
-    include: {
-      wallet: true,
+/** 重置钱包密码（通过助记词验证身份后更新密码） */
+export async function resetWalletPassword(
+  walletId: string,
+  mnemonic: string,
+  encryptedPassword: string,
+  passwordHint?: string
+): Promise<WalletDetail> {
+  logger.info("WALLET", `重置密码: walletId=${walletId}`);
+
+  const wallet = await prisma.wallet.findUnique({
+    where: { id: walletId },
+  });
+  if (!wallet) {
+    throw createError(404, "Wallet not found");
+  }
+
+  // Verify mnemonic matches the wallet address
+  const derivedAddress = await deriveAddressFromMnemonic(mnemonic, "Ethereum", 0);
+  if (derivedAddress !== wallet.address) {
+    throw createError(400, "助记词与当前钱包不匹配", "MNEMONIC_MISMATCH");
+  }
+
+  // Decrypt RSA encrypted password
+  let rawPassword: string;
+  try {
+    rawPassword = rsaDecryptPassword(encryptedPassword);
+  } catch {
+    throw createError(400, "Password decryption failed", "PASSWORD_DECRYPT_FAILED");
+  }
+  if (rawPassword.length < 8) {
+    throw createError(400, "Password must be at least 8 characters", "PASSWORD_TOO_SHORT");
+  }
+
+  const passwordHash = await bcrypt.hash(rawPassword, 10);
+
+  // Update password
+  await prisma.wallet.update({
+    where: { id: walletId },
+    data: {
+      password: passwordHash,
+      passwordHint: passwordHint || null,
     },
-    orderBy: { createdAt: "desc" },
   });
 
-  // Compute token balances for each wallet
+  logger.info("WALLET", `重置密码成功: walletId=${walletId}`);
+
+  const { tokenBalances, totalBalanceCny } = await computeTokenBalances(walletId);
+  const accountCount = await prisma.account.count({ where: { walletId } });
+
+  return {
+    id: wallet.id,
+    identifier: wallet.identifier,
+    alias: wallet.alias,
+    address: wallet.address,
+    source: wallet.source as string,
+    isBackedUp: wallet.isBackedUp,
+    accountCount,
+    createdAt: wallet.createdAt,
+    updatedAt: wallet.updatedAt,
+    tokenBalances,
+    totalBalanceCny,
+  };
+}
+
+/** 获取设备关联的所有钱包 */
+export async function getDeviceWallets(deviceId: string): Promise<WalletSummary[]> {
+  const device = await prisma.device.findUnique({
+    where: { device_id: deviceId },
+  });
+  if (!device) {
+    throw createError(404, "Device not found", "DEVICE_NOT_FOUND");
+  }
+
+  const subscriptions = await prisma.walletSubscription.findMany({
+    where: { device_id: device.id },
+    include: { wallet: true },
+    orderBy: { created_at: "desc" },
+  });
+
   const walletSummaries: WalletSummary[] = [];
-  for (const uw of userWallets) {
-    const { tokenBalances, totalBalanceCny } = await computeTokenBalances(uw.wallet.id);
+  for (const sub of subscriptions) {
+    const { tokenBalances, totalBalanceCny } = await computeTokenBalances(sub.wallet.id);
+    const accountCount = await prisma.account.count({ where: { walletId: sub.wallet.id } });
     walletSummaries.push({
-      id: uw.wallet.id,
-      alias: uw.wallet.alias,
-      address: uw.wallet.address,
-      source: uw.wallet.source as string,
-      isActive: uw.isActive,
-      createdAt: uw.wallet.createdAt,
+      id: sub.wallet.id,
+      identifier: sub.wallet.identifier,
+      alias: sub.wallet.alias,
+      address: sub.wallet.address,
+      source: sub.wallet.source as string,
+      isBackedUp: sub.wallet.isBackedUp,
+      accountCount,
+      createdAt: sub.wallet.createdAt,
       tokenBalances,
       totalBalanceCny,
     });
@@ -244,18 +308,13 @@ export async function getUserWallets(
   return walletSummaries;
 }
 
+/** 获取钱包详情 */
 export async function getWalletDetail(
   walletId: string,
-  userId: string
+  deviceId: string
 ): Promise<WalletDetail> {
   const wallet = await prisma.wallet.findUnique({
     where: { id: walletId },
-    include: {
-      users: {
-        where: { userId },
-        select: { isActive: true },
-      },
-    },
   });
 
   if (!wallet) {
@@ -263,13 +322,17 @@ export async function getWalletDetail(
   }
 
   const { tokenBalances, totalBalanceCny } = await computeTokenBalances(wallet.id);
+  const accountCount = await prisma.account.count({ where: { walletId: wallet.id } });
 
   return {
     id: wallet.id,
+    identifier: wallet.identifier,
     alias: wallet.alias,
     address: wallet.address,
     source: wallet.source as string,
-    isActive: wallet.users[0]?.isActive ?? false,
+    isBackedUp: wallet.isBackedUp,
+    passwordHint: wallet.passwordHint,
+    accountCount,
     createdAt: wallet.createdAt,
     updatedAt: wallet.updatedAt,
     tokenBalances,
@@ -277,51 +340,110 @@ export async function getWalletDetail(
   };
 }
 
-export async function deleteWallet(
+/** 更新钱包别名 */
+export async function updateWalletAlias(
   walletId: string,
-  userId: string
-): Promise<void> {
-  const userWallet = await prisma.userWallet.findUnique({
-    where: {
-      userId_walletId: { userId, walletId },
-    },
-  });
-
-  if (!userWallet) {
-    throw createError(404, "Wallet not found");
-  }
-
-  logger.info("WALLET", `删除钱包: walletId=${walletId}, userId=${userId}`);
-
-  await prisma.wallet.delete({
+  alias: string
+): Promise<WalletSummary> {
+  const wallet = await prisma.wallet.update({
     where: { id: walletId },
+    data: { alias },
   });
+  const accountCount = await prisma.account.count({ where: { walletId } });
+  const { tokenBalances, totalBalanceCny } = await computeTokenBalances(walletId);
+  return {
+    id: wallet.id,
+    identifier: wallet.identifier,
+    alias: wallet.alias,
+    address: wallet.address,
+    source: wallet.source as string,
+    isBackedUp: wallet.isBackedUp,
+    accountCount,
+    createdAt: wallet.createdAt,
+    tokenBalances,
+    totalBalanceCny,
+  };
 }
 
-export async function activateWallet(
-  userId: string,
-  walletId: string
+/** 删除钱包（取消当前设备的订阅，钱包记录保留） */
+export async function deleteWallet(
+  walletId: string,
+  deviceId: string
 ): Promise<void> {
-  const userWallet = await prisma.userWallet.findUnique({
+  const device = await prisma.device.findUnique({
+    where: { device_id: deviceId },
+  });
+  if (!device) {
+    throw createError(404, "Device not found", "DEVICE_NOT_FOUND");
+  }
+
+  const subscription = await prisma.walletSubscription.findFirst({
     where: {
-      userId_walletId: { userId, walletId },
+      wallet_id: walletId,
+      device_id: device.id,
     },
   });
 
-  if (!userWallet) {
+  if (!subscription) {
+    throw createError(404, "Wallet subscription not found for this device");
+  }
+
+  logger.info("WALLET", `删除钱包订阅: walletId=${walletId}, deviceId=${deviceId.slice(0, 8)}...`);
+
+  // 删除订阅关系
+  await prisma.walletSubscription.delete({
+    where: { id: subscription.id },
+  });
+
+  // 如果没有任何设备订阅此钱包，则真正删除钱包
+  const remainingSubs = await prisma.walletSubscription.count({
+    where: { wallet_id: walletId },
+  });
+
+  if (remainingSubs === 0) {
+    logger.info("WALLET", `钱包无其他订阅，删除钱包记录: walletId=${walletId}`);
+    await prisma.wallet.delete({
+      where: { id: walletId },
+    });
+  }
+}
+
+/** 验证钱包密码 */
+export async function verifyWalletPassword(
+  walletId: string,
+  encryptedPassword: string
+): Promise<boolean> {
+  const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
+  if (!wallet) {
     throw createError(404, "Wallet not found");
   }
 
-  logger.info("WALLET", `激活钱包: walletId=${walletId}, userId=${userId}`);
+  // RSA 解密客户端发送的密码
+  let rawPassword: string;
+  try {
+    rawPassword = rsaDecryptPassword(encryptedPassword);
+  } catch {
+    throw createError(400, "Password decryption failed", "PASSWORD_DECRYPT_FAILED");
+  }
 
-  await prisma.$transaction([
-    prisma.userWallet.updateMany({
-      where: { userId, isActive: true },
-      data: { isActive: false },
-    }),
-    prisma.userWallet.update({
-      where: { id: userWallet.id },
-      data: { isActive: true },
-    }),
-  ]);
+  // bcrypt 比对
+  const match = await bcrypt.compare(rawPassword, wallet.password);
+  return match;
+}
+
+/** 标记钱包已备份 */
+export async function backupWallet(walletId: string): Promise<void> {
+  const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
+  if (!wallet) {
+    throw createError(404, "Wallet not found");
+  }
+  if (wallet.isBackedUp) {
+    throw createError(400, "Wallet is already backed up", "ALREADY_BACKED_UP");
+  }
+
+  logger.info("WALLET", `备份钱包: walletId=${walletId}`);
+  await prisma.wallet.update({
+    where: { id: walletId },
+    data: { isBackedUp: true },
+  });
 }

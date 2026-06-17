@@ -21,7 +21,7 @@ export function validate(schema: ZodSchema) {
           {
             body: req.body,
             errors: details,
-            userId: req.user?.userId,
+            deviceId: (req as any).device?.deviceId?.slice(0, 8) + '...',
           },
           req
         );

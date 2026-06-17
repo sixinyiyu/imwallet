@@ -10,22 +10,10 @@ dotenv.config();
  *   Example: A sends 10, fee 0.1 → A pays 10, B receives 9.9, platform gets 0.1
  */
 export type FeeMode = "EXTRA" | "DEDUCTED";
-export type UserRole = "NORMAL" | "ADMIN";
 
 export const config = {
   port: parseInt(process.env.PORT || "3000", 10),
   nodeEnv: process.env.NODE_ENV || "development",
-  jwt: {
-    secret: process.env.JWT_SECRET || (
-      (process.env.NODE_ENV || "development") === "production"
-        ? (() => { throw new Error("JWT_SECRET must be set in production"); })()
-        : "dev_jwt_secret_change_in_production"
-    ),
-    expiresIn: process.env.JWT_EXPIRES_IN || "7d",
-  },
-  bcrypt: {
-    saltRounds: 12,
-  },
   fee: {
     rate: parseFloat(process.env.FEE_RATE || "0.005"), // 0.5%
     mode: (process.env.FEE_MODE || "DEDUCTED") as FeeMode, // default: deduct from amount

@@ -20,16 +20,18 @@ interface MenuItem {
 
 export default function ProfileScreen() {
   const navigation = useNavigation<Nav>();
-  const { user, logout } = useAuthStore();
+  const { deviceId, logout } = useAuthStore();
   const [unreadCount, setUnreadCount] = React.useState(0);
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);
 
-  const isAdmin = user?.role === "ADMIN";
+  // Admin check: for now, no admin role in device-based auth
+  const isAdmin = false;
 
   const fetchUnreadCount = async () => {
     try {
-      const result = await notificationService.getUnreadCount();
-      setUnreadCount(result.count);
+      const notifications = await notificationService.getNotifications();
+      const count = notifications.filter((n: any) => !n.isRead).length;
+      setUnreadCount(count);
     } catch {
       // silent
     }

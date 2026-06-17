@@ -3,7 +3,7 @@ import cors from "cors";
 import { config } from "./config";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLogger } from "./middleware/requestLogger";
-import authRoutes from "./routes/auth";
+import deviceRoutes from "./routes/device";
 import walletRoutes from "./routes/wallet";
 import transactionRoutes from "./routes/transaction";
 import tokenRoutes from "./routes/token";
@@ -12,6 +12,7 @@ import contactRoutes from "./routes/contact";
 import rsaRoutes from "./routes/rsa";
 import configRoutes from "./routes/config";
 import adminRoutes from "./routes/admin";
+import accountRoutes from "./routes/account";
 import notificationRoutes from "./routes/notification";
 import { initRSAKeys } from "./services/rsaService";
 import { logger } from "./utils/logger";
@@ -24,9 +25,10 @@ app.use(cors({
     "https://imwallet.dpdns.org",
     "http://localhost:8081",
     "http://localhost:19006",
+    "http://localhost:3000",
   ],
   methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-device-id", "x-signature", "x-timestamp", "x-nonce"],
   credentials: true,
 }));
 app.use(express.json({ limit: "100kb" }));
@@ -40,7 +42,7 @@ app.get("/health", (_req, res) => {
 });
 
 // API routes
-app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/devices", deviceRoutes);
 app.use("/api/v1/wallets", walletRoutes);
 app.use("/api/v1/transactions", transactionRoutes);
 app.use("/api/v1/tokens", tokenRoutes);
@@ -49,6 +51,7 @@ app.use("/api/v1/contacts", contactRoutes);
 app.use("/api/v1/rsa", rsaRoutes);
 app.use("/api/v1/config", configRoutes);
 app.use("/api/v1/admin", adminRoutes);
+app.use("/api/v1/accounts", accountRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 
 // Error handler
@@ -60,6 +63,7 @@ if (config.nodeEnv !== "test") {
   app.listen(config.port, () => {
     logger.info("SERVER", `🚀 imwallet server running on http://localhost:${config.port}`);
     logger.info("SERVER", `📋 Environment: ${config.nodeEnv}`);
+    logger.info("SERVER", `🔑 Auth mode: Device Ed25519 signature verification`);
   });
 }
 

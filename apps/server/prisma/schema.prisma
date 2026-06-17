@@ -20,49 +20,78 @@ enum TxStatus {
   FAILED
 }
 
-/// 用户账号状态：PENDING=待审核(新注册), ACTIVE=已激活, REJECTED=已拒绝
-enum UserStatus {
-  PENDING
-  ACTIVE
-  REJECTED
-}
-
-/// 用户角色：NORMAL=普通用户, ADMIN=高等级管理员
-enum UserRole {
-  NORMAL
-  ADMIN
-}
-
 /// 通知类型
 enum NotificationType {
   TRANSFER_IN
   TRANSFER_OUT
-  ACCOUNT_ACTIVATED
-  ACCOUNT_REJECTED
 }
 
-/// 用户表：存储钱包用户的基本信息
-model User {
-  id           String       @id @default(uuid())
-  /// 用户名，3-32位字母数字下划线
-  username     String       @unique @db.VarChar(32)
-  /// 密码哈希值，bcrypt 加密
-  passwordHash String       @map("password_hash") @db.VarChar(60)
-  /// 设备信息，JSON 格式存储设备标识
-  deviceInfo   String       @default("") @map("device_info") @db.Text
-  /// 账号状态：PENDING=待审核, ACTIVE=已激活, REJECTED=已拒绝
-  status       UserStatus   @default(PENDING) @map("status")
-  /// 用户角色：NORMAL=普通, ADMIN=高等级管理员
-  role         UserRole     @default(NORMAL) @map("role")
-  /// 软删除时间戳，null 表示未删除
-  deletedAt    DateTime?    @map("deleted_at")
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @updatedAt @map("updated_at")
-  wallets      UserWallet[]
-  contacts     Contact[]
-  notifications Notification[]
+/// 管理员角色
+enum AdminRole {
+  ADMIN
+}
 
-  @@map("users")
+/// 设备平台
+enum Platform {
+  ios
+  android
+  web
+}
+
+/// 设备商店来源
+enum PlatformStore {
+  appStore
+  googlePlay
+  fdroid
+}
+
+/// 管理员表：极简设计，通过直接修改数据库绑定设备标识
+model Admin {
+  id        Int      @id @default(autoincrement())
+  /// 管理员设备的公钥 hex（64字符），即 deviceId
+  device_id String   @unique @db.VarChar(64)
+  /// 管理员角色
+  role      AdminRole @default(ADMIN)
+  created_at DateTime @default(now()) @map("created_at")
+
+  @@map("admins")
+}
+
+/// 设备表：存储设备信息，设备标识 = Ed25519 公钥 hex
+model Device {
+  id           Int       @id @default(autoincrement())
+  /// 设备标识，Ed25519 公钥 hex（64字符），客户端生成的密钥对公钥
+  device_id    String    @unique @db.VarChar(64)
+  /// 设备平台：ios/android/web
+  platform     Platform
+  /// 商店来源：appStore/googlePlay/fdroid/null（web平台为null）
+  platform_store PlatformStore? @map("platform_store")
+  /// 操作系统版本
+  os           String?   @db.VarChar(32)
+  /// 设备型号
+  model        String?   @db.VarChar(64)
+  /// 语言/地区设置
+  locale       String?   @db.VarChar(16)
+  /// App 版本号
+  version      String?   @db.VarChar(32)
+  /// 法币货币代码
+  currency     String?   @db.VarChar(8)
+  /// Push 推送 token
+  token        String?   @db.VarChar(256)
+  /// 是否启用推送通知
+  is_push_enabled Boolean @default(false) @map("is_push_enabled")
+  /// 是否启用价格提醒
+  is_price_alerts_enabled Boolean @default(false) @map("is_price_alerts_enabled")
+  /// 订阅版本号，用于增量同步
+  subscriptions_version Int? @default(0) @map("subscriptions_version")
+  created_at   DateTime  @default(now()) @map("created_at")
+  updated_at   DateTime  @updatedAt @map("updated_at")
+
+  walletSubscriptions WalletSubscription[]
+  contacts           Contact[]
+  notifications       Notification[]
+
+  @@map("devices")
 }
 
 /// 代币表：存储系统支持的代币类型
@@ -86,6 +115,7 @@ model Token {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   walletTokens    WalletToken[]
+  accounts        Account[]
   transactions    Transaction[]
 
   @@map("tokens")
@@ -94,25 +124,34 @@ model Token {
 /// 钱包表：存储用户创建或导入的钱包
 model Wallet {
   id           String        @id @default(uuid())
+  /// 钱包标识，aqud + 32位Base62随机字符串，全局唯一
+  identifier   String        @unique @db.VarChar(36)
   /// 钱包别名，用户自定义名称
   alias        String        @db.VarChar(64)
-  /// 钱包地址，链上唯一标识
-  address      String        @unique @db.VarChar(42)
+  /// 钱包地址，链上唯一标识（兼容旧数据，新钱包使用Account地址）
+  address      String        @unique @db.VarChar(64)
   /// 钱包来源
   source       WalletSource  @default(CREATE)
+  /// 是否已备份助记词，只有备份了的钱包才可以进行交易操作
+  isBackedUp   Boolean       @default(false) @map("is_backed_up")
+  /// 钱包密码（bcrypt hash），用于备份、删除等敏感操作的验证
+  password      String        @db.VarChar(128)
+  /// 密码提示，帮助用户回忆密码
+  passwordHint  String?       @map("password_hint") @db.VarChar(128)
   /// 备注说明
   memo         String        @default("") @db.VarChar(256)
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
-  users        UserWallet[]
+  accounts     Account[]
   sentTxs      Transaction[] @relation("FromWallet")
   receivedTxs  Transaction[] @relation("ToWallet")
   tokenBalances WalletToken[]
+  subscriptions WalletSubscription[]
 
   @@map("wallets")
 }
 
-/// 钱包代币余额表：每个钱包中每种代币的余额
+/// 钱包代币余额表：每个钱包中每种代币的余额（兼容旧数据）
 model WalletToken {
   id        String   @id @default(uuid())
   walletId  String   @map("wallet_id") @db.VarChar(36)
@@ -129,20 +168,45 @@ model WalletToken {
   @@map("wallet_tokens")
 }
 
-/// 用户钱包关联表：多对多关系，支持一个用户管理多个钱包
-model UserWallet {
+/// 账户表：钱包下的区块链网络账户，每个账户对应一种代币
+model Account {
   id        String   @id @default(uuid())
-  userId    String   @map("user_id") @db.VarChar(36)
   walletId  String   @map("wallet_id") @db.VarChar(36)
-  /// 是否为当前激活钱包
-  isActive  Boolean  @default(false) @map("is_active")
+  tokenId   String   @map("token_id") @db.VarChar(36)
+  /// 账户名称
+  name      String   @db.VarChar(64)
+  /// 链上地址（Tron格式: T+33位随机字符）
+  address   String   @unique @db.VarChar(64)
+  /// 代币余额
+  balance   Decimal  @default(0) @db.Decimal(30, 8)
   createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  token  Token  @relation(fields: [tokenId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, walletId])
-  @@map("user_wallets")
+  @@unique([walletId, tokenId])
+  @@map("accounts")
+}
+
+/// 钱包-设备订阅关联表：多对多关系
+model WalletSubscription {
+  id         Int      @id @default(autoincrement())
+  /// 钱包 ID
+  wallet_id  String   @db.VarChar(36)
+  /// 设备 ID（devices 表的自增主键）
+  device_id  Int
+  /// 链标识（预留）
+  chain      String?  @db.VarChar(32)
+  /// 地址标识（预留）
+  address_id String?  @db.VarChar(36)
+  created_at DateTime @default(now()) @map("created_at")
+
+  wallet Wallet @relation(fields: [wallet_id], references: [id], onDelete: Cascade)
+  device Device @relation(fields: [device_id], references: [id], onDelete: Cascade)
+
+  @@unique([wallet_id, device_id, chain, address_id])
+  @@map("wallet_subscriptions")
 }
 
 /// 法币汇率表：存储各法币对 USDT 的兑换汇率
@@ -192,10 +256,11 @@ model Transaction {
   @@map("transactions")
 }
 
-/// 地址本：用户常用联系人地址表
+/// 地址本：常用联系人地址表
 model Contact {
   id        String   @id @default(uuid())
-  userId    String   @map("user_id") @db.VarChar(36)
+  /// 设备 ID（devices 表的自增主键）
+  device_id Int
   /// 联系人名称
   name      String   @db.VarChar(64)
   /// 钱包地址
@@ -205,16 +270,16 @@ model Contact {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device @relation(fields: [device_id], references: [id], onDelete: Cascade)
 
   @@map("contacts")
 }
 
-/// 通知/消息表：站内信通知
+/// 通知/消息表：站内信通知（关联到设备）
 model Notification {
   id        String           @id @default(uuid())
-  /// 接收通知的用户 ID
-  userId    String           @map("user_id") @db.VarChar(36)
+  /// 接收通知的设备 ID
+  device_id Int              @map("device_id")
   /// 通知标题
   title     String           @db.VarChar(128)
   /// 通知内容
@@ -225,7 +290,7 @@ model Notification {
   isRead    Boolean          @default(false) @map("is_read")
   createdAt DateTime         @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device @relation(fields: [device_id], references: [id], onDelete: Cascade)
 
   @@map("notifications")
 }

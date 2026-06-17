@@ -1,79 +1,73 @@
 import api from "./api";
-import { encryptPassword } from "./rsaService";
-import type { User } from "../types";
+import type { Device } from "../types";
 
 export const authService = {
-  async login(
-    username: string,
-    password: string
-  ): Promise<{ token: string; user: User }> {
-    const encryptedPassword = await encryptPassword(password);
-    const { data } = await api.post("/auth/login", {
-      username,
-      password: encryptedPassword,
-    });
+  /** 注册设备（首次启动自动调用，由 api.ts 拦截器处理） */
+  async registerDevice(input: {
+    device_id: string;
+    platform: string;
+    os?: string;
+    model?: string;
+    locale?: string;
+    version?: string;
+    currency?: string;
+  }): Promise<Device> {
+    const { data } = await api.post("/devices", input);
     return data;
   },
 
-  async register(username: string, password: string): Promise<void> {
-    const encryptedPassword = await encryptPassword(password);
-    await api.post("/auth/register", {
-      username,
-      password: encryptedPassword,
-    });
+  /** 获取当前设备信息 */
+  async getDeviceInfo(): Promise<Device> {
+    const { data } = await api.get("/devices/me");
+    return data;
+  },
+
+  /** 更新设备信息 */
+  async updateDevice(input: {
+    locale?: string;
+    currency?: string;
+    token?: string;
+    is_push_enabled?: boolean;
+    is_price_alerts_enabled?: boolean;
+  }): Promise<Device> {
+    const { data } = await api.put("/devices", input);
+    return data;
   },
 };
 
 export const notificationService = {
-  async getNotifications(page: number = 1, limit: number = 20) {
-    const { data } = await api.get("/notifications", { params: { page, limit } });
-    return data;
-  },
-
-  async getUnreadCount() {
-    const { data } = await api.get("/notifications/unread-count");
-    return data;
+  async getNotifications() {
+    const { data } = await api.get("/notifications");
+    return data.notifications;
   },
 
   async markAsRead(id: string) {
-    const { data } = await api.put(`/notifications/${id}/read`);
-    return data;
+    await api.put(`/notifications/${id}/read`);
   },
 
   async markAllAsRead() {
-    const { data } = await api.put("/notifications/read-all");
-    return data;
+    await api.put("/notifications/read-all");
   },
 };
 
 export const adminService = {
-  async getAllUsers() {
-    const { data } = await api.get("/admin/users");
-    return data;
+  async getAllDevices() {
+    const { data } = await api.get("/admin/devices");
+    return data.devices;
   },
 
-  async getPendingUsers() {
-    const { data } = await api.get("/admin/users/pending");
-    return data;
+  async getAllWallets() {
+    const { data } = await api.get("/admin/wallets");
+    return data.wallets;
   },
 
-  async activateUser(userId: string) {
-    const { data } = await api.put(`/admin/users/${userId}/activate`);
-    return data;
+  async getAllSubscriptions() {
+    const { data } = await api.get("/admin/subscriptions");
+    return data.subscriptions;
   },
 
-  async rejectUser(userId: string) {
-    const { data } = await api.put(`/admin/users/${userId}/reject`);
-    return data;
-  },
-
-  async deactivateUser(userId: string) {
-    const { data } = await api.put(`/admin/users/${userId}/deactivate`);
-    return data;
-  },
-
-  async softDeleteUser(userId: string) {
-    const { data } = await api.delete(`/admin/users/${userId}`);
-    return data;
+  async getAllTransactions() {
+    const { data } = await api.get("/admin/transactions");
+    return data.transactions;
   },
 };

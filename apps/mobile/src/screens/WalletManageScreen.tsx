@@ -1,209 +1,312 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   FlatList,
   StyleSheet,
-  Alert,
   ActivityIndicator,
-  TextInput,
+  Modal,
+  Pressable,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
+import { WalletIcon } from "../components/icons";
+import { ChevronRightIcon } from "../components/icons";
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function WalletManageScreen() {
-  const { wallets, loading, fetchWallets, createWallet, deleteWallet, setActiveWallet } =
-    useWalletStore();
-  const [newAlias, setNewAlias] = React.useState("");
-  const [showCreate, setShowCreate] = React.useState(false);
+  const navigation = useNavigation<Nav>();
+  const {
+    wallets,
+    loading,
+    fetchWallets,
+    setActiveWallet,
+    accountCount,
+  } = useWalletStore();
+  const [showAddWalletDrawer, setShowAddWalletDrawer] = useState(false);
 
   useEffect(() => {
     fetchWallets();
   }, []);
 
-  const handleCreate = async () => {
-    if (!newAlias.trim()) {
-      Alert.alert("提示", "请输入钱包别名");
-      return;
-    }
-    try {
-      await createWallet(newAlias.trim());
-      setNewAlias("");
-      setShowCreate(false);
-      Alert.alert("成功", "钱包已创建");
-    } catch (err: any) {
-      Alert.alert("错误", err.message || "创建失败");
-    }
-  };
-
-  const handleDelete = (walletId: string, alias: string) => {
-    Alert.alert("删除钱包", `确定要删除 "${alias}" 吗？此操作不可撤销。`, [
-      { text: "取消", style: "cancel" },
-      {
-        text: "删除",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteWallet(walletId);
-          } catch (err: any) {
-            Alert.alert("错误", err.message || "删除失败");
-          }
-        },
-      },
-    ]);
-  };
-
   return (
     <View style={styles.container}>
-      {showCreate && (
-        <View style={styles.createBox}>
-          <TextInput
-            style={styles.input}
-            placeholder="输入钱包别名"
-            value={newAlias}
-            onChangeText={setNewAlias}
-          />
-          <View style={styles.createActions}>
-            <TouchableOpacity
-              style={styles.createBtn}
-              onPress={handleCreate}
-            >
-              <Text style={styles.createBtnText}>创建</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={() => {
-                setShowCreate(false);
-                setNewAlias("");
-              }}
-            >
-              <Text style={styles.cancelBtnText}>取消</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={() => setShowCreate(true)}
-      >
-        <Text style={styles.addButtonText}>+ 创建新钱包</Text>
-      </TouchableOpacity>
-
       {loading ? (
-        <ActivityIndicator style={{ padding: 32 }} />
+        <ActivityIndicator style={{ padding: 32 }} color="#3B82F6" />
       ) : (
         <FlatList
           data={wallets}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.walletItem}>
-              <View style={styles.walletInfo}>
-                <Text style={styles.walletAlias}>
-                  {item.alias} {item.isActive && "(当前)"}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item, index }) => (
+            <View style={styles.walletCard}>
+              {/* Card top: alias + chevron → navigate to detail */}
+              <TouchableOpacity
+                style={styles.cardTop}
+                onPress={() => navigation.navigate("WalletDetail", { walletId: item.id })}
+                activeOpacity={0.6}
+              >
+                <WalletIcon size={20} color="#3B82F6" />
+                <Text style={styles.walletAlias}>{item.alias}</Text>
+                {index === 0 && (
+                  <View style={styles.activeBadge}>
+                    <Text style={styles.activeBadgeText}>当前</Text>
+                  </View>
+                )}
+                <View style={styles.chevronWrap}>
+                  <ChevronRightIcon size={18} color="#9CA3AF" />
+                </View>
+              </TouchableOpacity>
+
+              {/* Account count + backup status */}
+              <View style={styles.cardMiddle}>
+                <Text style={styles.walletAccountCount}>
+                  {item.accountCount}个账户
                 </Text>
-                <Text style={styles.walletAddress}>
-                  {item.address.slice(0, 14)}...{item.address.slice(-8)}
-                </Text>
-                <Text style={styles.walletSource}>
-                  来源: {item.source === "CREATE" ? "创建" : "导入"}
+                <Text style={styles.walletBackupStatus}>
+                  {item.isBackedUp ? "✅ 已备份" : "⚠️ 未备份"}
                 </Text>
               </View>
-              <View style={styles.walletActions}>
-                {!item.isActive && (
+
+              {/* Actions */}
+              <View style={styles.cardActions}>
+                {index !== 0 ? (
                   <TouchableOpacity
                     style={styles.activateBtn}
                     onPress={() => setActiveWallet(item)}
                   >
                     <Text style={styles.activateBtnText}>切换</Text>
                   </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate("WalletAddAccount", { walletId: item.id })}
+                  >
+                    <Text style={styles.addAccountLink}>+ 添加账户</Text>
+                  </TouchableOpacity>
                 )}
-                <TouchableOpacity
-                  style={styles.deleteBtn}
-                  onPress={() => handleDelete(item.id, item.alias)}
-                >
-                  <Text style={styles.deleteBtnText}>删除</Text>
-                </TouchableOpacity>
               </View>
             </View>
           )}
         />
       )}
+
+      {/* Add wallet button */}
+      <TouchableOpacity
+        style={styles.addButton}
+        onPress={() => setShowAddWalletDrawer(true)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.addButtonText}>+ 添加钱包</Text>
+      </TouchableOpacity>
+
+      {/* Drawer-style popup for adding wallet */}
+      <Modal
+        visible={showAddWalletDrawer}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAddWalletDrawer(false)}
+      >
+        <Pressable
+          style={styles.drawerOverlay}
+          onPress={() => setShowAddWalletDrawer(false)}
+        >
+          <View style={styles.drawerContent}>
+            <Text style={styles.drawerTitle}>添加钱包</Text>
+
+            <TouchableOpacity
+              style={styles.drawerOption}
+              onPress={() => {
+                setShowAddWalletDrawer(false);
+                navigation.navigate("WalletCreate");
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.drawerOptionIcon}>
+                <Text style={styles.drawerOptionIconText}>✨</Text>
+              </View>
+              <View style={styles.drawerOptionInfo}>
+                <Text style={styles.drawerOptionTitle}>创建钱包</Text>
+                <Text style={styles.drawerOptionDesc}>
+                  生成新的助记词创建钱包
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.drawerOption}
+              onPress={() => {
+                setShowAddWalletDrawer(false);
+                navigation.navigate("WalletImport");
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.drawerOptionIcon}>
+                <Text style={styles.drawerOptionIconText}>📥</Text>
+              </View>
+              <View style={styles.drawerOptionInfo}>
+                <Text style={styles.drawerOptionTitle}>导入钱包</Text>
+                <Text style={styles.drawerOptionDesc}>
+                  使用已有助记词恢复钱包
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F9FAFB", padding: 16 },
-  createBox: {
-    backgroundColor: "#fff",
+  container: {
+    flex: 1,
+    backgroundColor: "#F5F6F8",
+  },
+  listContent: {
+    padding: 16,
+    paddingBottom: 80,
+  },
+  walletCard: {
+    backgroundColor: "#FFFFFF",
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 15,
     marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  createActions: { flexDirection: "row", gap: 12 },
-  createBtn: {
-    flex: 1,
-    backgroundColor: "#3B82F6",
-    borderRadius: 8,
-    padding: 12,
-    alignItems: "center",
-  },
-  createBtnText: { color: "#fff", fontWeight: "600" },
-  cancelBtn: {
-    flex: 1,
-    backgroundColor: "#F3F4F6",
-    borderRadius: 8,
-    padding: 12,
-    alignItems: "center",
-  },
-  cancelBtnText: { color: "#6B7280", fontWeight: "500" },
-  addButton: {
-    backgroundColor: "#3B82F6",
-    borderRadius: 10,
-    padding: 14,
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  addButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
-  walletItem: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 10,
+  cardTop: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
   },
-  walletInfo: { flex: 1 },
-  walletAlias: { fontSize: 16, fontWeight: "600", color: "#1F2937" },
-  walletAddress: {
+  chevronWrap: {
+    marginLeft: "auto",
+  },
+  walletAlias: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1F2937",
+  },
+  activeBadge: {
+    backgroundColor: "#DBEAFE",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  activeBadgeText: {
+    fontSize: 11,
+    color: "#3B82F6",
+    fontWeight: "500",
+  },
+  cardMiddle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 8,
+  },
+  walletAccountCount: {
+    fontSize: 13,
+    color: "#3B82F6",
+    fontWeight: "500",
+  },
+  walletBackupStatus: {
     fontSize: 12,
     color: "#6B7280",
-    fontFamily: "monospace",
+  },
+  cardActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  activateBtn: {
+    backgroundColor: "#DBEAFE",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  activateBtnText: {
+    color: "#3B82F6",
+    fontWeight: "500",
+    fontSize: 13,
+  },
+  addAccountLink: {
+    fontSize: 13,
+    color: "#3B82F6",
+    fontWeight: "500",
+  },
+  addButton: {
+    backgroundColor: "#3B82F6",
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginBottom: 24,
+  },
+  addButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  drawerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  drawerContent: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  drawerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1F2937",
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  drawerOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  drawerOptionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#DBEAFE",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  drawerOptionIconText: {
+    fontSize: 20,
+  },
+  drawerOptionInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  drawerOptionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1F2937",
+  },
+  drawerOptionDesc: {
+    fontSize: 12,
+    color: "#9CA3AF",
     marginTop: 4,
   },
-  walletSource: { fontSize: 12, color: "#9CA3AF", marginTop: 4 },
-  walletActions: { gap: 8 },
-  activateBtn: {
-    backgroundColor: "#EFF6FF",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  activateBtnText: { color: "#3B82F6", fontWeight: "500" },
-  deleteBtn: {
-    backgroundColor: "#FEE2E2",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  deleteBtnText: { color: "#EF4444", fontWeight: "500" },
 });
