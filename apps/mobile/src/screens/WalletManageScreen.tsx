@@ -131,7 +131,7 @@ export default function WalletManageScreen() {
               <View style={styles.drawerOptionInfo}>
                 <Text style={styles.drawerOptionTitle}>创建钱包</Text>
                 <Text style={styles.drawerOptionDesc}>
-                  生成新的助记词创建钱包
+                  生成新的钱包
                 </Text>
               </View>
             </TouchableOpacity>
@@ -150,7 +150,7 @@ export default function WalletManageScreen() {
               <View style={styles.drawerOptionInfo}>
                 <Text style={styles.drawerOptionTitle}>导入钱包</Text>
                 <Text style={styles.drawerOptionDesc}>
-                  使用已有助记词恢复钱包
+                  使用助记词导入
                 </Text>
               </View>
             </TouchableOpacity>

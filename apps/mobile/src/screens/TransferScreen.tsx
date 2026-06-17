@@ -224,7 +224,7 @@ export default function TransferScreen() {
         });
       } else {
         const { Share } = require("react-native");
-        await Share.share({ message: `imwallet 转账 ${amount} USDT\nTX: ${result?.txHash}` });
+        await Share.share({ message: `imwallet 转账 ${amount} USDT` });
       }
     } catch (err: any) {
       Alert.alert("分享失败", err.message || "请尝试截图后手动分享");
@@ -260,19 +260,8 @@ export default function TransferScreen() {
           {result.success ? "转账成功" : "转账失败"}
         </Text>
         <View style={z.resultCard}>
-          {result.success && result.txHash ? (
+          {result.success ? (
             <>
-              <Text style={z.resultLabel}>交易哈希</Text>
-              <Text style={z.resultHash} selectable>{result.txHash}</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  const C = require("expo-clipboard");
-                  C.setStringAsync(result.txHash!);
-                }}
-              >
-                <Text style={z.copyLink}>复制</Text>
-              </TouchableOpacity>
-              <View style={z.resultDivider} />
               <ResultRow label="收款地址" value={`${toAddress.slice(0, 8)}...${toAddress.slice(-6)}`} />
               <ResultRow label="实际到账" value={`${resultReceived.toFixed(6)} USDT`} />
               <ResultRow label="手续费" value={`${resultFee.toFixed(6)} USDT`} />

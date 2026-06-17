@@ -4,6 +4,7 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useAuthStore } from "../stores/authStore";
+import { useWalletStore } from "../stores/walletStore";
 import { notificationService } from "../services/authService";
 import { WalletIcon, AboutIcon, LogoutIcon, CopyIcon } from "../components/icons";
 import AdminIcon from "../components/icons/AdminIcon";
@@ -16,11 +17,14 @@ interface MenuItem {
   label: string;
   screen?: keyof RootStackParamList;
   action?: () => void;
+  badge?: string;
 }
 
 export default function ProfileScreen() {
   const navigation = useNavigation<Nav>();
   const { deviceId, logout } = useAuthStore();
+  const { wallets } = useWalletStore();
+  const totalAccountCount = wallets.reduce((sum, w) => sum + w.accountCount, 0);
   const [unreadCount, setUnreadCount] = React.useState(0);
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);
 
@@ -55,7 +59,7 @@ export default function ProfileScreen() {
   };
 
   const menuItems: MenuItem[] = [
-    { icon: <WalletIcon size={22} color="#3B82F6" />, label: "钱包管理", screen: "WalletManage" },
+    { icon: <WalletIcon size={22} color="#3B82F6" />, label: "钱包管理", screen: "WalletManage", badge: `${totalAccountCount} 个钱包` },
     { icon: <CopyIcon size={22} color="#10B981" />, label: "地址本", screen: "AddressBook" },
     ...(isAdmin
       ? [{ icon: <AdminIcon size={22} color="#3B82F6" />, label: "管理", screen: "Admin" as keyof RootStackParamList }]
@@ -104,7 +108,10 @@ export default function ProfileScreen() {
           >
             <View style={styles.menuItemLeft}>
               <View style={styles.menuIconBox}>{item.icon}</View>
-              <Text style={styles.menuLabel}>{item.label}</Text>
+              <View style={styles.menuTextWrap}>
+                <Text style={styles.menuLabel}>{item.label}</Text>
+                {item.badge && <Text style={styles.menuBadge}>{item.badge}</Text>}
+              </View>
             </View>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
@@ -188,6 +195,8 @@ const styles = StyleSheet.create({
   menuIconBox: { width: 32, alignItems: "center", marginRight: 12 },
   emojiIcon: { fontSize: 20 },
   menuLabel: { fontSize: 16, color: "#1F2937" },
+  menuTextWrap: { flex: 1 },
+  menuBadge: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
   menuArrow: { fontSize: 20, color: "#D1D5DB", fontWeight: "300" },
   // Modal
   modalOverlay: {
