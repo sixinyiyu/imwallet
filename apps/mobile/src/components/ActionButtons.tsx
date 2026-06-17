@@ -2,26 +2,7 @@ import React, { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Modal, FlatList, Pressable } from "react-native";
 import type { TokenBalance } from "../types";
 import TronIcon from "./icons/TronIcon";
-import { USDTIcon } from "./icons";
-
-// New SVG icons as React components per 1.0.2 requirements
-const TransferIconNew = ({ size = 24, color = "#E2E0F0" }: { size?: number; color?: string }) => (
-  <View style={{ width: size, height: size, justifyContent: "center", alignItems: "center" }}>
-    <Text style={{ fontSize: size * 0.7, color }}>⇄</Text>
-  </View>
-);
-
-const ReceiveIconNew = ({ size = 24, color = "#E2E0F0" }: { size?: number; color?: string }) => (
-  <View style={{ width: size, height: size, justifyContent: "center", alignItems: "center" }}>
-    <Text style={{ fontSize: size * 0.7, color }}>↓</Text>
-  </View>
-);
-
-const TradeIconNew = ({ size = 24, color = "#E2E0F0" }: { size?: number; color?: string }) => (
-  <View style={{ width: size, height: size, justifyContent: "center", alignItems: "center" }}>
-    <Text style={{ fontSize: size * 0.7, color }}>⇋</Text>
-  </View>
-);
+import { USDTIcon, TransferIcon, ReceiveIcon, RecordsIcon } from "./icons";
 
 function renderTokenIcon(symbol: string, size: number) {
   if (symbol === "TRX") return <TronIcon size={size} />;
@@ -48,7 +29,7 @@ export default function ActionButtons({
       <View style={styles.container}>
         <TouchableOpacity style={styles.button} onPress={onTransfer}>
           <View style={styles.iconCircle}>
-            <TransferIconNew size={24} color="#E2E0F0" />
+            <TransferIcon size={22} color="#2F3035" />
           </View>
           <Text style={styles.label}>转账</Text>
         </TouchableOpacity>
@@ -57,13 +38,13 @@ export default function ActionButtons({
           onPress={() => setShowTokenPicker(true)}
         >
           <View style={styles.iconCircle}>
-            <ReceiveIconNew size={24} color="#E2E0F0" />
+            <ReceiveIcon size={22} color="#2F3035" />
           </View>
           <Text style={styles.label}>收款</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.button} onPress={onRecords}>
           <View style={styles.iconCircle}>
-            <TradeIconNew size={24} color="#E2E0F0" />
+            <RecordsIcon size={22} color="#2F3035" />
           </View>
           <Text style={styles.label}>交易</Text>
         </TouchableOpacity>
@@ -120,22 +101,25 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     marginHorizontal: 16,
-    backgroundColor: "rgba(34, 32, 56, 0.1)",
+    marginTop: 20,
+    backgroundColor: "#FFFFFF",
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
   button: { flex: 1, alignItems: "center" },
   iconCircle: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "rgba(34, 32, 56, 0.1)", // #222038 with 10% opacity
+    backgroundColor: "#EFF6FF",
     justifyContent: "center",
     alignItems: "center",
   },
   label: {
     fontSize: 14,
-    color: "#E2E0F0",
+    color: "#1F2937",
     fontWeight: "500",
     marginTop: 8,
   },
@@ -146,14 +130,14 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   pickerCard: {
-    backgroundColor: "#1A1A2E",
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 20,
   },
   pickerTitle: {
     fontSize: 17,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: "#1F2937",
     textAlign: "center",
     marginBottom: 16,
   },
@@ -162,7 +146,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#222038",
+    borderBottomColor: "#F3F4F6",
   },
   pickerItemIcon: {
     width: 32,
@@ -174,20 +158,19 @@ const styles = StyleSheet.create({
   pickerItemName: {
     fontSize: 15,
     fontWeight: "500",
-    color: "#FFFFFF",
+    color: "#1F2937",
   },
   pickerItemBalance: {
     fontSize: 12,
-    color: "#E2E0F0",
+    color: "#6B7280",
     marginTop: 2,
-    opacity: 0.7,
   },
   pickerCancelBtn: {
     padding: 14,
     marginTop: 12,
-    backgroundColor: "rgba(34, 32, 56, 0.3)",
+    backgroundColor: "#F3F4F6",
     borderRadius: 10,
     alignItems: "center",
   },
-  pickerCancelText: { color: "#E2E0F0", fontWeight: "600" },
+  pickerCancelText: { color: "#6B7280", fontWeight: "600" },
 });

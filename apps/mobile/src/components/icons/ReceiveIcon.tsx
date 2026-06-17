@@ -1,49 +1,25 @@
 import React from "react";
-import Svg, { Rect, Path } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 
 interface Props {
   size?: number;
   color?: string;
 }
 
-export default function ReceiveIcon({ size = 24, color = "#333" }: Props) {
+/**
+ * 收款 icon — 手机 + 美元符号
+ * viewBox="0 0 1024 1024"
+ */
+export default function ReceiveIcon({ size = 24, color = "#2F3035" }: Props) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 48 48" fill="none">
-      <Rect
-        x="32" y="6" width="10" height="10"
-        stroke={color} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round"
-      />
-      <Rect
-        x="32" y="32" width="10" height="10"
-        stroke={color} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round"
-      />
-      <Rect
-        x="6" y="32" width="10" height="10"
-        stroke={color} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round"
-      />
-      <Rect
-        x="6" y="6" width="10" height="10"
-        stroke={color} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round"
+    <Svg width={size} height={size} viewBox="0 0 1024 1024" fill="none">
+      <Path
+        d="M768 0H256a128.16 128.16 0 0 0-128 128v768a128.16 128.16 0 0 0 128 128h512a128.16 128.16 0 0 0 128-128V128a128.16 128.16 0 0 0-128-128zM256 64h512a64.064 64.064 0 0 1 64 64v640H192V128a64.064 64.064 0 0 1 64-64z m512 896H256a64.064 64.064 0 0 1-64-64v-64h640v64a64.064 64.064 0 0 1-64 64z"
+        fill={color}
       />
       <Path
-        d="M8 24L30 24"
-        stroke={color} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round"
-      />
-      <Path
-        d="M38 24L40 24"
-        stroke={color} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round"
-      />
-      <Path
-        d="M24 37V39"
-        stroke={color} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round"
-      />
-      <Path
-        d="M24 17V31"
-        stroke={color} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round"
-      />
-      <Path
-        d="M24 8V10"
-        stroke={color} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round"
+        d="M544 864h-64a32 32 0 0 0 0 64h64a32 32 0 0 0 0-64zM500.704 445.92a76.32 76.32 0 0 1 48.928 41.6 29.28 29.28 0 0 1-9.088 28.032c-22.752 26.976-71.776-9.888-72.416-10.4a32 32 0 0 0-39.168 50.624 176.608 176.608 0 0 0 51.04 26.4V608a32 32 0 0 0 64 0v-21.984a87.776 87.776 0 0 0 45.44-29.216 93.888 93.888 0 0 0 22.08-85.408 135.776 135.776 0 0 0-88.224-85.344 76.32 76.32 0 0 1-48.96-41.6 29.28 29.28 0 0 1 9.12-28.032c22.72-26.976 71.872 10.016 72.32 10.336a32 32 0 1 0 39.264-50.56A174.816 174.816 0 0 0 544 249.28V224a32 32 0 0 0-64 0v21.696a88.224 88.224 0 0 0-45.44 29.504 93.888 93.888 0 0 0-22.08 85.408 135.776 135.776 0 0 0 88.224 85.312z"
+        fill={color}
       />
     </Svg>
   );
