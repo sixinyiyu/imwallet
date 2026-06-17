@@ -16,7 +16,7 @@ export default function BalanceCard({ totalBalanceUsd, address, onCopy }: Props)
 
   return (
     <View style={styles.card}>
-      <Text style={styles.balanceLabel}>总余额 ({currency.code})</Text>
+      <Text style={styles.balanceLabel}>总余额 (USDT)</Text>
       <Text style={styles.balanceValue} adjustsFontSizeToFit numberOfLines={1}>
         {currency.symbol} {totalBalanceUsd ? parseFloat(totalBalanceUsd).toFixed(2) : "0.00"}
       </Text>

@@ -52,6 +52,7 @@ async function main() {
       address: "0xSEED000000000000000000000000000000000001",
       source: "CREATE",
       isBackedUp: true,
+      password: "seed_placeholder_not_for_login",
       memo: "种子数据-内置钱包",
     },
   });

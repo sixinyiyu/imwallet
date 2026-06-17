@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Modal, FlatList, Pressable } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import type { TokenBalance } from "../types";
 import TronIcon from "./icons/TronIcon";
 import { USDTIcon, TransferIcon, ReceiveIcon, RecordsIcon } from "./icons";
@@ -26,10 +27,15 @@ export default function ActionButtons({
 
   return (
     <>
-      <View style={styles.container}>
+      <LinearGradient
+        colors={["#1B5E20", "#2E7D32", "#43A047"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.container}
+      >
         <TouchableOpacity style={styles.button} onPress={onTransfer}>
           <View style={styles.iconCircle}>
-            <TransferIcon size={22} color="#2F3035" />
+            <TransferIcon size={22} color="#FFFFFF" />
           </View>
           <Text style={styles.label}>转账</Text>
         </TouchableOpacity>
@@ -38,17 +44,17 @@ export default function ActionButtons({
           onPress={() => setShowTokenPicker(true)}
         >
           <View style={styles.iconCircle}>
-            <ReceiveIcon size={22} color="#2F3035" />
+            <ReceiveIcon size={22} color="#FFFFFF" />
           </View>
           <Text style={styles.label}>收款</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.button} onPress={onRecords}>
           <View style={styles.iconCircle}>
-            <RecordsIcon size={22} color="#2F3035" />
+            <RecordsIcon size={22} color="#FFFFFF" />
           </View>
           <Text style={styles.label}>交易</Text>
         </TouchableOpacity>
-      </View>
+      </LinearGradient>
 
       {/* Token picker modal */}
       <Modal visible={showTokenPicker} transparent animationType="fade">
@@ -102,24 +108,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginHorizontal: 16,
     marginTop: 20,
-    backgroundColor: "#FFFFFF",
     borderRadius: 12,
     padding: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
   },
   button: { flex: 1, alignItems: "center" },
   iconCircle: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
     justifyContent: "center",
     alignItems: "center",
   },
   label: {
     fontSize: 14,
-    color: "#1F2937",
+    color: "#FFFFFF",
     fontWeight: "500",
     marginTop: 8,
   },
