@@ -4,8 +4,7 @@ CREATE TABLE "tokens" (
     "symbol" VARCHAR(16) NOT NULL,
     "name" VARCHAR(64) NOT NULL,
     "decimals" INTEGER NOT NULL DEFAULT 6,
-    "network" VARCHAR(64) NOT NULL DEFAULT 'Private Chain',
-    "contract_address" VARCHAR(66),
+     "network" VARCHAR(64) NOT NULL DEFAULT 'Tron',    "contract_address" VARCHAR(66),
     "icon_url" VARCHAR(512),
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -19,9 +18,8 @@ CREATE UNIQUE INDEX "tokens_symbol_key" ON "tokens"("symbol");
 -- Step 2: Seed default tokens (USDT, TRX)
 INSERT INTO "tokens" ("id", "symbol", "name", "decimals", "network", "is_active", "updated_at")
 VALUES
-    ('token-usdt-default', 'USDT', 'Tether USD', 6, 'Private Chain', true, CURRENT_TIMESTAMP),
-    ('token-trx-default', 'TRX', 'Tron', 6, 'Tron Network', true, CURRENT_TIMESTAMP);
-
+     ('token-usdt-default', 'USDT', 'Tether USD', 6, 'Tron', true, CURRENT_TIMESTAMP),
+     ('token-trx-default', 'TRX', 'Tron', 6, 'Tron', true, CURRENT_TIMESTAMP);
 -- Step 3: Create wallet_tokens table
 CREATE TABLE "wallet_tokens" (
     "id" TEXT NOT NULL,

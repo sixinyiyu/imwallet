@@ -43,12 +43,11 @@ async function main() {
       symbol: "USDT",
       name: "Tether USD",
       decimals: 6,
-      network: "Private Chain",
-      isActive: true,
-    },
-  });
-  console.log(`✅ 代币 USDT 已创建/确认`);
-
+       network: "Tron",
+       isActive: true,
+     },
+   });
+   console.log(`✅ 代币 USDT 已创建/确认`);
   // 3. 创建代币 TRX
   const trx = await prisma.token.upsert({
     where: { symbol: "TRX" },
@@ -57,12 +56,11 @@ async function main() {
       symbol: "TRX",
       name: "Tron",
       decimals: 6,
-      network: "Private Chain",
-      isActive: true,
-    },
-  });
-  console.log(`✅ 代币 TRX 已创建/确认`);
-
+       network: "Tron",
+       isActive: true,
+     },
+   });
+   console.log(`✅ 代币 TRX 已创建/确认`);
   // 4. 为 damotou 创建钱包
   const wallet = await prisma.wallet.upsert({
     where: { address: "0xDAMOTOU00000000000000000000000000000001" },

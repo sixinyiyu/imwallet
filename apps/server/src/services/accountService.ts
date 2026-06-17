@@ -113,8 +113,9 @@ export async function createAccount(
     // If mnemonic is provided (both CREATE and IMPORT wallets),
     // use BIP44 deterministic derivation for cross-wallet compatibility
     address = await deriveAddressFromMnemonic(mnemonic, token.network, 0);
-  } else if (token.network === "Tron" || token.symbol === "TRX") {
+  } else if (token.network === "Tron" || token.symbol === "TRX" || token.symbol === "USDT") {
     // No mnemonic available — use random Tron-style address
+    // Both TRX and USDT (on Tron network) use Tron addresses (T...)
     address = generateTronAddress();
   } else {
     // No mnemonic available — use random address
