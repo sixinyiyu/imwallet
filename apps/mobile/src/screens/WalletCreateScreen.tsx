@@ -207,6 +207,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingRight: 14,
+    width: 44,
   },
   strengthLabel: {
     fontSize: 10,
@@ -230,11 +231,11 @@ const styles = StyleSheet.create({
 
   // 创建按钮
   button: { borderRadius: 12, paddingVertical: 16, alignItems: "center", justifyContent: "center", marginTop: 24 },
-  buttonActive: { backgroundColor: "#D0E0F8" },
+  buttonActive: { backgroundColor: "#3B82F6" },
   buttonDisabled: { backgroundColor: "#E5E7EB" },
   buttonText: { fontSize: 18, fontWeight: "600" },
-  buttonTextActive: { color: "#8899B8" },
+  buttonTextActive: { color: "#FFFFFF" },
   buttonTextDisabled: { color: "#9CA3AF" },
   loadingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  loadingText: { fontSize: 16, fontWeight: "500", color: "#8899B8" },
+  loadingText: { fontSize: 16, fontWeight: "500", color: "#FFFFFF" },
 });
