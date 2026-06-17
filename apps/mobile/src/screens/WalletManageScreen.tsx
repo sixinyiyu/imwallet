@@ -13,10 +13,18 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
-import { WalletIcon } from "../components/icons";
+import { WalletIcon, TronIcon, USDTIcon } from "../components/icons";
 import { ChevronRightIcon } from "../components/icons";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+/** 根据 symbol 获取对应图标组件 */
+function getTokenIcon(symbol: string): React.FC<{ size?: number; color?: string }> {
+  const lower = symbol.toUpperCase();
+  if (lower === "TRX") return TronIcon;
+  if (lower === "USDT") return USDTIcon;
+  return TronIcon; // fallback
+}
 
 export default function WalletManageScreen() {
   const navigation = useNavigation<Nav>();
@@ -24,6 +32,8 @@ export default function WalletManageScreen() {
     wallets,
     loading,
     fetchWallets,
+    accounts,
+    fetchAccounts,
     setActiveWallet,
     accountCount,
   } = useWalletStore();
@@ -32,6 +42,11 @@ export default function WalletManageScreen() {
   useEffect(() => {
     fetchWallets();
   }, []);
+
+  /** 获取指定钱包的账户列表 */
+  const getWalletAccounts = (walletId: string) => {
+    return accounts.filter((a) => a.walletId === walletId);
+  };
 
   return (
     <View style={styles.container}>
@@ -42,55 +57,63 @@ export default function WalletManageScreen() {
           data={wallets}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item, index }) => (
-            <View style={styles.walletCard}>
-              {/* Card top: alias + chevron → navigate to detail */}
-              <TouchableOpacity
-                style={styles.cardTop}
-                onPress={() => navigation.navigate("WalletDetail", { walletId: item.id })}
-                activeOpacity={0.6}
-              >
-                <WalletIcon size={20} color="#3B82F6" />
-                <Text style={styles.walletAlias}>{item.alias}</Text>
-                {index === 0 && (
-                  <View style={styles.activeBadge}>
-                    <Text style={styles.activeBadgeText}>当前</Text>
+          renderItem={({ item, index }) => {
+            const walletAccounts = getWalletAccounts(item.id);
+            const hasAccounts = walletAccounts.length > 0;
+
+            return (
+              <View style={styles.walletCard}>
+                {/* Card top: alias + chevron → navigate to detail */}
+                <TouchableOpacity
+                  style={styles.cardTop}
+                  onPress={() => navigation.navigate("WalletDetail", { walletId: item.id })}
+                  activeOpacity={0.6}
+                >
+                  <WalletIcon size={20} color="#9CA3AF" />
+                  <Text style={styles.walletAlias}>{item.alias}</Text>
+                  {index === 0 && (
+                    <View style={styles.activeBadge}>
+                      <Text style={styles.activeBadgeText}>当前</Text>
+                    </View>
+                  )}
+                  <View style={styles.chevronWrap}>
+                    <ChevronRightIcon size={18} color="#9CA3AF" />
                   </View>
-                )}
-                <View style={styles.chevronWrap}>
-                  <ChevronRightIcon size={18} color="#9CA3AF" />
+                </TouchableOpacity>
+
+                {/* Account count + backup status */}
+                <View style={styles.cardMiddle}>
+                  <Text style={styles.walletAccountCount}>
+                    {item.accountCount}个账户
+                  </Text>
+                  <Text style={styles.walletBackupStatus}>
+                    {item.isBackedUp ? "✅ 已备份" : "⚠️ 未备份"}
+                  </Text>
                 </View>
-              </TouchableOpacity>
 
-              {/* Account count + backup status */}
-              <View style={styles.cardMiddle}>
-                <Text style={styles.walletAccountCount}>
-                  {item.accountCount}个账户
-                </Text>
-                <Text style={styles.walletBackupStatus}>
-                  {item.isBackedUp ? "✅ 已备份" : "⚠️ 未备份"}
-                </Text>
-              </View>
-
-              {/* Actions */}
-              <View style={styles.cardActions}>
-                {index !== 0 ? (
-                  <TouchableOpacity
-                    style={styles.activateBtn}
-                    onPress={() => setActiveWallet(item)}
-                  >
-                    <Text style={styles.activateBtnText}>切换</Text>
-                  </TouchableOpacity>
-                ) : (
+                {/* Actions: 左侧提示/图标 + 右侧添加账户 */}
+                <View style={styles.cardActions}>
+                  <View style={styles.actionLeft}>
+                    {hasAccounts ? (
+                      <View style={styles.iconRow}>
+                        {walletAccounts.map((acc, i) => {
+                          const IconComp = getTokenIcon(acc.symbol);
+                          return <IconComp key={acc.id} size={20} />;
+                        })}
+                      </View>
+                    ) : (
+                      <Text style={styles.noAccountHint}>使用之前，先添加账户</Text>
+                    )}
+                  </View>
                   <TouchableOpacity
                     onPress={() => navigation.navigate("WalletAddAccount", { walletId: item.id })}
                   >
                     <Text style={styles.addAccountLink}>+ 添加账户</Text>
                   </TouchableOpacity>
-                )}
+                </View>
               </View>
-            </View>
-          )}
+            );
+          }}
         />
       )}
 
@@ -210,10 +233,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     marginTop: 8,
+    paddingLeft: 28,
   },
   walletAccountCount: {
     fontSize: 13,
-    color: "#3B82F6",
+    color: "#9CA3AF",
     fontWeight: "500",
   },
   walletBackupStatus: {
@@ -222,22 +246,24 @@ const styles = StyleSheet.create({
   },
   cardActions: {
     flexDirection: "row",
-    gap: 8,
+    alignItems: "center",
+    justifyContent: "space-between",
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: "#F3F4F6",
   },
-  activateBtn: {
-    backgroundColor: "#DBEAFE",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+  actionLeft: {
+    flex: 1,
+    paddingLeft: 28,
   },
-  activateBtnText: {
-    color: "#3B82F6",
-    fontWeight: "500",
+  iconRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  noAccountHint: {
     fontSize: 13,
+    color: "#9CA3AF",
   },
   addAccountLink: {
     fontSize: 13,
