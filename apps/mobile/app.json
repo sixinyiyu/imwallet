@@ -4,13 +4,21 @@
     "slug": "aquad",
     "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/app_logo.jpg",
+    "icon": "./assets/app_logo.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A1628"
+    },
     "ios": {
       "bundleIdentifier": "com.aquad.app",
       "supportsTablet": true,
+      "buildNumber": "1",
+      "deploymentTarget": "15.1",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "AquaD 需要访问您的相机以扫描二维码"
       }
     },
     "android": {

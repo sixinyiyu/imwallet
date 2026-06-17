@@ -9,7 +9,7 @@ on:
       - ".github/workflows/build-ios.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-ios:
@@ -50,3 +50,52 @@ jobs:
           EAS_BUILD_NO_EXPO_GO_WARNING: true
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
           EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Download IPA from EAS
+        run: |
+          mkdir -p dist
+          BUILD_INFO=$(eas build:list --platform ios --limit 5 --json)
+          BUILD_URL=$(echo "$BUILD_INFO" | node -e "
+            const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+            const build = data.find(b => b.buildProfile === 'production' && b.status === 'finished' && b.platform === 'ios');
+            const url = build?.artifacts?.buildUrl || '';
+            console.log(url);
+          ")
+          if [ -n "$BUILD_URL" ]; then
+            VERSION="${GITHUB_REF_NAME#mobile-v}"
+            curl -L -o "dist/imwallet-${VERSION}.ipa" "$BUILD_URL"
+            echo "✅ IPA downloaded: imwallet-${VERSION}.ipa"
+          else
+            echo "⚠️ Could not find IPA download URL"
+            exit 1
+          fi
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-production
+          path: apps/mobile/dist/*.ipa
+
+  release:
+    needs: build-ios
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download IPA artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-production
+          path: release-artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: IMWallet ${{ github.ref_name }}
+          files: release-artifacts/**/*.ipa
+          generate_release_notes: true
