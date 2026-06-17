@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Animated,
+  Modal,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -17,7 +19,7 @@ import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { EyeIcon, EyeOffIcon } from "../components/icons";
 
-type Nav = NativeStackNavigationProp<RootStackParamList, "WalletCreate">;
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 function getPasswordStrength(pwd: string): { level: number; label: string } {
   if (!pwd || pwd.length === 0) return { level: 0, label: "" };
@@ -33,6 +35,75 @@ function getPasswordStrength(pwd: string): { level: number; label: string } {
   if (score <= 3) return { level: 3, label: "强" };
   return { level: 4, label: "很好" };
 }
+
+/** Rotating dashed circle loading indicator with "创建中" text */
+function CreatingOverlay({ visible }: { visible: boolean }) {
+  const rotation = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!visible) return;
+    const animate = Animated.loop(
+      Animated.timing(rotation, {
+        toValue: 1,
+        duration: 1500,
+        useNativeDriver: true,
+      })
+    );
+    animate.start();
+    return () => animate.stop();
+  }, [visible]);
+
+  const rotateInterpolate = rotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  return (
+    <Modal transparent animationType="fade" visible={visible}>
+      <View style={overlayStyles.mask}>
+        <View style={overlayStyles.content}>
+          <Animated.View style={[overlayStyles.circleWrapper, { transform: [{ rotate: rotateInterpolate }] }]}>
+            <View style={overlayStyles.dashedCircle} />
+          </Animated.View>
+          <Text style={overlayStyles.text}>创建中</Text>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const overlayStyles = StyleSheet.create({
+  mask: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  content: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  circleWrapper: {
+    width: 64,
+    height: 64,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  dashedCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+    borderStyle: "dashed",
+  },
+  text: {
+    position: "absolute",
+    fontSize: 14,
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+});
 
 export default function WalletCreateScreen() {
   const navigation = useNavigation<Nav>();
@@ -60,7 +131,7 @@ export default function WalletCreateScreen() {
     setLoading(true);
     try {
       const id = await createWallet(alias.trim(), password, passwordHint.trim() || undefined);
-      navigation.replace("BackupGuide", { walletId: id });
+      navigation.replace("WalletAddAccount", { walletId: id });
     } catch (err: any) {
       const msg = err?.response?.data?.error || err?.response?.data?.details?.[0]?.message || err.message || "请稍后重试";
       Alert.alert("创建失败", msg);
@@ -70,99 +141,100 @@ export default function WalletCreateScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>创建钱包</Text>
-        <Text style={styles.desc}>为你的多账户钱包命名并设置密码保护。你也可以稍后添加更多钱包。</Text>
+    <>
+      {/* 遮罩层加载效果 */}
+      <CreatingOverlay visible={loading} />
 
-        <Text style={styles.label}>钱包名称</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="输入1-12个英文字符或1-6个汉字"
-          placeholderTextColor="#C8C9CC"
-          value={alias}
-          onChangeText={setAlias}
-          autoCapitalize="none"
-          autoCorrect={false}
-          maxLength={12}
-        />
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <Text style={styles.title}>创建钱包</Text>
+          <Text style={styles.desc}>为你的多账户钱包命名并设置密码保护。你也可以稍后添加更多钱包。</Text>
 
-        <Text style={styles.label}>创建密码</Text>
-        {/* 密码卡片：输入密码 + 分割线 + 重复密码 */}
-        <View style={styles.passwordCard}>
-          {/* 输入密码行：白色容器，TextInput透明，右侧强度指示器 */}
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.inputField}
-              placeholder="输入密码"
-              placeholderTextColor="#C8C9CC"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPasswords}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {password.length > 0 && (
-              <View style={styles.strengthWrap}>
-                <Text style={styles.strengthLabel}>{strength.label}</Text>
-                <View style={styles.strengthLines}>
-                  {[1, 2, 3, 4].map((i) => (
-                    <View key={i} style={[styles.strengthLine, { backgroundColor: strength.level >= i ? "#3B82F6" : "#E5E7EB" }]} />
-                  ))}
+          <Text style={styles.label}>钱包名称</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="输入1-12个英文字符或1-6个汉字"
+            placeholderTextColor="#C8C9CC"
+            value={alias}
+            onChangeText={setAlias}
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={12}
+          />
+
+          <Text style={styles.label}>创建密码</Text>
+          {/* 密码卡片：输入密码 + 分割线 + 重复密码 */}
+          <View style={styles.passwordCard}>
+            {/* 输入密码行：白色容器，TextInput透明，右侧强度指示器 */}
+            <View style={styles.inputRow}>
+              <TextInput
+                style={styles.inputField}
+                placeholder="输入密码"
+                placeholderTextColor="#C8C9CC"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPasswords}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {password.length > 0 && (
+                <View style={styles.strengthWrap}>
+                  <Text style={styles.strengthLabel}>{strength.label}</Text>
+                  <View style={styles.strengthLines}>
+                    {[1, 2, 3, 4].map((i) => (
+                      <View key={i} style={[styles.strengthLine, { backgroundColor: strength.level >= i ? "#3B82F6" : "#E5E7EB" }]} />
+                    ))}
+                  </View>
                 </View>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* 重复密码行：白色容器，TextInput透明，右侧眼睛icon */}
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.inputField}
-              placeholder="重复密码"
-              placeholderTextColor="#C8C9CC"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry={!showPasswords}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <TouchableOpacity onPress={() => setShowPasswords(!showPasswords)} activeOpacity={0.6} style={styles.eyeBtn}>
-              {showPasswords ? <EyeIcon size={20} color="#8899B8" /> : <EyeOffIcon size={20} color="#C4C5C5" />}
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <Text style={styles.label}>密码提示（可选）</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="输入提醒文字"
-          placeholderTextColor="#C8C9CC"
-          value={passwordHint}
-          onChangeText={setPasswordHint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          maxLength={128}
-        />
-
-        <TouchableOpacity
-          style={[styles.button, isFormValid ? styles.buttonActive : styles.buttonDisabled]}
-          onPress={handleCreate}
-          disabled={!isFormValid || loading}
-          activeOpacity={0.7}
-        >
-          {loading ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator size="small" color="#8899B8" />
-              <Text style={styles.loadingText}>创建中...</Text>
+              )}
             </View>
-          ) : (
-            <Text style={[styles.buttonText, isFormValid ? styles.buttonTextActive : styles.buttonTextDisabled]}>创建</Text>
+
+            <View style={styles.divider} />
+
+            {/* 重复密码行：白色容器，TextInput透明，右侧眼睛icon */}
+            <View style={styles.inputRow}>
+              <TextInput
+                style={styles.inputField}
+                placeholder="重复密码"
+                placeholderTextColor="#C8C9CC"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showPasswords}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity onPress={() => setShowPasswords(!showPasswords)} activeOpacity={0.6} style={styles.eyeBtn}>
+                {showPasswords ? <EyeIcon size={20} color="#8899B8" /> : <EyeOffIcon size={20} color="#C4C5C5" />}
+              </TouchableOpacity>
+            </View>
+          </View>
+          {confirmPassword.length > 0 && password !== confirmPassword && (
+            <Text style={styles.errorHint}>两次输入的密码不一致</Text>
           )}
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+          <Text style={styles.label}>密码提示（可选）</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="输入提醒文字"
+            placeholderTextColor="#C8C9CC"
+            value={passwordHint}
+            onChangeText={setPasswordHint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={128}
+          />
+
+          <TouchableOpacity
+            style={[styles.button, isFormValid ? styles.buttonActive : styles.buttonDisabled]}
+            onPress={handleCreate}
+            disabled={!isFormValid || loading}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.buttonText, isFormValid ? styles.buttonTextActive : styles.buttonTextDisabled]}>创建</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </>
   );
 }
 
@@ -187,7 +259,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 
-  // 输入行容器（与 WalletImportScreen 的 inputRow 同模式）
+  // 输入行容器
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -201,7 +273,7 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
 
-  // 强度指示器：文字在上，4条短线在下，整体垂直居中
+  // 强度指示器
   strengthWrap: {
     flexDirection: "column",
     alignItems: "center",
@@ -229,6 +301,8 @@ const styles = StyleSheet.create({
 
   eyeBtn: { padding: 14, paddingLeft: 4 },
 
+  errorHint: { fontSize: 12, color: "#EF4444", marginBottom: 12, marginLeft: 4 },
+
   // 创建按钮
   button: { borderRadius: 12, paddingVertical: 16, alignItems: "center", justifyContent: "center", marginTop: 24 },
   buttonActive: { backgroundColor: "#3B82F6" },
@@ -236,6 +310,4 @@ const styles = StyleSheet.create({
   buttonText: { fontSize: 18, fontWeight: "600" },
   buttonTextActive: { color: "#FFFFFF" },
   buttonTextDisabled: { color: "#9CA3AF" },
-  loadingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  loadingText: { fontSize: 16, fontWeight: "500", color: "#FFFFFF" },
 });
