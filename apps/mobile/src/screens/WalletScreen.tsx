@@ -90,7 +90,7 @@ export default function WalletScreen() {
           onPress={() => setWalletMenuOpen(!walletMenuOpen)}
         >
           <Text style={styles.walletSelectorText} numberOfLines={1}>
-            {activeWallet?.alias ?? "选择钱包"} ▼
+            {activeWallet?.alias ?? "选择钱包"} <Text style={styles.arrow}>▼</Text>
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -193,6 +193,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   walletSelectorText: { fontSize: 16, fontWeight: "600", color: "#1F2937" },
+  arrow: { color: "#6B7280" },
   scanButton: { padding: 4 },
   dropdownOverlay: {
     flex: 1,

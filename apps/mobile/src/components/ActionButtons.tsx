@@ -106,7 +106,7 @@ export default function ActionButtons({
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    marginHorizontal: 16,
+    marginHorizontal: 0,
     marginTop: 20,
     borderRadius: 12,
     padding: 16,
