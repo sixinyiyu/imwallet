@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -17,9 +17,7 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
-import { walletService } from "../services/walletService";
-import { validateMnemonic, cleanMnemonic, validateMnemonicWords } from "../utils/mnemonic";
-import { encryptPassword } from "../services/rsaService";
+import { validateMnemonic, cleanMnemonic, validateMnemonicWords, searchBip39Words } from "../utils/mnemonic";
 import * as SecureStore from "../utils/secureStorage";
 import { EyeIcon, EyeOffIcon } from "../components/icons";
 
@@ -76,6 +74,24 @@ export default function ResetPasswordScreen() {
   const isStep2Valid =
     newPassword.length >= 8 &&
     newPassword === confirmPassword;
+
+  // ─── Mnemonic autocomplete ───
+  const suggestions = useMemo(() => {
+    if (!mnemonicInput) return [];
+    // Get the last word being typed (after the last space)
+    const parts = mnemonicInput.split(/\s+/);
+    const lastPart = parts[parts.length - 1] || "";
+    // Only show suggestions when typing a word (not right after a space)
+    if (!lastPart || mnemonicInput.endsWith(" ")) return [];
+    return searchBip39Words(lastPart, 8);
+  }, [mnemonicInput]);
+
+  const handleSelectWord = useCallback((word: string) => {
+    // Replace the last partial word with the selected word + space
+    const parts = mnemonicInput.split(/\s+/);
+    parts[parts.length - 1] = word;
+    setMnemonicInput(parts.join(" ") + " ");
+  }, [mnemonicInput]);
 
   const handleValidateMnemonic = async () => {
     try {
@@ -146,14 +162,12 @@ export default function ResetPasswordScreen() {
 
     setSubmitting(true);
     try {
-      // Reset password via dedicated API (verify mnemonic identity, then update password)
       await resetPassword(
         walletId,
         validatedMnemonic,
         newPassword,
         passwordHint.trim() || undefined,
       );
-      // 直接导航回钱包详情页（Web端Alert回调不可靠）
       navigation.pop(2);
     } catch (err: any) {
       Alert.alert("重置失败", err.message || "请稍后重试");
@@ -162,7 +176,7 @@ export default function ResetPasswordScreen() {
     }
   };
 
-  // ─── Step 1: Verify Mnemonic ───
+  // ─── Step 1: Import Mnemonic ───
   if (step === 1) {
     return (
       <KeyboardAvoidingView
@@ -183,7 +197,7 @@ export default function ResetPasswordScreen() {
             <View style={styles.progressFill} />
           </View>
 
-          <Text style={styles.title}>验证助记词</Text>
+          <Text style={styles.title}>导入助记词</Text>
           <Text style={styles.description}>
             提供当前钱包的正确助记词以完成验证。
           </Text>
@@ -209,6 +223,24 @@ export default function ResetPasswordScreen() {
             autoFocus
           />
         </ScrollView>
+
+        {/* Word suggestions — below textarea, above keyboard on mobile */}
+        {suggestions.length > 0 && (
+          <View style={styles.suggestionsBar}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {suggestions.map((word) => (
+                <TouchableOpacity
+                  key={word}
+                  style={styles.suggestionChip}
+                  onPress={() => handleSelectWord(word)}
+                  activeOpacity={0.6}
+                >
+                  <Text style={styles.suggestionText}>{word}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         <View style={styles.footer}>
           <TouchableOpacity
@@ -442,6 +474,26 @@ const styles = StyleSheet.create({
     color: "#3B82F6",
     fontWeight: "500",
     marginBottom: 24,
+  },
+  // Word suggestions bar (between textarea and footer, above keyboard on mobile)
+  suggestionsBar: {
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    backgroundColor: "#F5F6F8",
+  },
+  suggestionChip: {
+    backgroundColor: "#EFF6FF",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: "#3B82F6",
+    fontWeight: "500",
   },
   mnemonicInput: {
     backgroundColor: "#FFFFFF",
