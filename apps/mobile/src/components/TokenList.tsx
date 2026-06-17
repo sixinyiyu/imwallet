@@ -1,9 +1,10 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
 import type { TokenBalance } from "../types";
 import { USDTIcon } from "./icons";
 import TronIcon from "./icons/TronIcon";
 import { useFiatStore } from "../stores/fiatStore";
+import EmptyState from "./EmptyState";
 
 interface Props {
   tokens: TokenBalance[];
@@ -15,9 +16,7 @@ export default function TokenList({ tokens, onTokenPress }: Props) {
 
   if (tokens.length === 0) {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyText}>暂无代币</Text>
-      </View>
+      <EmptyState message="暂无代币" />
     );
   }
 
@@ -96,5 +95,6 @@ const styles = StyleSheet.create({
   balanceText: { fontSize: 16, fontWeight: "600", color: "#1F2937" },
   fiatValue: { fontSize: 12, color: "#1F2937", marginTop: 2, fontWeight: "500" },
   empty: { alignItems: "center", padding: 32 },
+  emptyImage: { width: 120, height: 120, marginBottom: 12 },
   emptyText: { fontSize: 14, color: "#9CA3AF" },
 });

@@ -44,8 +44,8 @@ export default function ScanScreen() {
     setScanned(true);
 
     try {
-      // Try parsing our URI scheme: imwallet://transfer?address=0x...
-      if (data.startsWith("imwallet://")) {
+      // Try parsing our URI scheme: aquad://transfer?address=0x...
+      if (data.startsWith("aquad://")) {
         const url = new URL(data);
         const address = url.searchParams.get("address");
         if (address) {

@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { notificationService } from "../services/authService";
 import type { Notification } from "../types";
+import EmptyState from "../components/EmptyState";
 
 export default function NotificationScreen() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -118,9 +119,7 @@ export default function NotificationScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>暂无通知</Text>
-          </View>
+          <EmptyState message="暂无通知" />
         }
         contentContainerStyle={notifications.length === 0 ? styles.emptyList : undefined}
         onEndReached={() => {

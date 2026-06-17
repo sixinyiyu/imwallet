@@ -9,7 +9,12 @@ async function main() {
   const SALT_ROUNDS = 12;
 
   // 1. 创建 damotou 用户（ADMIN 角色，已激活）
-  const passwordHash = await bcrypt.hash(process.env.SEED_PASSWORD || "changeme", SALT_ROUNDS);
+  const seedPwd = process.env.SEED_PASSWORD;
+  if (!seedPwd) {
+    console.error("❌ SEED_PASSWORD 环境变量未设置，无法创建种子用户");
+    process.exit(1);
+  }
+  const passwordHash = await bcrypt.hash(seedPwd, SALT_ROUNDS);
 
   const damotou = await prisma.user.upsert({
     where: { username: "damotou" },

@@ -1,16 +1,19 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Image } from "react-native";
+
+const appLogoImage = require("../../assets/app_logo.jpg");
 
 export default function AboutScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.section}>
-        <Text style={styles.logo}>imwallet</Text>
+        <Image source={appLogoImage} style={styles.logoImage} resizeMode="contain" />
+        <Text style={styles.appName}>AquaD</Text>
         <Text style={styles.version}>版本 0.1.0</Text>
       </View>
       <View style={styles.section}>
         <Text style={styles.item}>开源协议: MIT</Text>
-        <Text style={styles.item}>官方网站: imwallet.io</Text>
+        <Text style={styles.item}>官方网站: aquad.io</Text>
         <Text style={styles.item}>用户协议</Text>
         <Text style={styles.item}>隐私政策</Text>
       </View>
@@ -27,7 +30,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     alignItems: "center",
   },
-  logo: { fontSize: 28, fontWeight: "700", color: "#1F2937" },
+  logoImage: { width: 80, height: 80, marginBottom: 8 },
+  appName: { fontSize: 28, fontWeight: "700", color: "#1F2937" },
   version: { fontSize: 14, color: "#6B7280", marginTop: 8 },
   item: {
     fontSize: 15,

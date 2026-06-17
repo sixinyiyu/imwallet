@@ -13,6 +13,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useWalletStore } from "../stores/walletStore";
+import EmptyState from "../components/EmptyState";
 import { transactionService, type TransactionFilter } from "../services/transactionService";
 import type { Transaction } from "../types";
 import { SearchIcon, USDTIcon } from "../components/icons";
@@ -230,10 +231,7 @@ export default function RecordsScreen() {
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
-            <View style={styles.centerEmpty}>
-              <Text style={styles.emptyIcon}>📭</Text>
-              <Text style={styles.emptyText}>暂无交易记录</Text>
-            </View>
+            <EmptyState message="暂无交易记录" />
           }
           ListFooterComponent={
             loadingMore ? (

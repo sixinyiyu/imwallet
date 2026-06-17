@@ -78,7 +78,7 @@ export default function TradeDetailScreen() {
         });
       } else {
         const { Share } = require("react-native");
-        await Share.share({ message: `imwallet 交易详情\n金额: ${tx?.amount} USDT\n状态: ${tx?.status}` });
+        await Share.share({ message: `AquaD 交易详情\n金额: ${tx?.amount} USDT\n状态: ${tx?.status}` });
       }
     } catch (err: any) {
       Alert.alert("分享失败", err.message || "请尝试截图后手动分享");

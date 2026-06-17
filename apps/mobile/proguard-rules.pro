@@ -1,4 +1,4 @@
-# IMWallet ProGuard Rules
+# AquaD ProGuard Rules
 
 # Keep React Native components
 -keep,allowobfuscation @interface com.facebook.proguard.annotations.DoNotStrip

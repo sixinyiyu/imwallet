@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
+import EmptyState from "../components/EmptyState";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -123,9 +124,7 @@ export default function TokenDetailScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={styles.emptyTxWrap}>
-          <Text style={styles.emptyTx}>暂无交易记录</Text>
-        </View>
+        <EmptyState message="暂无交易记录" />
       )}
     </ScrollView>
   );

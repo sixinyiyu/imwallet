@@ -64,7 +64,7 @@ function KeyResetIcon({ size = 24 }: { size?: number }) {
   );
 }
 
-const APP_NAME = "IMWallet";
+const APP_NAME = "AquaD";
 
 export default function ForgotPasswordScreen() {
   const navigation = useNavigation<Nav>();

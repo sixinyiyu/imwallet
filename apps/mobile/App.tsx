@@ -8,6 +8,7 @@ export default function App() {
   // Web端：禁止页面滚动和左右滑动
   useEffect(() => {
     if (typeof document !== "undefined") {
+      document.title = "AquaD";
       const style = document.createElement("style");
       style.textContent = `
         html, body, #root {

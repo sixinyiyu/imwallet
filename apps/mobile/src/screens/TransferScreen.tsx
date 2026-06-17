@@ -224,7 +224,7 @@ export default function TransferScreen() {
         });
       } else {
         const { Share } = require("react-native");
-        await Share.share({ message: `imwallet 转账 ${amount} USDT` });
+        await Share.share({ message: `AquaD 转账 ${amount} USDT` });
       }
     } catch (err: any) {
       Alert.alert("分享失败", err.message || "请尝试截图后手动分享");

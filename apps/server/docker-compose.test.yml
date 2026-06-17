@@ -6,7 +6,7 @@ services:
     container_name: imwallet-db
     environment:
       POSTGRES_USER: imwallet
-      POSTGRES_PASSWORD: imwallet_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-imwallet_dev}
       POSTGRES_DB: imwallet
     ports:
       - "5432:5432"

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { contactService } from "../services/contactService";
 import type { Contact } from "../types";
+import EmptyState from "../components/EmptyState";
 
 /** 联系人表单模式：新增 / 编辑 */
 type FormMode = "add" | "edit";
@@ -178,13 +179,7 @@ export default function AddressBookScreen() {
           </View>
         )}
         ListEmptyComponent={
-          <View style={styles.centerEmpty}>
-            <Text style={styles.emptyIcon}>📒</Text>
-            <Text style={styles.emptyText}>暂无联系人</Text>
-            <Text style={styles.emptyHint}>
-              点击上方按钮添加联系人
-            </Text>
-          </View>
+          <EmptyState message="暂无联系人" />
         }
         contentContainerStyle={
           contacts.length === 0 ? styles.emptyList : undefined

@@ -36,7 +36,7 @@ export default function ReceiveScreen() {
 
   const qrValue = useMemo(() => {
     if (!address) return "";
-    return `imwallet://transfer?address=${address}&token=${currentToken.symbol}`;
+    return `aquad://transfer?address=${address}&token=${currentToken.symbol}`;
   }, [address, currentToken.symbol]);
 
   const handleCopy = () => {

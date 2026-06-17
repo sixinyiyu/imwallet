@@ -13,6 +13,7 @@ import {
   Keyboard,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import EmptyState from "../components/EmptyState";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
@@ -317,9 +318,7 @@ export default function WalletDetailScreen() {
         </View>
 
         {accounts.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>暂无账户</Text>
-          </View>
+          <EmptyState message="暂无账户" />
         ) : (
           accounts.map((acc) => (
             <View key={acc.id} style={styles.accountCard}>
