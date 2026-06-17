@@ -55,9 +55,10 @@ export default function WalletAddAccountScreen() {
   const { addAccount } = useWalletStore();
 
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
+  const [selectedTokenIds, setSelectedTokenIds] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
-  const [tokens, setTokens] = useState(PRESET_TOKENS);
+  const [tokens, setTokens] = useState<(TokenInfo & { icon: React.FC<{ size?: number }> })[]>([]);
+  const [tokensLoaded, setTokensLoaded] = useState(false);
 
   useEffect(() => {
     loadTokens();
@@ -75,30 +76,56 @@ export default function WalletAddAccountScreen() {
           };
         });
         setTokens(merged);
+      } else {
+        // API 返回空列表，使用预置代币
+        setTokens(PRESET_TOKENS);
       }
     } catch {
-      // use PRESET_TOKENS as fallback
+      // API 失败，使用预置代币
+      setTokens(PRESET_TOKENS);
     }
+    setTokensLoaded(true);
+  };
+
+  const toggleToken = (tokenId: string) => {
+    setSelectedTokenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tokenId)) {
+        next.delete(tokenId);
+      } else {
+        next.add(tokenId);
+      }
+      return next;
+    });
   };
 
   const handleConfirm = async () => {
-    if (!selectedTokenId) return;
+    if (selectedTokenIds.size === 0) return;
     if (!walletId) {
       Alert.alert("错误", "钱包ID缺失");
       return;
     }
-    const token = tokens.find((t) => t.id === selectedTokenId);
     setCreating(true);
     try {
-      await addAccount(walletId, selectedTokenId, `${token?.symbol ?? ""} Account`);
-      setDrawerVisible(false);
-      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
-    } catch (err: any) {
-      Alert.alert("添加失败", err.message || "请稍后重试");
-    } finally {
-      setCreating(false);
+      // 逐个添加选中的代币账户，单个失败不阻塞后续
+      for (const tokenId of selectedTokenIds) {
+        const token = tokens.find((t) => t.id === tokenId);
+        try {
+          await addAccount(walletId, tokenId, `${token?.symbol ?? ""} Account`);
+        } catch {
+          // 单个账户添加失败不阻塞流程
+        }
+      }
+    } catch {
+      // 整体异常也不阻塞
     }
+    setDrawerVisible(false);
+    setCreating(false);
+    // 跳转到钱包备份引导页
+    navigation.replace("BackupGuide", { walletId });
   };
+
+  const hasSelection = selectedTokenIds.size > 0;
 
   return (
     <View style={styles.container}>
@@ -125,7 +152,10 @@ export default function WalletAddAccountScreen() {
         <View style={styles.bottomArea}>
           <TouchableOpacity
             style={styles.addButton}
-            onPress={() => setDrawerVisible(true)}
+            onPress={() => {
+              setSelectedTokenIds(new Set());
+              setDrawerVisible(true);
+            }}
             activeOpacity={0.7}
           >
             <Text style={styles.addButtonText}>立即添加账号</Text>
@@ -152,11 +182,14 @@ export default function WalletAddAccountScreen() {
             选择你需要的特定账户类型，完成响应账户的添加。
           </Text>
 
-          {/* 代币卡片列表 */}
+          {/* 代币卡片列表 - 多选 */}
+          {!tokensLoaded ? (
+            <ActivityIndicator color="#3B82F6" size="large" style={{ marginTop: 20 }} />
+          ) : (
           <View style={drawerStyles.tokenList}>
             {tokens.map((token) => {
               const IconComp = token.icon;
-              const isSelected = selectedTokenId === token.id;
+              const isSelected = selectedTokenIds.has(token.id);
               return (
                 <TouchableOpacity
                   key={token.id}
@@ -164,7 +197,7 @@ export default function WalletAddAccountScreen() {
                     drawerStyles.tokenCard,
                     isSelected && drawerStyles.tokenCardSelected,
                   ]}
-                  onPress={() => setSelectedTokenId(token.id)}
+                  onPress={() => toggleToken(token.id)}
                   activeOpacity={0.7}
                 >
                   <View style={drawerStyles.tokenIconWrap}>
@@ -176,22 +209,23 @@ export default function WalletAddAccountScreen() {
                       {token.symbol} · {token.network}
                     </Text>
                   </View>
-                  {/* 选中指示器 */}
+                  {/* 多选 checkbox */}
                   <View
                     style={[
-                      drawerStyles.radioOuter,
-                      isSelected && drawerStyles.radioOuterSelected,
+                      drawerStyles.checkboxOuter,
+                      isSelected && drawerStyles.checkboxOuterSelected,
                     ]}
                   >
-                    {isSelected && <View style={drawerStyles.radioInner} />}
+                    {isSelected && <Text style={drawerStyles.checkboxTick}>✓</Text>}
                   </View>
                 </TouchableOpacity>
               );
             })}
           </View>
+          )}
 
           {/* 提示文字 */}
-          {!selectedTokenId && (
+          {!hasSelection && (
             <Text style={drawerStyles.hintText}>请先选择账户</Text>
           )}
 
@@ -199,10 +233,10 @@ export default function WalletAddAccountScreen() {
           <TouchableOpacity
             style={[
               drawerStyles.confirmButton,
-              (!selectedTokenId || creating) && drawerStyles.confirmButtonDisabled,
+              (!hasSelection || creating) && drawerStyles.confirmButtonDisabled,
             ]}
             onPress={handleConfirm}
-            disabled={!selectedTokenId || creating}
+            disabled={!hasSelection || creating}
             activeOpacity={0.7}
           >
             {creating ? (
@@ -338,23 +372,24 @@ const drawerStyles = StyleSheet.create({
     color: "#9CA3AF",
     marginTop: 2,
   },
-  radioOuter: {
+  checkboxOuter: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: 6,
     borderWidth: 2,
     borderColor: "#D1D5DB",
     justifyContent: "center",
     alignItems: "center",
   },
-  radioOuterSelected: {
+  checkboxOuterSelected: {
     borderColor: "#3B82F6",
-  },
-  radioInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
     backgroundColor: "#3B82F6",
+  },
+  checkboxTick: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
   },
   hintText: {
     fontSize: 13,
