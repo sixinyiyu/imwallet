@@ -51,6 +51,7 @@ export default function StartScreen() {
       >
         {/* Logo 区域：flex:1 占据剩余空间，内容垂直居中 */}
         <View style={styles.logoArea}>
+          <Text style={styles.slogan}>极致安全 自由掌控</Text>
         </View>
 
         {/* 按钮区域：固定在底部 */}
@@ -101,8 +102,16 @@ const styles = StyleSheet.create({
   },
   logoArea: {
     flex: 1,
-    justifyContent: "center",
+    justifyContent: "flex-end",
     alignItems: "center",
+    paddingBottom: 110,
+  },
+  slogan: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "700",
+    letterSpacing: 4,
+    textAlign: "center",
   },
 
   buttonArea: {
