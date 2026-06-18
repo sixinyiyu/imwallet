@@ -78,31 +78,50 @@ async function importPrismaMigrations(): Promise<void> {
 
 // ─── Run database initialization ─────────────────────────────────────────────
 export async function runMigrations(): Promise<void> {
-  logger.info("MIGRATE", "Checking database initialization...");
+  logger.info("MIGRATE", "========================================");
+  logger.info("MIGRATE", "  Checking database initialization...");
+  logger.info("MIGRATE", "========================================");
 
   // Step 1: If database was managed by Prisma before, import those records
   await importPrismaMigrations();
 
   // Step 2: Check if already initialized
   if (await isDatabaseInitialized()) {
-    logger.info("MIGRATE", "Database already initialized — skipping.");
+    logger.info("MIGRATE", "✅ Database already initialized — skipping.");
     return;
   }
 
   // Step 3: Execute init.sql
   if (!fs.existsSync(INIT_SQL_PATH)) {
-    logger.error("MIGRATE", `init.sql not found at ${INIT_SQL_PATH}`);
+    logger.error("MIGRATE", `❌ init.sql not found at ${INIT_SQL_PATH}`);
     throw new Error("prisma/init.sql not found");
   }
 
   const sql = fs.readFileSync(INIT_SQL_PATH, "utf-8");
   const statements = splitSql(sql);
 
-  logger.info("MIGRATE", `Initializing database: ${statements.length} statements from init.sql`);
+  logger.info("MIGRATE", `🌱 Initializing fresh database: ${statements.length} SQL statements from init.sql`);
 
-  for (const stmt of statements) {
-    await prisma.$executeRawUnsafe(stmt);
+  for (let i = 0; i < statements.length; i++) {
+    const stmt = statements[i];
+    // Log progress every 10 statements, and always log CREATE/INSERT statements
+    const isStructural = stmt.startsWith("CREATE") || stmt.startsWith("ALTER") || stmt.startsWith("INSERT");
+    if (isStructural || (i + 1) % 10 === 0 || i === statements.length - 1) {
+      const preview = stmt.length > 80 ? stmt.substring(0, 80) + "..." : stmt;
+      logger.info("MIGRATE", `  [${i + 1}/${statements.length}] ${preview}`);
+    }
+
+    try {
+      await prisma.$executeRawUnsafe(stmt);
+    } catch (err: any) {
+      logger.error("MIGRATE", `❌ Statement ${i + 1} failed: ${stmt.substring(0, 120)}`);
+      logger.error("MIGRATE", `❌ Error: ${err.message}`);
+      throw err;
+    }
   }
 
-  logger.info("MIGRATE", "✅ Database initialized successfully.");
+  logger.info("MIGRATE", "========================================");
+  logger.info("MIGRATE", "  ✅ Database initialized successfully!");
+  logger.info("MIGRATE", `  ${statements.length} statements executed`);
+  logger.info("MIGRATE", "========================================");
 }

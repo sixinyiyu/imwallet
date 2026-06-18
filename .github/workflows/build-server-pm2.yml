@@ -37,37 +37,22 @@ jobs:
         run: npm run build
         working-directory: apps/server
 
-      - name: Install production dependencies for server
+      - name: Install production dependencies (standalone, no workspace hoisting)
         run: |
-          mkdir -p apps/server/node_modules
-          npm install --omit=dev --workspace=apps/server
+          mkdir -p /tmp/prod-install
+          cp apps/server/package.json /tmp/prod-install/
+          cd /tmp/prod-install
+          npm install --omit=dev
+          npx prisma@6 generate
 
-      - name: Regenerate Prisma client for production
-        run: npx prisma@6 generate
-        working-directory: apps/server
-
-      - name: Copy Prisma client into server node_modules
+      - name: Verify production dependencies
         run: |
-          # In npm workspaces, @prisma/client is hoisted to root node_modules,
-          # so .prisma/client is generated there — copy it into apps/server/node_modules
-          if [ -d "node_modules/.prisma" ] && [ ! -d "apps/server/node_modules/.prisma" ]; then
-            mkdir -p apps/server/node_modules/.prisma
-            cp -r node_modules/.prisma/client apps/server/node_modules/.prisma/client
-            echo "✅ Copied .prisma/client from root node_modules to apps/server/node_modules"
-          fi
-
-      - name: Verify Prisma client generated
-        run: |
-          if [ ! -d "apps/server/node_modules/.prisma/client" ]; then
-            echo "❌ FATAL: .prisma/client not found in node_modules!"
-            echo "  Root node_modules/.prisma:"
-            ls -la node_modules/.prisma/ 2>/dev/null || echo "    (does not exist)"
-            echo "  apps/server/node_modules/.prisma:"
-            ls -la apps/server/node_modules/.prisma/ 2>/dev/null || echo "    (does not exist)"
-            exit 1
-          fi
-          echo "✅ .prisma/client exists:"
-          ls apps/server/node_modules/.prisma/client/ | head -10
+          echo "Checking critical modules..."
+          test -d "/tmp/prod-install/node_modules/express" || { echo "❌ express missing"; exit 1; }
+          test -d "/tmp/prod-install/node_modules/bcrypt" || { echo "❌ bcrypt missing"; exit 1; }
+          test -d "/tmp/prod-install/node_modules/.prisma/client" || { echo "❌ .prisma/client missing"; exit 1; }
+          test -f "apps/server/prisma/init.sql" || { echo "❌ prisma/init.sql missing"; exit 1; }
+          echo "✅ All production dependencies verified"
 
       - name: Package release artifact
         run: |
@@ -75,19 +60,15 @@ jobs:
           mkdir -p /tmp/imwallet-server
           
           cp -r apps/server/dist /tmp/imwallet-server/dist
-          cp -r apps/server/node_modules /tmp/imwallet-server/node_modules
+          cp -r /tmp/prod-install/node_modules /tmp/imwallet-server/node_modules
           cp -r apps/server/prisma /tmp/imwallet-server/prisma
           cp apps/server/package.json /tmp/imwallet-server/package.json
           cp apps/server/.env.example /tmp/imwallet-server/.env.example
           cp apps/server/ecosystem.config.js /tmp/imwallet-server/ecosystem.config.js
           cp apps/server/deploy-pm2.sh /tmp/imwallet-server/deploy-pm2.sh
           
-          # Verify .prisma/client is in the packaged node_modules
-          if [ ! -d "/tmp/imwallet-server/node_modules/.prisma/client" ]; then
-            echo "❌ FATAL: .prisma/client missing from packaged artifact!"
-            exit 1
-          fi
-          echo "✅ .prisma/client verified in packaged artifact"
+          # Ensure shell scripts have Unix line endings (LF)
+          sed -i 's/\r$//' /tmp/imwallet-server/deploy-pm2.sh
           
           cd /tmp
           tar -czf imwallet-server-pm2-${VERSION}.tar.gz imwallet-server/
