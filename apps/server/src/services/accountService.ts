@@ -16,89 +16,53 @@ function generateTronAddress(): string {
   return address;
 }
 
-/**
- * Generate a wallet identifier: aqud + 32 random Base62 characters
- */
-function generateIdentifier(): string {
-  const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  let identifier = "aqud";
-  for (let i = 0; i < 32; i++) {
-    identifier += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return identifier;
-}
-
 export interface AccountSummary {
   id: string;
   walletId: string;
-  tokenId: string;
+  network: string;
   name: string;
   address: string;
-  symbol: string;
-  network: string;
-  iconUrl?: string;
-  balance: string;
-  usdValue: string;
-  cnyValue: string;
-  decimals: number;
-}
-
-export interface AccountDetail extends AccountSummary {
+  createdAt: Date;
   updatedAt: Date;
 }
 
-/**
- * Compute USD and CNY values for an account balance
- */
-async function computeAccountValues(
-  balance: string,
-  symbol: string
-): Promise<{ usdValue: string; cnyValue: string }> {
-  const [usdtFiat, cnyFiat] = await Promise.all([
-    prisma.fiatCurrency.findUnique({ where: { code: "USD" } }),
-    prisma.fiatCurrency.findUnique({ where: { code: "CNY" } }),
-  ]);
-
-  const usdRate = usdtFiat ? parseFloat(usdtFiat.rate.toString()) : 1;
-  const cnyRate = cnyFiat ? parseFloat(cnyFiat.rate.toString()) : 7.25;
-
-  const usdValue = (parseFloat(balance) * usdRate).toFixed(2);
-  const cnyValue = (parseFloat(balance) * cnyRate).toFixed(2);
-
-  return { usdValue, cnyValue };
+export interface AccountDetail extends AccountSummary {
+  /** 该网络账户下的代币余额列表 */
+  tokenBalances: Array<{
+    tokenId: string;
+    symbol: string;
+    name: string;
+    network: string;
+    balance: string;
+    decimals: number;
+    iconUrl?: string;
+  }>;
 }
 
 /**
- * Create an account under a wallet for a specific token type.
- * For IMPORT wallets with mnemonic, uses BIP44 deterministic derivation.
- * For CREATE wallets (no mnemonic), uses random address generation.
+ * Create an account under a wallet for a specific network.
+ * Each wallet can have one account per network (e.g., one Tron account).
  *
  * @param walletId - Wallet ID
- * @param tokenId - Token ID
+ * @param network - Blockchain network (e.g., "Tron", "Ethereum")
  * @param name - Optional account name
  * @param mnemonic - Optional mnemonic phrase for deterministic derivation
  */
 export async function createAccount(
   walletId: string,
-  tokenId: string,
+  network: string,
   name?: string,
   mnemonic?: string
 ): Promise<AccountDetail> {
-  logger.info("ACCOUNT", `创建账户: walletId=${walletId}, tokenId=${tokenId}`);
+  logger.info("ACCOUNT", `创建账户: walletId=${walletId}, network=${network}`);
 
-  // Check if account already exists for this wallet+token combination
+  // Check if account already exists for this wallet+network combination
   const existing = await prisma.account.findUnique({
-    where: { walletId_tokenId: { walletId, tokenId } },
+    where: { walletId_network: { walletId, network } },
   });
 
   if (existing) {
-    throw createError(409, "Account already exists for this token type in this wallet", "ACCOUNT_EXISTS");
-  }
-
-  // Get token info
-  const token = await prisma.token.findUnique({ where: { id: tokenId } });
-  if (!token) {
-    throw createError(404, "Token not found", "TOKEN_NOT_FOUND");
+    throw createError(409, "Account already exists for this network in this wallet", "ACCOUNT_EXISTS");
   }
 
   // Get wallet info to determine source
@@ -107,91 +71,105 @@ export async function createAccount(
     throw createError(404, "Wallet not found", "WALLET_NOT_FOUND");
   }
 
-  // Generate address based on mnemonic availability and token network
+  // Generate address based on mnemonic availability and network
   let address: string;
   if (mnemonic) {
-    // If mnemonic is provided (both CREATE and IMPORT wallets),
-    // use BIP44 deterministic derivation for cross-wallet compatibility
-    address = await deriveAddressFromMnemonic(mnemonic, token.network, 0);
-  } else if (token.network === "Tron" || token.symbol === "TRX" || token.symbol === "USDT") {
-    // No mnemonic available — use random Tron-style address
-    // Both TRX and USDT (on Tron network) use Tron addresses (T...)
+    // Use BIP44 deterministic derivation
+    address = await deriveAddressFromMnemonic(mnemonic, network, 0);
+  } else if (network === "Tron") {
+    // No mnemonic — use random Tron-style address
     address = generateTronAddress();
   } else {
-    // No mnemonic available — use random address
+    // No mnemonic — use random Ethereum-style address
     address = "0x" + uuid().replace(/-/g, "").slice(0, 40).toUpperCase();
   }
 
-  const accountName = name || `${token.symbol} Account`;
+  const accountName = name || `${network} Account`;
 
   const account = await prisma.account.create({
     data: {
       walletId,
-      tokenId,
+      network,
       name: accountName,
       address,
-      balance: 0,
     },
   });
 
   logger.info("ACCOUNT", `创建账户成功: accountId=${account.id}, address=${address}`);
 
-  const { usdValue, cnyValue } = await computeAccountValues("0", token.symbol);
+  // Fetch token balances for this wallet on this network
+  const tokenBalances = await getAccountTokenBalances(walletId, network);
 
   return {
     id: account.id,
     walletId: account.walletId,
-    tokenId: account.tokenId,
+    network: account.network,
     name: account.name,
     address: account.address,
-    symbol: token.symbol,
-    network: token.network,
-    iconUrl: token.iconUrl || undefined,
-    balance: account.balance.toString(),
-    usdValue,
-    cnyValue,
-    decimals: token.decimals,
+    createdAt: account.createdAt,
     updatedAt: account.updatedAt,
+    tokenBalances,
   };
+}
+
+/**
+ * Get token balances for a wallet on a specific network
+ */
+async function getAccountTokenBalances(
+  walletId: string,
+  network: string
+): Promise<Array<{
+  tokenId: string;
+  symbol: string;
+  name: string;
+  network: string;
+  balance: string;
+  decimals: number;
+  iconUrl?: string;
+}>> {
+  const walletTokens = await prisma.walletToken.findMany({
+    where: {
+      walletId,
+      token: { network },
+    },
+    include: { token: true },
+  });
+
+  return walletTokens.map((wt: any) => ({
+    tokenId: wt.tokenId,
+    symbol: wt.token.symbol,
+    name: wt.token.name,
+    network: wt.token.network,
+    balance: wt.balance.toString(),
+    decimals: wt.token.decimals,
+    iconUrl: wt.token.iconUrl || undefined,
+  }));
 }
 
 /**
  * Get all accounts for a wallet
  */
-export async function getWalletAccounts(walletId: string): Promise<AccountSummary[]> {
+export async function getWalletAccounts(walletId: string): Promise<AccountDetail[]> {
   const accounts = await prisma.account.findMany({
     where: { walletId },
-    include: { token: true },
   });
 
-  const [usdtFiat, cnyFiat] = await Promise.all([
-    prisma.fiatCurrency.findUnique({ where: { code: "USD" } }),
-    prisma.fiatCurrency.findUnique({ where: { code: "CNY" } }),
-  ]);
-
-  const usdRate = usdtFiat ? parseFloat(usdtFiat.rate.toString()) : 1;
-  const cnyRate = cnyFiat ? parseFloat(cnyFiat.rate.toString()) : 7.25;
-
-  return accounts.map((account: any) => {
-    const balance = account.balance.toString();
-    const usdValue = (parseFloat(balance) * usdRate).toFixed(2);
-    const cnyValue = (parseFloat(balance) * cnyRate).toFixed(2);
-
-    return {
+  const result: AccountDetail[] = [];
+  for (const account of accounts) {
+    const tokenBalances = await getAccountTokenBalances(walletId, account.network);
+    result.push({
       id: account.id,
       walletId: account.walletId,
-      tokenId: account.tokenId,
+      network: account.network,
       name: account.name,
       address: account.address,
-      symbol: account.token.symbol,
-      network: account.token.network,
-      iconUrl: account.token.iconUrl || undefined,
-      balance,
-      usdValue,
-      cnyValue,
-      decimals: account.token.decimals,
-    };
-  });
+      createdAt: account.createdAt,
+      updatedAt: account.updatedAt,
+      tokenBalances,
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -200,32 +178,23 @@ export async function getWalletAccounts(walletId: string): Promise<AccountSummar
 export async function getAccountDetail(accountId: string): Promise<AccountDetail> {
   const account = await prisma.account.findUnique({
     where: { id: accountId },
-    include: { token: true },
   });
 
   if (!account) {
     throw createError(404, "Account not found", "ACCOUNT_NOT_FOUND");
   }
 
-  const { usdValue, cnyValue } = await computeAccountValues(
-    account.balance.toString(),
-    account.token.symbol
-  );
+  const tokenBalances = await getAccountTokenBalances(account.walletId, account.network);
 
   return {
     id: account.id,
     walletId: account.walletId,
-    tokenId: account.tokenId,
+    network: account.network,
     name: account.name,
     address: account.address,
-    symbol: account.token.symbol,
-    network: account.token.network,
-    iconUrl: account.token.iconUrl || undefined,
-    balance: account.balance.toString(),
-    usdValue,
-    cnyValue,
-    decimals: account.token.decimals,
+    createdAt: account.createdAt,
     updatedAt: account.updatedAt,
+    tokenBalances,
   };
 }
 
@@ -243,29 +212,47 @@ export async function deleteAccount(accountId: string): Promise<void> {
 }
 
 /**
- * Get available token types for creating accounts
+ * Get available networks for creating accounts.
+ * Only returns tokens where isAccountToken=true, grouped by network.
  */
-export async function getAvailableTokens(): Promise<{
-  tokens: Array<{
-    id: string;
-    symbol: string;
-    name: string;
+export async function getAvailableNetworks(): Promise<{
+  networks: Array<{
     network: string;
-    iconUrl?: string;
-    decimals: number;
+    tokens: Array<{
+      id: string;
+      symbol: string;
+      name: string;
+      decimals: number;
+      iconUrl?: string;
+      isAccountToken: boolean;
+    }>;
   }>;
 }> {
   const tokens = await prisma.token.findMany({
-    where: { isActive: true },
+    where: { isActive: true, isAccountToken: true },
     select: {
       id: true,
       symbol: true,
       name: true,
       network: true,
-      iconUrl: true,
       decimals: true,
+      iconUrl: true,
+      isAccountToken: true,
     },
   });
 
-  return { tokens: tokens.map((t: any) => ({ ...t, iconUrl: t.iconUrl || undefined })) };
+  // Group by network
+  const networkMap = new Map<string, Array<typeof tokens[0]>>();
+  for (const t of tokens) {
+    const list = networkMap.get(t.network) || [];
+    list.push(t);
+    networkMap.set(t.network, list);
+  }
+
+  const networks = Array.from(networkMap.entries()).map(([network, tokens]) => ({
+    network,
+    tokens: tokens.map((t: any) => ({ ...t, iconUrl: t.iconUrl || undefined })),
+  }));
+
+  return { networks };
 }

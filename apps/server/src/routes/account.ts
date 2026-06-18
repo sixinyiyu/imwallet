@@ -10,18 +10,18 @@ const router = Router();
 const asyncHandler =
   (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
   (req: Request, res: Response, next: NextFunction) =>
-    fn(req, res, next).catch(next);
+  fn(req, res, next).catch(next);
 
 router.use(deviceAuthMiddleware);
 
 const createAccountSchema = z.object({
-  tokenId: z.string().min(1, "Token ID is required"),
+  network: z.string().min(1, "Network is required"),
   name: z.string().max(64, "Name too long").optional(),
   mnemonic: z.string().optional(),
 });
 
 /**
- * POST /wallets/:walletId/accounts — Create account under a wallet
+ * POST /wallets/:walletId/accounts — Create account under a wallet for a network
  */
 router.post(
   "/wallets/:walletId/accounts",
@@ -43,7 +43,7 @@ router.post(
 
     const account = await accountService.createAccount(
       walletId,
-      req.body.tokenId,
+      req.body.network,
       req.body.name,
       req.body.mnemonic
     );
@@ -130,12 +130,13 @@ router.delete(
 );
 
 /**
- * GET /tokens/available — Get available token types for account creation
+ * GET /networks/available — Get available networks for account creation
+ * Only returns tokens where isAccountToken=true, grouped by network
  */
 router.get(
-  "/tokens/available",
+  "/networks/available",
   asyncHandler(async (_req: Request, res: Response) => {
-    const result = await accountService.getAvailableTokens();
+    const result = await accountService.getAvailableNetworks();
     res.json(result);
   })
 );

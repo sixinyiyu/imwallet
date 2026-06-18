@@ -323,11 +323,11 @@ export default function WalletDetailScreen() {
           accounts.map((acc) => (
             <View key={acc.id} style={styles.accountCard}>
               <View style={styles.accountIconCircle}>
-                <Text style={styles.accountIconText}>{acc.symbol.charAt(0)}</Text>
+                <Text style={styles.accountIconText}>{acc.network.charAt(0)}</Text>
               </View>
               <View style={styles.accountInfo}>
                 <Text style={styles.accountName}>{acc.name}</Text>
-                <Text style={styles.accountSymbol}>{acc.symbol} · {acc.network}</Text>
+                <Text style={styles.accountSymbol}>{acc.network}</Text>
               </View>
             </View>
           ))

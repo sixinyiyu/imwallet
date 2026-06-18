@@ -244,7 +244,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   /** Add account to wallet */
-  addAccount: async (walletId: string, tokenId: string, name?: string) => {
+  addAccount: async (walletId: string, network: string, name?: string) => {
     try {
       // Read mnemonic from SecureStore for deterministic derivation
       let mnemonic: string | undefined;
@@ -254,7 +254,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       } catch {
         // mnemonic may not be available for CREATE wallets
       }
-      await accountService.createAccount(walletId, tokenId, name, mnemonic);
+      await accountService.createAccount(walletId, network, name, mnemonic);
       await get().fetchAccounts(walletId);
     } catch (err: any) {
       throw err;

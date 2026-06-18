@@ -26,27 +26,11 @@ type RouteType = RouteProp<RootStackParamList, "WalletAddAccount">;
 const accountImage = require("../../assets/account.png");
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 
-/** 预置代币列表（含图标组件） */
-const PRESET_TOKENS: (TokenInfo & { icon: React.FC<{ size?: number }> })[] = [
-  {
-    id: "default-trx",
-    symbol: "TRX",
-    name: "Tron",
-    decimals: 6,
-    network: "Tron",
-    isActive: true,
-    icon: TronIcon,
-  },
-  {
-    id: "default-usdt",
-    symbol: "USDT",
-    name: "Tether USD",
-    decimals: 6,
-    network: "Tron",
-    isActive: true,
-    icon: USDTIcon,
-  },
-];
+/** 预置代币图标映射 */
+const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
+  TRX: TronIcon,
+  USDT: USDTIcon,
+};
 
 export default function WalletAddAccountScreen() {
   const navigation = useNavigation<Nav>();
@@ -55,63 +39,74 @@ export default function WalletAddAccountScreen() {
   const { addAccount } = useWalletStore();
 
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [selectedTokenIds, setSelectedTokenIds] = useState<Set<string>>(new Set());
+  const [selectedNetworks, setSelectedNetworks] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
-  const [tokens, setTokens] = useState<(TokenInfo & { icon: React.FC<{ size?: number }> })[]>([]);
-  const [tokensLoaded, setTokensLoaded] = useState(false);
+  const [networks, setNetworks] = useState<TokenInfo[]>([]);
+  const [networksLoaded, setNetworksLoaded] = useState(false);
+  /** 已有账户的网络集合（锁定选中，不可操作） */
+  const [existingNetworks, setExistingNetworks] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    loadTokens();
+    loadData();
   }, []);
 
-  const loadTokens = async () => {
+  const loadData = async () => {
     try {
-      const result = await accountService.getAvailableTokens();
-      if (result.tokens && result.tokens.length > 0) {
-        const merged = result.tokens.map((t) => {
-          const preset = PRESET_TOKENS.find((p) => p.symbol === t.symbol);
-          return {
-            ...t,
-            icon: preset?.icon ?? TronIcon,
-          };
-        });
-        setTokens(merged);
-      } else {
-        // API 返回空列表，使用预置代币
-        setTokens(PRESET_TOKENS);
+      // 并行加载：可创建账户的代币列表 + 钱包已有账户
+      const [networksResult, accountsResult] = await Promise.all([
+        accountService.getAvailableNetworks(),
+        walletId ? accountService.getWalletAccounts(walletId) : Promise.resolve({ accounts: [] }),
+      ]);
+
+      // 从 networks 中提取所有代币（用于展示）
+      const allTokens: TokenInfo[] = [];
+      for (const net of networksResult.networks) {
+        allTokens.push(...net.tokens);
       }
+      setNetworks(allTokens);
+
+      // 记录已有账户的网络
+      const existing = new Set<string>();
+      for (const acc of accountsResult.accounts) {
+        existing.add(acc.network);
+      }
+      setExistingNetworks(existing);
     } catch {
-      // API 失败，使用预置代币
-      setTokens(PRESET_TOKENS);
+      // API 失败，使用预置 TRX
+      setNetworks([
+        { id: "default-trx", symbol: "TRX", name: "Tron", decimals: 6, network: "Tron", isActive: true, isAccountToken: true },
+      ]);
     }
-    setTokensLoaded(true);
+    setNetworksLoaded(true);
   };
 
-  const toggleToken = (tokenId: string) => {
-    setSelectedTokenIds((prev) => {
+  const toggleNetwork = (network: string) => {
+    // 已有账户的网络不可操作
+    if (existingNetworks.has(network)) return;
+
+    setSelectedNetworks((prev) => {
       const next = new Set(prev);
-      if (next.has(tokenId)) {
-        next.delete(tokenId);
+      if (next.has(network)) {
+        next.delete(network);
       } else {
-        next.add(tokenId);
+        next.add(network);
       }
       return next;
     });
   };
 
   const handleConfirm = async () => {
-    if (selectedTokenIds.size === 0) return;
+    if (selectedNetworks.size === 0) return;
     if (!walletId) {
       Alert.alert("错误", "钱包ID缺失");
       return;
     }
     setCreating(true);
     try {
-      // 逐个添加选中的代币账户，单个失败不阻塞后续
-      for (const tokenId of selectedTokenIds) {
-        const token = tokens.find((t) => t.id === tokenId);
+      // 逐个添加选中的网络账户，单个失败不阻塞后续
+      for (const network of selectedNetworks) {
         try {
-          await addAccount(walletId, tokenId, `${token?.symbol ?? ""} Account`);
+          await addAccount(walletId, network, `${network} Account`);
         } catch {
           // 单个账户添加失败不阻塞流程
         }
@@ -125,7 +120,8 @@ export default function WalletAddAccountScreen() {
     navigation.replace("BackupGuide", { walletId, source: "create" });
   };
 
-  const hasSelection = selectedTokenIds.size > 0;
+  // 只有新选择的网络才算有效选择（已有账户的不算）
+  const hasNewSelection = selectedNetworks.size > 0;
 
   return (
     <View style={styles.container}>
@@ -153,7 +149,7 @@ export default function WalletAddAccountScreen() {
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => {
-              setSelectedTokenIds(new Set());
+              setSelectedNetworks(new Set());
               setDrawerVisible(true);
             }}
             activeOpacity={0.7}
@@ -183,22 +179,26 @@ export default function WalletAddAccountScreen() {
           </Text>
 
           {/* 代币卡片列表 - 多选 */}
-          {!tokensLoaded ? (
+          {!networksLoaded ? (
             <ActivityIndicator color="#3B82F6" size="large" style={{ marginTop: 20 }} />
           ) : (
           <View style={drawerStyles.tokenList}>
-            {tokens.map((token) => {
-              const IconComp = token.icon;
-              const isSelected = selectedTokenIds.has(token.id);
+            {networks.map((token) => {
+              const IconComp = TOKEN_ICONS[token.symbol] ?? TronIcon;
+              const isSelected = selectedNetworks.has(token.network);
+              const isExisting = existingNetworks.has(token.network);
+              const isLocked = isExisting; // 已有账户的网络锁定选中
               return (
                 <TouchableOpacity
                   key={token.id}
                   style={[
                     drawerStyles.tokenCard,
-                    isSelected && drawerStyles.tokenCardSelected,
+                    (isSelected || isLocked) && drawerStyles.tokenCardSelected,
+                    isLocked && drawerStyles.tokenCardLocked,
                   ]}
-                  onPress={() => toggleToken(token.id)}
+                  onPress={() => toggleNetwork(token.network)}
                   activeOpacity={0.7}
+                  disabled={isLocked}
                 >
                   <View style={drawerStyles.tokenIconWrap}>
                     <IconComp size={36} />
@@ -213,10 +213,11 @@ export default function WalletAddAccountScreen() {
                   <View
                     style={[
                       drawerStyles.checkboxOuter,
-                      isSelected && drawerStyles.checkboxOuterSelected,
+                      (isSelected || isLocked) && drawerStyles.checkboxOuterSelected,
+                      isLocked && drawerStyles.checkboxOuterLocked,
                     ]}
                   >
-                    {isSelected && <Text style={drawerStyles.checkboxTick}>✓</Text>}
+                    {(isSelected || isLocked) && <Text style={drawerStyles.checkboxTick}>✓</Text>}
                   </View>
                 </TouchableOpacity>
               );
@@ -225,7 +226,7 @@ export default function WalletAddAccountScreen() {
           )}
 
           {/* 提示文字 */}
-          {!hasSelection && (
+          {!hasNewSelection && (
             <Text style={drawerStyles.hintText}>请先选择账户</Text>
           )}
 
@@ -233,10 +234,10 @@ export default function WalletAddAccountScreen() {
           <TouchableOpacity
             style={[
               drawerStyles.confirmButton,
-              (!hasSelection || creating) && drawerStyles.confirmButtonDisabled,
+              (!hasNewSelection || creating) && drawerStyles.confirmButtonDisabled,
             ]}
             onPress={handleConfirm}
-            disabled={!hasSelection || creating}
+            disabled={!hasNewSelection || creating}
             activeOpacity={0.7}
           >
             {creating ? (
@@ -350,6 +351,11 @@ const drawerStyles = StyleSheet.create({
     borderColor: "#3B82F6",
     backgroundColor: "#EFF6FF",
   },
+  tokenCardLocked: {
+    borderColor: "#D1D5DB",
+    backgroundColor: "#F3F4F6",
+    opacity: 0.7,
+  },
   tokenIconWrap: {
     width: 44,
     height: 44,
@@ -384,6 +390,10 @@ const drawerStyles = StyleSheet.create({
   checkboxOuterSelected: {
     borderColor: "#3B82F6",
     backgroundColor: "#3B82F6",
+  },
+  checkboxOuterLocked: {
+    borderColor: "#9CA3AF",
+    backgroundColor: "#9CA3AF",
   },
   checkboxTick: {
     color: "#FFFFFF",

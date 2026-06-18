@@ -19,9 +19,9 @@ import { ChevronRightIcon } from "../components/icons";
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 /** 根据 symbol 获取对应图标组件 */
-function getTokenIcon(symbol: string): React.FC<{ size?: number; color?: string }> {
-  const lower = symbol.toUpperCase();
-  if (lower === "TRX") return TronIcon;
+function getTokenIcon(network: string): React.FC<{ size?: number; color?: string }> {
+  const lower = network.toUpperCase();
+  if (lower === "TRON") return TronIcon;
   if (lower === "USDT") return USDTIcon;
   return TronIcon; // fallback
 }
@@ -97,7 +97,7 @@ export default function WalletManageScreen() {
                     {hasAccounts ? (
                       <View style={styles.iconRow}>
                         {walletAccounts.map((acc, i) => {
-                          const IconComp = getTokenIcon(acc.symbol);
+                          const IconComp = getTokenIcon(acc.network);
                           return <IconComp key={acc.id} size={20} />;
                         })}
                       </View>

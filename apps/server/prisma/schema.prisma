@@ -95,11 +95,12 @@ model Token {
   iconUrl         String?   @map("icon_url") @db.VarChar(512)
   /// 是否启用
   isActive        Boolean   @default(true) @map("is_active")
+  /// 是否可创建账户：原生代币=true，度量币(USDT)=false
+  isAccountToken  Boolean   @default(true) @map("is_account_token")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   walletTokens    WalletToken[]
-  accounts        Account[]
   transactions    Transaction[]
 
   @@map("tokens")
@@ -153,24 +154,22 @@ model WalletToken {
   @@map("wallet_tokens")
 }
 
-/// 账户表：钱包下的区块链网络账户，每个账户对应一种代币
+/// 账户表：钱包下的区块链网络账户，每个钱包每个网络一个账户
 model Account {
   id        String   @id @default(uuid())
   walletId  String   @map("wallet_id") @db.VarChar(36)
-  tokenId   String   @map("token_id") @db.VarChar(36)
+  /// 所属网络（如 Tron、Ethereum）
+  network   String   @db.VarChar(64)
   /// 账户名称
   name      String   @db.VarChar(64)
   /// 链上地址（Tron格式: T+33位随机字符）
-  address   String   @unique @db.VarChar(64)
-  /// 代币余额
-  balance   Decimal  @default(0) @db.Decimal(30, 8)
+  address   String   @db.VarChar(64)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  token  Token  @relation(fields: [tokenId], references: [id], onDelete: Cascade)
 
-  @@unique([walletId, tokenId])
+  @@unique([walletId, network])
   @@map("accounts")
 }
 

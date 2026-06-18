@@ -35,17 +35,21 @@ export interface Wallet {
 export interface Account {
   id: string;
   walletId: string;
-  tokenId: string;
+  network: string;
   name: string;
   address: string;
-  symbol: string;
-  network: string;
-  iconUrl?: string;
-  balance: string;
-  usdValue: string;
-  cnyValue: string;
-  decimals: number;
+  createdAt: string;
   updatedAt?: string;
+  /** 该网络账户下的代币余额列表 */
+  tokenBalances: Array<{
+    tokenId: string;
+    symbol: string;
+    name: string;
+    network: string;
+    balance: string;
+    decimals: number;
+    iconUrl?: string;
+  }>;
 }
 
 export interface WalletTokenBalance {
@@ -83,6 +87,7 @@ export interface TokenInfo {
   contractAddress?: string;
   iconUrl?: string;
   isActive: boolean;
+  isAccountToken?: boolean;
 }
 
 export interface Transaction {

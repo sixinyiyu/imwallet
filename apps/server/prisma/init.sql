@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS "tokens" (
     "contract_address" VARCHAR(66),
     "icon_url"         VARCHAR(512),
     "is_active"        BOOLEAN     NOT NULL DEFAULT true,
+    "is_account_token" BOOLEAN     NOT NULL DEFAULT true,
     "created_at"       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at"       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -113,22 +114,20 @@ CREATE TABLE IF NOT EXISTS "wallet_tokens" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "wallet_tokens_wallet_id_token_id_key" ON "wallet_tokens"("wallet_id", "token_id");
 
--- 账户表
+-- 账户表（按网络，每个钱包每个网络一个账户）
 CREATE TABLE IF NOT EXISTS "accounts" (
     "id"        TEXT        NOT NULL,
     "wallet_id" VARCHAR(36) NOT NULL,
-    "token_id"  VARCHAR(36) NOT NULL,
+    "network"   VARCHAR(64) NOT NULL,
     "name"      VARCHAR(64) NOT NULL,
     "address"   VARCHAR(64) NOT NULL,
-    "balance"   DECIMAL(30,8) NOT NULL DEFAULT 0,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "accounts_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "accounts_address_key" ON "accounts"("address");
-CREATE UNIQUE INDEX IF NOT EXISTS "accounts_wallet_id_token_id_key" ON "accounts"("wallet_id", "token_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "accounts_wallet_id_network_key" ON "accounts"("wallet_id", "network");
 
 -- 钱包-设备订阅关联表
 CREATE TABLE IF NOT EXISTS "wallet_subscriptions" (
@@ -221,12 +220,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS "notification_reads_notification_id_device_id_
 
 -- ─── Seed Data ───────────────────────────────────────────────────────────────
 
--- 代币: USDT, TRX
-INSERT INTO "tokens" ("id", "symbol", "name", "decimals", "network", "is_active", "created_at", "updated_at")
+-- 代币: TRX(可创建账户), USDT(度量币，不可创建账户)
+INSERT INTO "tokens" ("id", "symbol", "name", "decimals", "network", "is_active", "is_account_token", "created_at", "updated_at")
 VALUES
-    ('token-usdt-default', 'USDT', 'Tether USD', 6, 'Tron', true, NOW(), NOW()),
-    ('token-trx-default',  'TRX',  'Tron',       6, 'Tron', true, NOW(), NOW())
-ON CONFLICT ("symbol") DO NOTHING;
+    ('token-usdt-default', 'USDT', 'Tether USD', 6, 'Tron', true, false, NOW(), NOW()),
+    ('token-trx-default',  'TRX',  'Tron',       6, 'Tron', true, true,  NOW(), NOW())
+ON CONFLICT ("symbol") DO UPDATE SET "is_account_token" = EXCLUDED."is_account_token", "updated_at" = NOW();
 
 -- 法币汇率
 INSERT INTO "fiat_currencies" ("id", "code", "name", "symbol", "rate", "decimals", "updated_at")

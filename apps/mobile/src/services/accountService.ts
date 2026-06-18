@@ -1,6 +1,11 @@
 import api from "./api";
 import type { Account, TokenInfo } from "../types";
 
+export interface AvailableNetwork {
+  network: string;
+  tokens: TokenInfo[];
+}
+
 export const accountService = {
   async getWalletAccounts(walletId: string): Promise<{ accounts: Account[] }> {
     const { data } = await api.get(`/accounts/wallets/${walletId}/accounts`);
@@ -9,12 +14,12 @@ export const accountService = {
 
   async createAccount(
     walletId: string,
-    tokenId: string,
+    network: string,
     name?: string,
     mnemonic?: string
   ): Promise<Account> {
     const { data } = await api.post(`/accounts/wallets/${walletId}/accounts`, {
-      tokenId,
+      network,
       name,
       mnemonic,
     });
@@ -30,8 +35,9 @@ export const accountService = {
     await api.delete(`/accounts/accounts/${accountId}`);
   },
 
-  async getAvailableTokens(): Promise<{ tokens: TokenInfo[] }> {
-    const { data } = await api.get("/accounts/tokens/available");
+  /** 获取可创建账户的网络列表（只含 isAccountToken=true 的代币） */
+  async getAvailableNetworks(): Promise<{ networks: AvailableNetwork[] }> {
+    const { data } = await api.get("/accounts/networks/available");
     return data;
   },
 };
