@@ -23,6 +23,7 @@
     "db:generate": "npm run db:generate --workspace=apps/server",
     "db:push": "npm run db:push --workspace=apps/server",
     "db:seed": "npm run db:seed --workspace=apps/server",
+    "db:seed:sql": "npm run db:seed:sql --workspace=apps/server",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down"
   },

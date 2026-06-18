@@ -9,7 +9,7 @@
     "ios": {
       "bundleIdentifier": "com.aquad.app",
       "supportsTablet": true,
-      "deploymentTarget": "15.1",
+      "deploymentTarget": "16.4",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "AquaD 需要访问您的相机以扫描二维码"
@@ -30,6 +30,14 @@
     },
     "plugins": [
       "expo-status-bar",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ],
       "./plugins/withAbiFilter"
     ],
     "extra": {
