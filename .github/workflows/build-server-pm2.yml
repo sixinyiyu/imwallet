@@ -94,7 +94,8 @@ jobs:
           cp -r apps/server/dist $BASE/dist
           cp -r apps/server/prisma $BASE/prisma
           cp apps/server/package.json $BASE/package.json
-          cp apps/server/package-lock.json $BASE/package-lock.json
+          # Use standalone install's lock file (not workspace root's), matches the bundled node_modules
+          cp /tmp/prod-install/package-lock.json $BASE/package-lock.json
           cp apps/server/.env.example $BASE/.env.example
           cp apps/server/ecosystem.config.js $BASE/ecosystem.config.js
           cp apps/server/deploy-pm2.sh $BASE/deploy-pm2.sh
