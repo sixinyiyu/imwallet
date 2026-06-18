@@ -19,11 +19,8 @@
     "test:server": "npm run test --workspace=apps/server",
     "test:mobile": "npm run test --workspace=apps/mobile",
     "lint": "npm run lint --workspaces --if-present",
-    "db:migrate": "npm run db:migrate --workspace=apps/server",
     "db:generate": "npm run db:generate --workspace=apps/server",
-    "db:push": "npm run db:push --workspace=apps/server",
-    "db:seed": "npm run db:seed --workspace=apps/server",
-    "db:seed:sql": "npm run db:seed:sql --workspace=apps/server",
+    "db:init": "npm run db:init --workspace=apps/server",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down"
   },

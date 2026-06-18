@@ -1,6 +1,6 @@
 import { v4 as uuid } from "uuid";
 import { createHash } from "crypto";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import prisma from "../config/prisma";
 import { createError } from "../middleware/errorHandler";
 import { logger } from "../utils/logger";
