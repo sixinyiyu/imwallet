@@ -15,6 +15,8 @@ import adminRoutes from "./routes/admin";
 import accountRoutes from "./routes/account";
 import notificationRoutes from "./routes/notification";
 import { initRSAKeys } from "./services/rsaService";
+import { runMigrations } from "./services/migrator";
+import { runSeed } from "./services/seedService";
 import { logger } from "./utils/logger";
 
 const app = express();
@@ -59,12 +61,28 @@ app.use(errorHandler);
 
 // Start server
 if (config.nodeEnv !== "test") {
-  initRSAKeys();
-  app.listen(config.port, () => {
-    logger.info("SERVER", `🚀 imwallet server running on http://localhost:${config.port}`);
-    logger.info("SERVER", `📋 Environment: ${config.nodeEnv}`);
-    logger.info("SERVER", `🔑 Auth mode: Device Ed25519 signature verification`);
-  });
+  (async () => {
+    try {
+      // 1. Auto-run pending database migrations (Flyway-style)
+      await runMigrations();
+
+      // 2. Auto-run seed data (idempotent)
+      await runSeed();
+
+      // 3. Initialize RSA keys
+      initRSAKeys();
+
+      // 4. Start HTTP server
+      app.listen(config.port, () => {
+        logger.info("SERVER", `🚀 imwallet server running on http://localhost:${config.port}`);
+        logger.info("SERVER", `📋 Environment: ${config.nodeEnv}`);
+        logger.info("SERVER", `🔑 Auth mode: Device Ed25519 signature verification`);
+      });
+    } catch (err) {
+      logger.error("SERVER", `Fatal startup error: ${err}`);
+      process.exit(1);
+    }
+  })();
 }
 
 export default app;

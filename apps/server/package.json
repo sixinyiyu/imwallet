@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:seed": "node prisma/seed.js"
+    "db:seed": "node prisma/seed.js",
+    "db:seed:sql": "sh -c 'psql \"$DATABASE_URL\" -v seed_password=\"'\\''$SEED_PASSWORD'\\''\" -f prisma/seed.sql'"
   },
   "dependencies": {
     "@noble/ed25519": "^3.1.0",

@@ -2,6 +2,9 @@
 # IMWallet Server - EC2 部署脚本
 # 用法: ./deploy.sh <version>
 # 示例: ./deploy.sh 1.0.0
+#
+# 数据库迁移和种子数据在应用启动时自动执行（Flyway-style），
+# 无需 npx prisma / psql 等外部工具。
 
 set -e
 
@@ -50,17 +53,11 @@ sudo cp -r /tmp/imwallet-server/node_modules "$APP_DIR/"
 sudo cp -r /tmp/imwallet-server/prisma "$APP_DIR/"
 sudo cp /tmp/imwallet-server/package.json "$APP_DIR/"
 
-# 6. 执行数据库迁移
-echo "🗄️  执行数据库迁移..."
-cd "$APP_DIR"
-export DATABASE_URL=$(grep -E '^DATABASE_URL=' "$ENV_FILE" | sed 's/^DATABASE_URL=//')
-npx prisma@6 migrate deploy
-
-# 7. 重启服务
+# 6. 重启服务（应用启动时自动执行迁移 + 种子数据）
 echo "🔄 重启 imwallet 服务..."
 sudo systemctl restart "$SERVICE_NAME"
 
-# 8. 等待并检查状态
+# 7. 等待并检查状态
 sleep 3
 if sudo systemctl is-active --quiet "$SERVICE_NAME"; then
   echo "✅ 部署成功! imwallet v${VERSION} 已启动"
@@ -71,7 +68,7 @@ else
   exit 1
 fi
 
-# 9. 清理临时文件
+# 8. 清理临时文件
 rm -f "/tmp/imwallet-server-systemd-${VERSION}.tar.gz"
 rm -rf /tmp/imwallet-server
 

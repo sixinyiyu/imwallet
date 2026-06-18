@@ -42,6 +42,20 @@ jobs:
           mkdir -p apps/server/node_modules
           npm install --omit=dev --workspace=apps/server
 
+      - name: Regenerate Prisma client for production
+        run: npx prisma@6 generate
+        working-directory: apps/server
+
+      - name: Verify Prisma client generated
+        run: |
+          if [ ! -d "apps/server/node_modules/.prisma/client" ]; then
+            echo "❌ FATAL: .prisma/client not found in node_modules!"
+            ls -la apps/server/node_modules/.prisma/ 2>/dev/null || echo "  .prisma directory does not exist"
+            exit 1
+          fi
+          echo "✅ .prisma/client exists:"
+          ls apps/server/node_modules/.prisma/client/ | head -10
+
       - name: Package release artifact
         run: |
           VERSION="${GITHUB_REF_NAME#server-pm2-v}"
@@ -54,6 +68,13 @@ jobs:
           cp apps/server/.env.example /tmp/imwallet-server/.env.example
           cp apps/server/ecosystem.config.js /tmp/imwallet-server/ecosystem.config.js
           cp apps/server/deploy-pm2.sh /tmp/imwallet-server/deploy-pm2.sh
+          
+          # Verify .prisma/client is in the packaged node_modules
+          if [ ! -d "/tmp/imwallet-server/node_modules/.prisma/client" ]; then
+            echo "❌ FATAL: .prisma/client missing from packaged artifact!"
+            exit 1
+          fi
+          echo "✅ .prisma/client verified in packaged artifact"
           
           cd /tmp
           tar -czf imwallet-server-pm2-${VERSION}.tar.gz imwallet-server/
