@@ -152,6 +152,52 @@ export async function createOrImportWallet(
   }
   const identifier = generateIdentifier();
 
+  // 检查地址是否已存在（同一助记词可能已被导入过）
+  const existingWallet = await prisma.wallet.findUnique({
+    where: { address },
+  });
+
+  if (existingWallet) {
+    // 地址已存在，检查当前设备是否已订阅该钱包
+    const existingSub = await prisma.walletSubscription.findFirst({
+      where: {
+        wallet_id: existingWallet.id,
+        device_id: device.id,
+      },
+    });
+
+    if (existingSub) {
+      // 当前设备已订阅该钱包
+      throw createError(409, "钱包已存在于当前设备", "WALLET_ALREADY_EXISTS");
+    }
+
+    // 当前设备未订阅，自动添加订阅（多设备共享同一钱包）
+    logger.info("WALLET", `钱包地址已存在，为当前设备添加订阅: walletId=${existingWallet.id}, deviceId=${deviceId.slice(0, 8)}...`);
+    await prisma.walletSubscription.create({
+      data: {
+        wallet_id: existingWallet.id,
+        device_id: device.id,
+      },
+    });
+
+    const { tokenBalances, totalBalanceCny } = await computeTokenBalances(existingWallet.id);
+    const accountCount = await prisma.account.count({ where: { walletId: existingWallet.id } });
+
+    return {
+      id: existingWallet.id,
+      identifier: existingWallet.identifier,
+      alias: existingWallet.alias,
+      address: existingWallet.address,
+      source: existingWallet.source as string,
+      accountCount,
+      createdAt: existingWallet.createdAt,
+      updatedAt: existingWallet.updatedAt,
+      tokenBalances,
+      totalBalanceCny,
+    };
+  }
+
+  // 地址不存在，创建新钱包
   const wallet = await prisma.wallet.create({
     data: {
       identifier,
