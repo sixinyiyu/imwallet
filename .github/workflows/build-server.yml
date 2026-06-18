@@ -58,11 +58,19 @@ jobs:
           rm -rf prisma
           # Remove TypeScript compiler (dev tool, not needed at runtime)
           rm -rf typescript
+          # Remove @prisma/engines package (76MB, contains all platform engines)
+          # The actual query engine is in .prisma/client after overwrite, this package is redundant
+          rm -rf @prisma/engines
           # Remove migration and introspection engines (not needed at runtime)
           rm -rf .prisma/client/migration-engine-*
           rm -rf .prisma/client/introspection-engine-*
           # Remove schema.prisma from client (already in prisma/ directory)
           rm -f .prisma/client/schema.prisma
+          # Remove non-PostgreSQL wasm-base64 engines (42MB, we only use PostgreSQL)
+          find @prisma/client/runtime -type f -name '*cockroachdb*' -delete 2>/dev/null || true
+          find @prisma/client/runtime -type f -name '*mysql*' -delete 2>/dev/null || true
+          find @prisma/client/runtime -type f -name '*sqlserver*' -delete 2>/dev/null || true
+          find @prisma/client/runtime -type f -name '*sqlite*' -delete 2>/dev/null || true
 
           # Strip common bloat from all packages
           find . -type f -name "README*" -delete 2>/dev/null || true

@@ -54,9 +54,14 @@ jobs:
           rm -rf .cache
           rm -rf prisma
           rm -rf typescript
+          rm -rf @prisma/engines
           rm -rf .prisma/client/migration-engine-*
           rm -rf .prisma/client/introspection-engine-*
           rm -f .prisma/client/schema.prisma
+          find @prisma/client/runtime -type f -name '*cockroachdb*' -delete 2>/dev/null || true
+          find @prisma/client/runtime -type f -name '*mysql*' -delete 2>/dev/null || true
+          find @prisma/client/runtime -type f -name '*sqlserver*' -delete 2>/dev/null || true
+          find @prisma/client/runtime -type f -name '*sqlite*' -delete 2>/dev/null || true
 
           find . -type f -name "README*" -delete 2>/dev/null || true
           find . -type f -name "CHANGELOG*" -delete 2>/dev/null || true
