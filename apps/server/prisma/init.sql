@@ -23,16 +23,6 @@ EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
 DO $$ BEGIN
-    CREATE TYPE "UserStatus" AS ENUM ('PENDING', 'ACTIVE', 'REJECTED');
-EXCEPTION WHEN duplicate_object THEN null;
-END $$;
-
-DO $$ BEGIN
-    CREATE TYPE "UserRole" AS ENUM ('NORMAL', 'ADMIN');
-EXCEPTION WHEN duplicate_object THEN null;
-END $$;
-
-DO $$ BEGIN
     CREATE TYPE "NotificationType" AS ENUM ('TRANSFER_IN', 'TRANSFER_OUT', 'ACCOUNT_ACTIVATED', 'ACCOUNT_REJECTED');
 EXCEPTION WHEN duplicate_object THEN null;
 END $$;
@@ -86,23 +76,6 @@ CREATE TABLE IF NOT EXISTS "devices" (
     CONSTRAINT "devices_pkey" PRIMARY KEY ("id")
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "devices_device_id_key" ON "devices"("device_id");
-
--- 用户表
-CREATE TABLE IF NOT EXISTS "users" (
-    "id"           TEXT        NOT NULL,
-    "username"     VARCHAR(32) NOT NULL,
-    "password_hash" VARCHAR(60) NOT NULL,
-    "device_info"  TEXT        NOT NULL DEFAULT '',
-    "status"       "UserStatus" NOT NULL DEFAULT 'PENDING',
-    "role"         "UserRole" NOT NULL DEFAULT 'NORMAL',
-    "deleted_at"   TIMESTAMP(3),
-    "created_at"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS "users_username_key" ON "users"("username");
 
 -- 代币表
 CREATE TABLE IF NOT EXISTS "tokens" (
@@ -172,19 +145,6 @@ CREATE TABLE IF NOT EXISTS "accounts" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "accounts_address_key" ON "accounts"("address");
 CREATE UNIQUE INDEX IF NOT EXISTS "accounts_wallet_id_token_id_key" ON "accounts"("wallet_id", "token_id");
-
--- 用户-钱包关联表
-CREATE TABLE IF NOT EXISTS "user_wallets" (
-    "id"         TEXT        NOT NULL,
-    "user_id"    VARCHAR(36) NOT NULL,
-    "wallet_id"  VARCHAR(36) NOT NULL,
-    "is_active"  BOOLEAN     NOT NULL DEFAULT false,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "user_wallets_pkey" PRIMARY KEY ("id")
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS "user_wallets_user_id_wallet_id_key" ON "user_wallets"("user_id", "wallet_id");
 
 -- 钱包-设备订阅关联表
 CREATE TABLE IF NOT EXISTS "wallet_subscriptions" (
