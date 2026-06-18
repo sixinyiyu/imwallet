@@ -2,15 +2,12 @@
  * Flyway-style database migrator.
  *
  * On every app startup, reads SQL files from prisma/migrations/<folder>/migration.sql,
- * tracks executed ones in the _migrations table, and runs any pending migrations
- * inside a transaction.
+ * tracks executed ones in the _migrations table, and runs any pending migrations.
  *
- * Migration from Prisma: on first run, detects _prisma_migrations table and
- * imports all previously-applied migration names into _migrations, so we don't
- * re-run migrations that Prisma already applied.
- *
- * Checksum validation: if an already-applied migration file is modified,
- * startup will fail with a clear error (same as Flyway).
+ * Key features:
+ * - Migration from Prisma: detects _prisma_migrations and imports records
+ * - Checksum validation: modified already-applied migrations cause startup failure
+ * - Each migration runs as a single $executeRawUnsafe call (no SQL splitting)
  *
  * Zero external dependencies — uses the existing PrismaClient connection.
  */
@@ -65,13 +62,13 @@ async function importPrismaMigrations(): Promise<void> {
     return;
   }
 
-  // Get Prisma-applied migration names
+  // Get Prisma-applied migration names (only successfully finished ones)
   const prismaRows = await prisma.$queryRawUnsafe(
     `SELECT migration_name FROM "${PRISMA_MIGRATIONS_TABLE}" WHERE finished_at IS NOT NULL;`
   ) as Array<{ migration_name: string }>;
 
   if (prismaRows.length === 0) {
-    logger.info("MIGRATE", "_prisma_migrations table exists but has no records — no import needed.");
+    logger.info("MIGRATE", "_prisma_migrations table exists but has no finished records — no import needed.");
     return;
   }
 
@@ -184,21 +181,16 @@ export async function runMigrations(): Promise<void> {
   for (const migration of pending) {
     logger.info("MIGRATE", `Applying: ${migration.name} ...`);
 
-    await prisma.$transaction(async (tx: any) => {
-      const statements = migration.sql
-        .split(";")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0 && !s.startsWith("--"));
+    // Execute the entire migration SQL as one batch — no splitting needed.
+    // PostgreSQL supports multi-statement execution via $executeRawUnsafe.
+    // This avoids bugs with comment-prefixed statements being filtered out.
+    await prisma.$executeRawUnsafe(migration.sql);
 
-      for (const stmt of statements) {
-        await tx.$executeRawUnsafe(stmt);
-      }
-
-      // Record the migration with checksum
-      await tx.$executeRawUnsafe(
-        `INSERT INTO "${MIGRATIONS_TABLE}" (name, checksum) VALUES ('${migration.name}', '${migration.checksum}');`
-      );
-    });
+    // Record the migration with checksum (outside the DDL transaction,
+    // since PostgreSQL auto-commits DDL and can't roll it back)
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${MIGRATIONS_TABLE}" (name, checksum) VALUES ('${migration.name}', '${migration.checksum}');`
+    );
 
     logger.info("MIGRATE", `✅ Applied: ${migration.name}`);
   }
