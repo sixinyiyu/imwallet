@@ -15,7 +15,7 @@ export function MainTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "#3B82F6",
+        tabBarActiveTintColor: "#2E7D32",
         tabBarInactiveTintColor: "#9CA3AF",
         tabBarStyle: {
           borderTopWidth: 1,

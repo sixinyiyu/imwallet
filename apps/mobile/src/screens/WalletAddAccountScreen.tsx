@@ -180,7 +180,7 @@ export default function WalletAddAccountScreen() {
 
           {/* 代币卡片列表 - 多选 */}
           {!networksLoaded ? (
-            <ActivityIndicator color="#3B82F6" size="large" style={{ marginTop: 20 }} />
+            <ActivityIndicator color="#287220" size="large" style={{ marginTop: 20 }} />
           ) : (
           <View style={drawerStyles.tokenList}>
             {networks.map((token) => {
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   addButton: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: "center",
@@ -348,8 +348,8 @@ const drawerStyles = StyleSheet.create({
     borderColor: "transparent",
   },
   tokenCardSelected: {
-    borderColor: "#3B82F6",
-    backgroundColor: "#EFF6FF",
+    borderColor: "#287220",
+    backgroundColor: "#E8F9B0",
   },
   tokenCardLocked: {
     borderColor: "#D1D5DB",
@@ -388,8 +388,8 @@ const drawerStyles = StyleSheet.create({
     alignItems: "center",
   },
   checkboxOuterSelected: {
-    borderColor: "#3B82F6",
-    backgroundColor: "#3B82F6",
+    borderColor: "#287220",
+    backgroundColor: "#287220",
   },
   checkboxOuterLocked: {
     borderColor: "#9CA3AF",
@@ -408,7 +408,7 @@ const drawerStyles = StyleSheet.create({
     marginBottom: 4,
   },
   confirmButton: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: "center",

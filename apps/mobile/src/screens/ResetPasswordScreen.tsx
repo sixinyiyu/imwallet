@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
   stepActive: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#3B82F6",
+    color: "#287220",
   },
   stepSeparator: {
     fontSize: 16,
@@ -454,13 +454,13 @@ const styles = StyleSheet.create({
     width: "50%",
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
   },
   progressFillFull: {
     width: "100%",
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
   },
   title: {
     fontSize: 22,
@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
   },
   learnMoreLink: {
     fontSize: 14,
-    color: "#3B82F6",
+    color: "#287220",
     fontWeight: "500",
     marginBottom: 24,
   },
@@ -493,17 +493,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F6F8",
   },
   suggestionChip: {
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "#E8F9B0",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 6,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: "#BFDBFE",
+    borderColor: "#A5D6A7",
   },
   suggestionText: {
     fontSize: 14,
-    color: "#3B82F6",
+    color: "#287220",
     fontWeight: "500",
   },
   mnemonicInput: {
@@ -612,7 +612,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F6F8",
   },
   importBtn: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: "center",
@@ -626,7 +626,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   submitBtn: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: "center",

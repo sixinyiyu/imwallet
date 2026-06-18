@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
 
   // 创建按钮
   button: { borderRadius: 12, paddingVertical: 16, alignItems: "center", justifyContent: "center", marginTop: 24 },
-  buttonActive: { backgroundColor: "#3B82F6" },
+  buttonActive: { backgroundColor: "#287220" },
   buttonDisabled: { backgroundColor: "#E5E7EB" },
   buttonText: { fontSize: 18, fontWeight: "600" },
   buttonTextActive: { color: "#FFFFFF" },

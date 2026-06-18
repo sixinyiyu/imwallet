@@ -25,8 +25,16 @@ import {
   EyeOffIcon,
   EyeIcon,
   WarningIcon,
+  TronIcon,
 } from "../components/icons";
 import type { Wallet } from "../types";
+
+/** 根据网络名获取对应图标组件 */
+function getNetworkIcon(network: string): React.FC<{ size?: number; color?: string }> {
+  const upper = network.toUpperCase();
+  if (upper === "TRON") return TronIcon;
+  return TronIcon; // fallback
+}
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "WalletDetail">;
 type RouteType = RouteProp<RootStackParamList, "WalletDetail">;
@@ -43,7 +51,7 @@ export default function WalletDetailScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const walletId = route.params?.walletId;
-  const { wallets, accounts, fetchAccounts, setActiveWallet, deleteWallet, fetchWallets } = useWalletStore();
+  const { wallets, accounts, fetchAccounts, deleteWallet, fetchWallets } = useWalletStore();
 
   const [detail, setDetail] = useState<Wallet | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,6 +86,7 @@ export default function WalletDetailScreen() {
 
   const walletFromStore = wallets.find((w) => w.id === walletId);
   const wallet = detail || walletFromStore;
+  const isBackedUp = useWalletStore((s) => s.isBackedUp);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -152,14 +161,6 @@ export default function WalletDetailScreen() {
     setSavingAlias(false);
   };
 
-  const handleSwitchWallet = async () => {
-    try {
-      await setActiveWallet(wallet!);
-    } catch (err: any) {
-      Alert.alert("提示", err.message || "切换失败");
-    }
-  };
-
   const handleRemoveWallet = async () => {
     if (!wallet || !walletId || !removePassword.trim()) return;
     setRemoving(true);
@@ -200,7 +201,6 @@ export default function WalletDetailScreen() {
   }
 
   const passwordHint = (detail as any)?.passwordHint;
-  const isBackedUp = useWalletStore((s) => s.isBackedUp);
 
   return (
     <View style={styles.wrapper}>
@@ -312,7 +312,7 @@ export default function WalletDetailScreen() {
             onPress={() => navigation.navigate("WalletAddAccount", { walletId: wallet.id })}
             activeOpacity={0.6}
           >
-            <PlusCircleIcon size={18} color="#3B82F6" />
+            <PlusCircleIcon size={18} color="#287220" />
             <Text style={styles.addAccountLinkText}>添加账户</Text>
           </TouchableOpacity>
         </View>
@@ -322,28 +322,18 @@ export default function WalletDetailScreen() {
         ) : (
           accounts.map((acc) => (
             <View key={acc.id} style={styles.accountCard}>
-              <View style={styles.accountIconCircle}>
-                <Text style={styles.accountIconText}>{acc.network.charAt(0)}</Text>
+              <View style={styles.accountIconRow}>
+                {(() => {
+                  const IconComp = getNetworkIcon(acc.network);
+                  return <IconComp size={28} />;
+                })()}
               </View>
               <View style={styles.accountInfo}>
                 <Text style={styles.accountName}>{acc.name}</Text>
-                <Text style={styles.accountSymbol}>{acc.network}</Text>
+                <Text style={styles.accountSymbol}>{acc.address}</Text>
               </View>
             </View>
           ))
-        )}
-
-        {/* Actions */}
-        {wallets.length > 1 && (
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.switchBtn}
-              onPress={handleSwitchWallet}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.switchBtnText}>切换为当前钱包</Text>
-            </TouchableOpacity>
-          </View>
         )}
       </ScrollView>
 
@@ -766,7 +756,7 @@ const styles = StyleSheet.create({
   },
   addAccountLinkText: {
     fontSize: 13,
-    color: "#3B82F6",
+    color: "#287220",
     fontWeight: "500",
   },
   emptyCard: {
@@ -792,18 +782,12 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  accountIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#3B82F6",
-    justifyContent: "center",
+  accountIconRow: {
+    flexDirection: "row",
     alignItems: "center",
-  },
-  accountIconText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
+    gap: 4,
+    width: 36,
+    justifyContent: "center",
   },
   accountInfo: {
     flex: 1,
@@ -818,21 +802,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#9CA3AF",
     marginTop: 2,
-  },
-  actions: {
-    marginTop: 24,
-    gap: 10,
-  },
-  switchBtn: {
-    backgroundColor: "#DBEAFE",
-    borderRadius: 12,
-    padding: 14,
-    alignItems: "center",
-  },
-  switchBtnText: {
-    color: "#3B82F6",
-    fontSize: 15,
-    fontWeight: "600",
   },
   // ── Drawer shared ──
   drawerOverlay: {

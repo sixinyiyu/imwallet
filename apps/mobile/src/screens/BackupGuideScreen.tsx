@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   backupBtn: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: "center",

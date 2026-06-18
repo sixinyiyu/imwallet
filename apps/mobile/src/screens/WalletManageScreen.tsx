@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,8 +13,10 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
+import { accountService } from "../services/accountService";
 import { WalletIcon, TronIcon, USDTIcon } from "../components/icons";
 import { ChevronRightIcon } from "../components/icons";
+import type { Account } from "../types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -32,22 +34,41 @@ export default function WalletManageScreen() {
     wallets,
     loading,
     fetchWallets,
-    accounts,
-    fetchAccounts,
-    setActiveWallet,
-    accountCount,
   } = useWalletStore();
   const isBackedUp = useWalletStore((s) => s.isBackedUp);
   const [showAddWalletDrawer, setShowAddWalletDrawer] = useState(false);
+  /** 每个钱包的账户列表映射 walletId -> Account[] */
+  const [walletAccountsMap, setWalletAccountsMap] = useState<Record<string, Account[]>>({});
 
   useEffect(() => {
     fetchWallets();
   }, []);
 
-  /** 获取指定钱包的账户列表 */
-  const getWalletAccounts = (walletId: string) => {
-    return accounts.filter((a) => a.walletId === walletId);
-  };
+  /** 为所有钱包获取账户数据 */
+  const fetchAllWalletAccounts = useCallback(async (walletIds: string[]) => {
+    const results = await Promise.all(
+      walletIds.map(async (wid): Promise<[string, Account[]]> => {
+        try {
+          const data = await accountService.getWalletAccounts(wid);
+          return [wid, data.accounts];
+        } catch {
+          return [wid, []];
+        }
+      })
+    );
+    const map: Record<string, Account[]> = {};
+    for (const [wid, accs] of results) {
+      map[wid] = accs;
+    }
+    setWalletAccountsMap(map);
+  }, []);
+
+  /** 监听 wallets 变化，获取所有钱包的账户 */
+  useEffect(() => {
+    if (wallets.length > 0) {
+      fetchAllWalletAccounts(wallets.map((w) => w.id));
+    }
+  }, [wallets, fetchAllWalletAccounts]);
 
   return (
     <View style={styles.container}>
@@ -59,7 +80,7 @@ export default function WalletManageScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           renderItem={({ item, index }) => {
-            const walletAccounts = getWalletAccounts(item.id);
+            const walletAccounts = walletAccountsMap[item.id] || [];
             const hasAccounts = walletAccounts.length > 0;
 
             return (
@@ -268,11 +289,11 @@ const styles = StyleSheet.create({
   },
   addAccountLink: {
     fontSize: 13,
-    color: "#3B82F6",
+    color: "#287220",
     fontWeight: "500",
   },
   addButton: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     borderRadius: 12,
     padding: 14,
     alignItems: "center",

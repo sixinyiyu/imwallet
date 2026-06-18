@@ -128,7 +128,7 @@ export default function AddressBookScreen() {
   if (loading && contacts.length === 0) {
     return (
       <View style={styles.centerLoading}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+        <ActivityIndicator size="large" color="#287220" />
       </View>
     );
   }
@@ -257,7 +257,7 @@ export default function AddressBookScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F9FAFB", padding: 16 },
   addButton: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     borderRadius: 10,
     padding: 14,
     alignItems: "center",
@@ -300,12 +300,12 @@ const styles = StyleSheet.create({
   contactMemo: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
   actionButtons: { flexDirection: "row", gap: 8 },
   editBtn: {
-    backgroundColor: "#DBEAFE",
+    backgroundColor: "#E8F5E9",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
   },
-  editBtnText: { color: "#3B82F6", fontWeight: "500", fontSize: 13 },
+  editBtnText: { color: "#287220", fontWeight: "500", fontSize: 13 },
   deleteBtn: {
     backgroundColor: "#FEE2E2",
     paddingHorizontal: 14,
@@ -380,7 +380,7 @@ const modal = StyleSheet.create({
   },
   cancelBtnText: { color: "#6B7280", fontWeight: "600", fontSize: 15 },
   submitBtn: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     borderRadius: 10,
     padding: 14,
     flex: 1,

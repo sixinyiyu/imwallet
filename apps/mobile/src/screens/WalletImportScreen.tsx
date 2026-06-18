@@ -129,10 +129,7 @@ export default function WalletImportScreen() {
     setLoading(true);
     try {
       const walletId = await importWallet(validatedMnemonic, alias.trim(), password, passwordHint.trim() || undefined);
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "Main" }],
-      });
+      navigation.replace("WalletAddAccount", { walletId });
     } catch (err: any) {
       Alert.alert("导入失败", err.message || "请稍后重试");
     } finally {
@@ -334,7 +331,7 @@ const s1 = StyleSheet.create({
     paddingBottom: 32,
   },
   button: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     borderRadius: 10,
     padding: 16,
     alignItems: "center",
@@ -441,7 +438,7 @@ const s2 = StyleSheet.create({
 
   // 继续按钮
   button: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: "center",

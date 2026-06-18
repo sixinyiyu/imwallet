@@ -366,7 +366,7 @@ export default function TransferScreen() {
         {toAddress.trim() && (
           <View style={z.statusRow}>
             {addressChecking ? (
-              <ActivityIndicator size="small" color="#3B82F6" style={z.statusSpinner} />
+              <ActivityIndicator size="small" color="#287220" style={z.statusSpinner} />
             ) : !addressFormatValid ? (
               <Text style={[z.statusText, { color: "#EF4444" }]}>✗ 无效的地址格式</Text>
             ) : !addressExists ? (
@@ -380,7 +380,7 @@ export default function TransferScreen() {
                   </TouchableOpacity>
                 )}
                 {addingToContacts && (
-                  <ActivityIndicator size="small" color="#3B82F6" />
+                  <ActivityIndicator size="small" color="#287220" />
                 )}
               </>
             )}
@@ -537,7 +537,7 @@ export default function TransferScreen() {
               keyExtractor={(item) => item.symbol}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={[z.contactItem, item.symbol === selectedToken?.symbol && { backgroundColor: "#EFF6FF" }]}
+                  style={[z.contactItem, item.symbol === selectedToken?.symbol && { backgroundColor: "#E8F5E9" }]}
                   onPress={() => {
                     setSelectedToken(item);
                     setShowTokenPicker(false);
@@ -548,7 +548,7 @@ export default function TransferScreen() {
                     <Text style={z.contactAddr}>余额: {item.balance}</Text>
                   </View>
                   {item.symbol === selectedToken?.symbol && (
-                    <Text style={{ color: "#3B82F6", fontWeight: "600" }}>✓</Text>
+                    <Text style={{ color: "#287220", fontWeight: "600" }}>✓</Text>
                   )}
                 </TouchableOpacity>
               )}
@@ -661,7 +661,7 @@ const z = StyleSheet.create({
   statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6, marginLeft: 4 },
   statusSpinner: { marginLeft: 4 },
   statusText: { fontSize: 13 },
-  addToContactLinkText: { fontSize: 13, color: "#3B82F6", fontWeight: "500" },
+  addToContactLinkText: { fontSize: 13, color: "#287220", fontWeight: "500" },
   // Token
   tokenCard: {
     backgroundColor: "#fff",
@@ -677,7 +677,7 @@ const z = StyleSheet.create({
     marginBottom: 12,
   },
   tokenBadge: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
@@ -685,9 +685,9 @@ const z = StyleSheet.create({
   tokenBadgeText: { color: "#fff", fontWeight: "600", fontSize: 13 },
   modeSwitch: { flexDirection: "row", gap: 4 },
   modeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
-  modeBtnActive: { backgroundColor: "#EFF6FF" },
+  modeBtnActive: { backgroundColor: "#E8F5E9" },
   modeBtnText: { fontSize: 13, color: "#9CA3AF", fontWeight: "500" },
-  modeBtnTextActive: { color: "#3B82F6", fontWeight: "600" },
+  modeBtnTextActive: { color: "#287220", fontWeight: "600" },
   tokenInput: {
     backgroundColor: "#fff",
     borderWidth: 1,
@@ -726,7 +726,7 @@ const z = StyleSheet.create({
   errorNote: { color: "#EF4444", fontSize: 13, marginTop: 8 },
   // Button
   nextBtn: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     borderRadius: 10,
     padding: 16,
     alignItems: "center",
@@ -762,7 +762,7 @@ const z = StyleSheet.create({
     flex: 1,
     padding: 14,
     borderRadius: 10,
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     alignItems: "center",
   },
   modalConfirmText: { color: "#fff", fontWeight: "600" },
@@ -783,14 +783,14 @@ const z = StyleSheet.create({
     borderBottomColor: "#F3F4F6",
   },
   contactItemActive: {
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "#E8F5E9",
     borderRadius: 8,
   },
   contactAvatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "#E8F5E9",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -830,14 +830,14 @@ const z = StyleSheet.create({
   },
   resultLabel: { fontSize: 13, color: "#6B7280", marginBottom: 4 },
   resultHash: { fontSize: 12, color: "#1F2937", fontFamily: "monospace", marginBottom: 8 },
-  copyLink: { fontSize: 13, color: "#3B82F6", fontWeight: "500", marginBottom: 8 },
+  copyLink: { fontSize: 13, color: "#287220", fontWeight: "500", marginBottom: 8 },
   resultDivider: { height: 1, backgroundColor: "#E5E7EB", marginVertical: 12 },
   resultError: { fontSize: 15, color: "#EF4444", fontWeight: "500", marginBottom: 8 },
   suggestion: { fontSize: 13, color: "#6B7280", marginTop: 4 },
   resultActions: { flexDirection: "row", gap: 12, marginTop: 24, width: "100%" },
   primaryBtn: {
     flex: 1,
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     borderRadius: 10,
     padding: 16,
     alignItems: "center",

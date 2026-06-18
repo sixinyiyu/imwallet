@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   selectedTag: {
-    backgroundColor: "#DBEAFE",
+    backgroundColor: "#E8F9B0",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   nextBtnActive: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
   },
   nextBtnDisabled: {
     backgroundColor: "#D1D5DB",

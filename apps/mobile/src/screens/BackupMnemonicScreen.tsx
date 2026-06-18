@@ -136,7 +136,7 @@ export default function BackupMnemonicScreen() {
 
       {!showMnemonic ? (
         <View style={styles.hiddenSection}>
-          <CameraIcon size={48} color="#3B82F6" />
+          <CameraIcon size={48} color="#287220" />
           <Text style={styles.warningTitle}>请注意周围环境</Text>
           <Text style={styles.warningDesc}>
             为确保助记词安全，请在安全环境下查看，谨防他人窥探或拍照
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   },
   warningTitle: { fontSize: 16, fontWeight: "600", color: "#1F2937", marginTop: 16, marginBottom: 8 },
   warningDesc: { fontSize: 14, color: "#6B7280", textAlign: "center", lineHeight: 22, marginBottom: 20 },
-  showBtn: { backgroundColor: "#3B82F6", borderRadius: 10, paddingVertical: 14, paddingHorizontal: 32, alignItems: "center" },
+  showBtn: { backgroundColor: "#287220", borderRadius: 10, paddingVertical: 14, paddingHorizontal: 32, alignItems: "center" },
   showBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
   mnemonicCard: {
     backgroundColor: "#FFFFFF",
@@ -233,12 +233,12 @@ const styles = StyleSheet.create({
   wordText: { fontSize: 14, color: "#1F2937", fontWeight: "600", flex: 1 },
   tipsSection: { marginBottom: 24 },
   tipText: { fontSize: 13, color: "#6B7280", lineHeight: 20, marginBottom: 4 },
-  confirmBtn: { backgroundColor: "#3B82F6", borderRadius: 12, paddingVertical: 16, alignItems: "center" },
+  confirmBtn: { backgroundColor: "#287220", borderRadius: 12, paddingVertical: 16, alignItems: "center" },
   confirmBtnText: { color: "#FFFFFF", fontSize: 18, fontWeight: "600" },
   noMnemonicContent: { alignItems: "center", justifyContent: "center", flex: 1, paddingHorizontal: 24 },
   noMnemonicTitle: { fontSize: 18, fontWeight: "700", color: "#1F2937", marginBottom: 12 },
   noMnemonicDesc: { fontSize: 14, color: "#6B7280", textAlign: "center", lineHeight: 22, marginBottom: 24 },
-  backBtn: { backgroundColor: "#3B82F6", borderRadius: 10, paddingVertical: 14, paddingHorizontal: 32, alignItems: "center" },
+  backBtn: { backgroundColor: "#287220", borderRadius: 10, paddingVertical: 14, paddingHorizontal: 32, alignItems: "center" },
   backBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
   toastWrap: { position: "absolute", bottom: 80, left: 0, right: 0, alignItems: "center" },
   toast: { backgroundColor: "rgba(0,0,0,0.75)", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
@@ -251,6 +251,6 @@ const styles = StyleSheet.create({
   drawerCloseText: { fontSize: 20, color: "#9CA3AF" },
   drawerTitle: { fontSize: 16, fontWeight: "600", color: "#1F2937", marginTop: 16, marginBottom: 8 },
   drawerDesc: { fontSize: 14, color: "#6B7280", textAlign: "center", lineHeight: 22, marginBottom: 20 },
-  drawerAckBtn: { backgroundColor: "#3B82F6", borderRadius: 10, paddingVertical: 14, paddingHorizontal: 32, alignItems: "center" },
+  drawerAckBtn: { backgroundColor: "#287220", borderRadius: 10, paddingVertical: 14, paddingHorizontal: 32, alignItems: "center" },
   drawerAckBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
 });
