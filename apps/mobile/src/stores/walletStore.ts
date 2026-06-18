@@ -3,7 +3,6 @@ import * as SecureStore from "../utils/secureStorage";
 import { walletService } from "../services/walletService";
 import { accountService } from "../services/accountService";
 import { generateMnemonic, cleanMnemonic } from "../utils/mnemonic";
-import { verifyAndReRegisterDevice } from "../services/api";
 import type { Wallet, Account, TokenBalance } from "../types";
 
 const MNEMONIC_KEY_PREFIX = "aquad_mnemonic_";
@@ -63,10 +62,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   /** Load local state from SecureStore */
   loadLocalState: async () => {
     try {
-      // 启动时先验证设备是否在服务端真的已注册
-      // 解决场景：老app残留 DEVICE_REGISTERED="true" 但服务端数据库是新的
-      await verifyAndReRegisterDevice();
-
       const isBackedUpStr = await SecureStore.getItemAsync(IS_BACKED_UP_KEY);
       const hasWalletsStr = await SecureStore.getItemAsync(HAS_WALLETS_KEY);
 
