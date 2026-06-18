@@ -37,6 +37,7 @@ export default function WalletManageScreen() {
     setActiveWallet,
     accountCount,
   } = useWalletStore();
+  const isBackedUp = useWalletStore((s) => s.isBackedUp);
   const [showAddWalletDrawer, setShowAddWalletDrawer] = useState(false);
 
   useEffect(() => {
@@ -87,7 +88,7 @@ export default function WalletManageScreen() {
                     {item.accountCount}个账户
                   </Text>
                   <Text style={styles.walletBackupStatus}>
-                    {item.isBackedUp ? "✅ 已备份" : "⚠️ 未备份"}
+                    {isBackedUp ? "✅ 已备份" : "⚠️ 未备份"}
                   </Text>
                 </View>
 

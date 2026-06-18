@@ -200,7 +200,7 @@ export default function WalletDetailScreen() {
   }
 
   const passwordHint = (detail as any)?.passwordHint;
-  const isBackedUp = wallet.isBackedUp;
+  const isBackedUp = useWalletStore((s) => s.isBackedUp);
 
   return (
     <View style={styles.wrapper}>

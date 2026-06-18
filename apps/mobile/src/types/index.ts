@@ -22,7 +22,6 @@ export interface Wallet {
   alias: string;
   address: string;
   source: string;
-  isBackedUp: boolean;
   accountCount: number;
   createdAt: string;
   updatedAt?: string;

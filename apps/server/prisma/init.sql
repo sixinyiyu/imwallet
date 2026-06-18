@@ -87,7 +87,6 @@ CREATE TABLE IF NOT EXISTS "wallets" (
     "alias"        VARCHAR(64) NOT NULL,
     "address"      VARCHAR(64) NOT NULL,
     "source"       "WalletSource" NOT NULL DEFAULT 'CREATE',
-    "is_backed_up" BOOLEAN     NOT NULL DEFAULT false,
     "password"     VARCHAR(128) NOT NULL DEFAULT '',
     "password_hint" VARCHAR(128),
     "memo"         VARCHAR(256) NOT NULL DEFAULT '',

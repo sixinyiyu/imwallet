@@ -150,23 +150,4 @@ router.post(
   })
 );
 
-// 标记钱包已备份
-router.put("/:id/backup", asyncHandler(async (req: Request, res: Response) => {
-  const walletId = req.params.id as string;
-
-  const subscription = await prisma.walletSubscription.findFirst({
-    where: {
-      wallet_id: walletId,
-      device: { device_id: req.device!.deviceId },
-    },
-  });
-  if (!subscription) {
-    res.status(403).json({ error: "You do not have permission to backup this wallet" });
-    return;
-  }
-
-  await walletService.backupWallet(walletId);
-  res.json({ message: "Wallet backed up" });
-}));
-
 export default router;

@@ -52,10 +52,6 @@ export const walletService = {
     await api.delete(`/wallets/${walletId}`);
   },
 
-  async backupWallet(walletId: string): Promise<void> {
-    await api.put(`/wallets/${walletId}/backup`);
-  },
-
   async updateWalletAlias(walletId: string, alias: string): Promise<Wallet> {
     const { data } = await api.put(`/wallets/${walletId}`, { alias });
     return data;

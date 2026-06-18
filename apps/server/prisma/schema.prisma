@@ -117,8 +117,6 @@ model Wallet {
   address      String        @unique @db.VarChar(64)
   /// 钱包来源
   source       WalletSource  @default(CREATE)
-  /// 是否已备份助记词，只有备份了的钱包才可以进行交易操作
-  isBackedUp   Boolean       @default(false) @map("is_backed_up")
   /// 钱包密码（bcrypt hash），用于备份、删除等敏感操作的验证
   password      String        @db.VarChar(128)
   /// 密码提示，帮助用户回忆密码

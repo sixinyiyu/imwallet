@@ -157,7 +157,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   /** Set active wallet */
   setActiveWallet: (wallet: Wallet) => {
-    set({ activeWallet: wallet, isBackedUp: wallet.isBackedUp });
+    set({ activeWallet: wallet });
     get().fetchAccounts(wallet.id);
   },
 
@@ -178,7 +178,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     set({
       mnemonic,
-      isBackedUp: wallet.isBackedUp,
       hasWallets: true,
     });
 
@@ -200,7 +199,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     set({
       mnemonic: mnemonicInput,
-      isBackedUp: wallet.isBackedUp,
       hasWallets: true,
     });
 
@@ -231,23 +229,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  /** Mark wallet as backed up */
+  /** Mark wallet as backed up (纯客户端操作，不调用服务端) */
   backupWallet: async (walletId: string) => {
-    try {
-      // 如果本地已标记为已备份，直接返回，避免重复调用服务端报错
-      const wallet = get().wallets.find((w) => w.id === walletId);
-      if (wallet?.isBackedUp) {
-        await SecureStore.setItemAsync(IS_BACKED_UP_KEY, "true");
-        set({ isBackedUp: true });
-        return;
-      }
-      await walletService.backupWallet(walletId);
-      await SecureStore.setItemAsync(IS_BACKED_UP_KEY, "true");
-      set({ isBackedUp: true });
-      await get().fetchWallets();
-    } catch (err: any) {
-      throw err;
-    }
+    await SecureStore.setItemAsync(IS_BACKED_UP_KEY, "true");
+    set({ isBackedUp: true });
   },
 
   /** Add account to wallet */

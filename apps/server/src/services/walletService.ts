@@ -38,7 +38,6 @@ export interface WalletSummary {
   alias: string;
   address: string;
   source: string;
-  isBackedUp: boolean;
   accountCount: number;
   createdAt: Date;
   tokenBalances: WalletTokenBalance[];
@@ -153,9 +152,6 @@ export async function createOrImportWallet(
   }
   const identifier = generateIdentifier();
 
-  // IMPORT wallets are considered backed up (user already has the mnemonic)
-  const isBackedUp = source === "IMPORT";
-
   const wallet = await prisma.wallet.create({
     data: {
       identifier,
@@ -164,7 +160,6 @@ export async function createOrImportWallet(
       source,
       password: passwordHash,
       passwordHint: passwordHint || null,
-      isBackedUp,
       subscriptions: {
         create: {
           device_id: device.id,
@@ -199,7 +194,6 @@ export async function createOrImportWallet(
     alias: wallet.alias,
     address: wallet.address,
     source: wallet.source as string,
-    isBackedUp: wallet.isBackedUp,
     accountCount,
     createdAt: wallet.createdAt,
     updatedAt: wallet.updatedAt,
@@ -263,7 +257,6 @@ export async function resetWalletPassword(
     alias: wallet.alias,
     address: wallet.address,
     source: wallet.source as string,
-    isBackedUp: wallet.isBackedUp,
     accountCount,
     createdAt: wallet.createdAt,
     updatedAt: wallet.updatedAt,
@@ -297,7 +290,6 @@ export async function getDeviceWallets(deviceId: string): Promise<WalletSummary[
       alias: sub.wallet.alias,
       address: sub.wallet.address,
       source: sub.wallet.source as string,
-      isBackedUp: sub.wallet.isBackedUp,
       accountCount,
       createdAt: sub.wallet.createdAt,
       tokenBalances,
@@ -330,7 +322,6 @@ export async function getWalletDetail(
     alias: wallet.alias,
     address: wallet.address,
     source: wallet.source as string,
-    isBackedUp: wallet.isBackedUp,
     passwordHint: wallet.passwordHint,
     accountCount,
     createdAt: wallet.createdAt,
@@ -357,7 +348,6 @@ export async function updateWalletAlias(
     alias: wallet.alias,
     address: wallet.address,
     source: wallet.source as string,
-    isBackedUp: wallet.isBackedUp,
     accountCount,
     createdAt: wallet.createdAt,
     tokenBalances,
@@ -437,13 +427,4 @@ export async function backupWallet(walletId: string): Promise<void> {
   if (!wallet) {
     throw createError(404, "Wallet not found");
   }
-  if (wallet.isBackedUp) {
-    throw createError(400, "Wallet is already backed up", "ALREADY_BACKED_UP");
-  }
-
-  logger.info("WALLET", `备份钱包: walletId=${walletId}`);
-  await prisma.wallet.update({
-    where: { id: walletId },
-    data: { isBackedUp: true },
-  });
 }

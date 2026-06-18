@@ -309,7 +309,6 @@ export async function getDeviceWallets(deviceId: string): Promise<any[]> {
       alias: sub.wallet.alias,
       address: sub.wallet.address,
       source: sub.wallet.source,
-      isBackedUp: sub.wallet.isBackedUp,
       memo: sub.wallet.memo,
       createdAt: sub.wallet.createdAt,
       updatedAt: sub.wallet.updatedAt,
