@@ -420,11 +420,3 @@ export async function verifyWalletPassword(
   const match = await bcrypt.compare(rawPassword, wallet.password);
   return match;
 }
-
-/** 标记钱包已备份 */
-export async function backupWallet(walletId: string): Promise<void> {
-  const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
-  if (!wallet) {
-    throw createError(404, "Wallet not found");
-  }
-}
