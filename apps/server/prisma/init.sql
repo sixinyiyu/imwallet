@@ -1,26 +1,61 @@
 -- ============================================================
 -- IMWallet Database Init (Single File)
--- 包含所有建表 + 种子数据，用于全新数据库初始化
--- 用法: 应用启动时自动执行，或手动 psql -f init.sql
+-- 幂等脚本：所有语句可安全重复执行
+--   CREATE TYPE → DO $$ BEGIN ... EXCEPTION WHEN duplicate_object
+--   CREATE TABLE → IF NOT EXISTS
+--   CREATE UNIQUE INDEX → IF NOT EXISTS
+--   ALTER TABLE ADD CONSTRAINT → IF NOT EXISTS
+--   INSERT → ON CONFLICT DO NOTHING / DO UPDATE
 -- ============================================================
 
 -- ─── Extensions ──────────────────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ─── Enums ───────────────────────────────────────────────────────────────────
-CREATE TYPE "WalletSource" AS ENUM ('IMPORT', 'CREATE');
-CREATE TYPE "TxStatus" AS ENUM ('PENDING', 'CONFIRMED', 'FAILED');
-CREATE TYPE "UserStatus" AS ENUM ('PENDING', 'ACTIVE', 'REJECTED');
-CREATE TYPE "UserRole" AS ENUM ('NORMAL', 'ADMIN');
-CREATE TYPE "NotificationType" AS ENUM ('TRANSFER_IN', 'TRANSFER_OUT', 'ACCOUNT_ACTIVATED', 'ACCOUNT_REJECTED');
-CREATE TYPE "AdminRole" AS ENUM ('ADMIN');
-CREATE TYPE "Platform" AS ENUM ('ios', 'android', 'web');
-CREATE TYPE "PlatformStore" AS ENUM ('appStore', 'googlePlay', 'fdroid');
+DO $$ BEGIN
+    CREATE TYPE "WalletSource" AS ENUM ('IMPORT', 'CREATE');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE "TxStatus" AS ENUM ('PENDING', 'CONFIRMED', 'FAILED');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE "UserStatus" AS ENUM ('PENDING', 'ACTIVE', 'REJECTED');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE "UserRole" AS ENUM ('NORMAL', 'ADMIN');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE "NotificationType" AS ENUM ('TRANSFER_IN', 'TRANSFER_OUT', 'ACCOUNT_ACTIVATED', 'ACCOUNT_REJECTED');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE "AdminRole" AS ENUM ('ADMIN');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE "Platform" AS ENUM ('ios', 'android', 'web');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE "PlatformStore" AS ENUM ('appStore', 'googlePlay', 'fdroid');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
 
 -- ─── Tables ──────────────────────────────────────────────────────────────────
 
 -- 管理员表
-CREATE TABLE "admins" (
+CREATE TABLE IF NOT EXISTS "admins" (
     "id"         SERIAL      NOT NULL,
     "device_id"  VARCHAR(64) NOT NULL,
     "role"       "AdminRole" NOT NULL DEFAULT 'ADMIN',
@@ -28,10 +63,10 @@ CREATE TABLE "admins" (
 
     CONSTRAINT "admins_pkey" PRIMARY KEY ("id")
 );
-CREATE UNIQUE INDEX "admins_device_id_key" ON "admins"("device_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "admins_device_id_key" ON "admins"("device_id");
 
 -- 设备表
-CREATE TABLE "devices" (
+CREATE TABLE IF NOT EXISTS "devices" (
     "id"                     SERIAL      NOT NULL,
     "device_id"              VARCHAR(64) NOT NULL,
     "platform"               "Platform" NOT NULL,
@@ -50,10 +85,10 @@ CREATE TABLE "devices" (
 
     CONSTRAINT "devices_pkey" PRIMARY KEY ("id")
 );
-CREATE UNIQUE INDEX "devices_device_id_key" ON "devices"("device_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "devices_device_id_key" ON "devices"("device_id");
 
 -- 用户表
-CREATE TABLE "users" (
+CREATE TABLE IF NOT EXISTS "users" (
     "id"           TEXT        NOT NULL,
     "username"     VARCHAR(32) NOT NULL,
     "password_hash" VARCHAR(60) NOT NULL,
@@ -67,10 +102,10 @@ CREATE TABLE "users" (
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "users_username_key" ON "users"("username");
+CREATE UNIQUE INDEX IF NOT EXISTS "users_username_key" ON "users"("username");
 
 -- 代币表
-CREATE TABLE "tokens" (
+CREATE TABLE IF NOT EXISTS "tokens" (
     "id"               TEXT        NOT NULL,
     "symbol"           VARCHAR(16) NOT NULL,
     "name"             VARCHAR(64) NOT NULL,
@@ -85,10 +120,10 @@ CREATE TABLE "tokens" (
     CONSTRAINT "tokens_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "tokens_symbol_key" ON "tokens"("symbol");
+CREATE UNIQUE INDEX IF NOT EXISTS "tokens_symbol_key" ON "tokens"("symbol");
 
--- 钱包表（最终版本：含 identifier, is_backed_up, password, address VARCHAR(64)）
-CREATE TABLE "wallets" (
+-- 钱包表
+CREATE TABLE IF NOT EXISTS "wallets" (
     "id"           TEXT        NOT NULL,
     "identifier"   VARCHAR(36) NOT NULL,
     "alias"        VARCHAR(64) NOT NULL,
@@ -104,11 +139,11 @@ CREATE TABLE "wallets" (
     CONSTRAINT "wallets_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "wallets_identifier_key" ON "wallets"("identifier");
-CREATE UNIQUE INDEX "wallets_address_key" ON "wallets"("address");
+CREATE UNIQUE INDEX IF NOT EXISTS "wallets_identifier_key" ON "wallets"("identifier");
+CREATE UNIQUE INDEX IF NOT EXISTS "wallets_address_key" ON "wallets"("address");
 
 -- 钱包代币余额表
-CREATE TABLE "wallet_tokens" (
+CREATE TABLE IF NOT EXISTS "wallet_tokens" (
     "id"        TEXT        NOT NULL,
     "wallet_id" VARCHAR(36) NOT NULL,
     "token_id"  VARCHAR(36) NOT NULL,
@@ -119,10 +154,10 @@ CREATE TABLE "wallet_tokens" (
     CONSTRAINT "wallet_tokens_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "wallet_tokens_wallet_id_token_id_key" ON "wallet_tokens"("wallet_id", "token_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "wallet_tokens_wallet_id_token_id_key" ON "wallet_tokens"("wallet_id", "token_id");
 
 -- 账户表
-CREATE TABLE "accounts" (
+CREATE TABLE IF NOT EXISTS "accounts" (
     "id"        TEXT        NOT NULL,
     "wallet_id" VARCHAR(36) NOT NULL,
     "token_id"  VARCHAR(36) NOT NULL,
@@ -135,11 +170,11 @@ CREATE TABLE "accounts" (
     CONSTRAINT "accounts_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "accounts_address_key" ON "accounts"("address");
-CREATE UNIQUE INDEX "accounts_wallet_id_token_id_key" ON "accounts"("wallet_id", "token_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "accounts_address_key" ON "accounts"("address");
+CREATE UNIQUE INDEX IF NOT EXISTS "accounts_wallet_id_token_id_key" ON "accounts"("wallet_id", "token_id");
 
 -- 用户-钱包关联表
-CREATE TABLE "user_wallets" (
+CREATE TABLE IF NOT EXISTS "user_wallets" (
     "id"         TEXT        NOT NULL,
     "user_id"    VARCHAR(36) NOT NULL,
     "wallet_id"  VARCHAR(36) NOT NULL,
@@ -149,10 +184,10 @@ CREATE TABLE "user_wallets" (
     CONSTRAINT "user_wallets_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "user_wallets_user_id_wallet_id_key" ON "user_wallets"("user_id", "wallet_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "user_wallets_user_id_wallet_id_key" ON "user_wallets"("user_id", "wallet_id");
 
 -- 钱包-设备订阅关联表
-CREATE TABLE "wallet_subscriptions" (
+CREATE TABLE IF NOT EXISTS "wallet_subscriptions" (
     "id"         SERIAL      NOT NULL,
     "wallet_id"  VARCHAR(36) NOT NULL,
     "device_id"  INT       NOT NULL,
@@ -162,10 +197,10 @@ CREATE TABLE "wallet_subscriptions" (
 
     CONSTRAINT "wallet_subscriptions_pkey" PRIMARY KEY ("id")
 );
-CREATE UNIQUE INDEX "wallet_subscriptions_wallet_id_device_id_chain_address_id_key" ON "wallet_subscriptions"("wallet_id", "device_id", "chain", "address_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "wallet_subscriptions_wallet_id_device_id_chain_address_id_key" ON "wallet_subscriptions"("wallet_id", "device_id", "chain", "address_id");
 
 -- 法币汇率表
-CREATE TABLE "fiat_currencies" (
+CREATE TABLE IF NOT EXISTS "fiat_currencies" (
     "id"       TEXT        NOT NULL,
     "code"     VARCHAR(8)  NOT NULL,
     "name"     VARCHAR(32) NOT NULL,
@@ -177,10 +212,10 @@ CREATE TABLE "fiat_currencies" (
     CONSTRAINT "fiat_currencies_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "fiat_currencies_code_key" ON "fiat_currencies"("code");
+CREATE UNIQUE INDEX IF NOT EXISTS "fiat_currencies_code_key" ON "fiat_currencies"("code");
 
 -- 交易记录表
-CREATE TABLE "transactions" (
+CREATE TABLE IF NOT EXISTS "transactions" (
     "id"            TEXT        NOT NULL,
     "tx_hash"       VARCHAR(66) NOT NULL,
     "from_wallet_id" VARCHAR(36) NOT NULL,
@@ -196,10 +231,10 @@ CREATE TABLE "transactions" (
     CONSTRAINT "transactions_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "transactions_tx_hash_key" ON "transactions"("tx_hash");
+CREATE UNIQUE INDEX IF NOT EXISTS "transactions_tx_hash_key" ON "transactions"("tx_hash");
 
--- 联系人表（关联到设备，不是用户）
-CREATE TABLE "contacts" (
+-- 联系人表
+CREATE TABLE IF NOT EXISTS "contacts" (
     "id"         TEXT        NOT NULL,
     "device_id"  INT         NOT NULL,
     "name"       VARCHAR(64) NOT NULL,
@@ -211,8 +246,8 @@ CREATE TABLE "contacts" (
     CONSTRAINT "contacts_pkey" PRIMARY KEY ("id")
 );
 
--- 通知表（关联到设备）
-CREATE TABLE "notifications" (
+-- 通知表
+CREATE TABLE IF NOT EXISTS "notifications" (
     "id"         TEXT        NOT NULL,
     "device_id"  INT         NOT NULL,
     "title"      VARCHAR(128) NOT NULL,
@@ -225,25 +260,25 @@ CREATE TABLE "notifications" (
 );
 
 -- ─── Foreign Keys ────────────────────────────────────────────────────────────
-ALTER TABLE "user_wallets" ADD CONSTRAINT "user_wallets_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "user_wallets" ADD CONSTRAINT "user_wallets_wallet_id_fkey" FOREIGN KEY ("wallet_id") REFERENCES "wallets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "user_wallets" ADD CONSTRAINT IF NOT EXISTS "user_wallets_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "user_wallets" ADD CONSTRAINT IF NOT EXISTS "user_wallets_wallet_id_fkey" FOREIGN KEY ("wallet_id") REFERENCES "wallets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-ALTER TABLE "wallet_tokens" ADD CONSTRAINT "wallet_tokens_wallet_id_fkey" FOREIGN KEY ("wallet_id") REFERENCES "wallets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "wallet_tokens" ADD CONSTRAINT "wallet_tokens_token_id_fkey" FOREIGN KEY ("token_id") REFERENCES "tokens"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "wallet_tokens" ADD CONSTRAINT IF NOT EXISTS "wallet_tokens_wallet_id_fkey" FOREIGN KEY ("wallet_id") REFERENCES "wallets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "wallet_tokens" ADD CONSTRAINT IF NOT EXISTS "wallet_tokens_token_id_fkey" FOREIGN KEY ("token_id") REFERENCES "tokens"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-ALTER TABLE "accounts" ADD CONSTRAINT "accounts_wallet_id_fkey" FOREIGN KEY ("wallet_id") REFERENCES "wallets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "accounts" ADD CONSTRAINT "accounts_token_id_fkey" FOREIGN KEY ("token_id") REFERENCES "tokens"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "accounts" ADD CONSTRAINT IF NOT EXISTS "accounts_wallet_id_fkey" FOREIGN KEY ("wallet_id") REFERENCES "wallets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "accounts" ADD CONSTRAINT IF NOT EXISTS "accounts_token_id_fkey" FOREIGN KEY ("token_id") REFERENCES "tokens"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-ALTER TABLE "wallet_subscriptions" ADD CONSTRAINT "wallet_subscriptions_wallet_id_fkey" FOREIGN KEY ("wallet_id") REFERENCES "wallets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "wallet_subscriptions" ADD CONSTRAINT "wallet_subscriptions_device_id_fkey" FOREIGN KEY ("device_id") REFERENCES "devices"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "wallet_subscriptions" ADD CONSTRAINT IF NOT EXISTS "wallet_subscriptions_wallet_id_fkey" FOREIGN KEY ("wallet_id") REFERENCES "wallets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "wallet_subscriptions" ADD CONSTRAINT IF NOT EXISTS "wallet_subscriptions_device_id_fkey" FOREIGN KEY ("device_id") REFERENCES "devices"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-ALTER TABLE "transactions" ADD CONSTRAINT "transactions_from_wallet_id_fkey" FOREIGN KEY ("from_wallet_id") REFERENCES "wallets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "transactions" ADD CONSTRAINT "transactions_to_wallet_id_fkey" FOREIGN KEY ("to_wallet_id") REFERENCES "wallets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "transactions" ADD CONSTRAINT "transactions_token_id_fkey" FOREIGN KEY ("token_id") REFERENCES "tokens"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "transactions" ADD CONSTRAINT IF NOT EXISTS "transactions_from_wallet_id_fkey" FOREIGN KEY ("from_wallet_id") REFERENCES "wallets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "transactions" ADD CONSTRAINT IF NOT EXISTS "transactions_to_wallet_id_fkey" FOREIGN KEY ("to_wallet_id") REFERENCES "wallets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "transactions" ADD CONSTRAINT IF NOT EXISTS "transactions_token_id_fkey" FOREIGN KEY ("token_id") REFERENCES "tokens"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
-ALTER TABLE "contacts" ADD CONSTRAINT "contacts_device_id_fkey" FOREIGN KEY ("device_id") REFERENCES "devices"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "contacts" ADD CONSTRAINT IF NOT EXISTS "contacts_device_id_fkey" FOREIGN KEY ("device_id") REFERENCES "devices"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-ALTER TABLE "notifications" ADD CONSTRAINT "notifications_device_id_fkey" FOREIGN KEY ("device_id") REFERENCES "devices"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "notifications" ADD CONSTRAINT IF NOT EXISTS "notifications_device_id_fkey" FOREIGN KEY ("device_id") REFERENCES "devices"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- ─── Seed Data ───────────────────────────────────────────────────────────────
 
