@@ -5,6 +5,10 @@
  * tracks executed ones in the _migrations table, and runs any pending migrations
  * inside a transaction.
  *
+ * Migration from Prisma: on first run, detects _prisma_migrations table and
+ * imports all previously-applied migration names into _migrations, so we don't
+ * re-run migrations that Prisma already applied.
+ *
  * Checksum validation: if an already-applied migration file is modified,
  * startup will fail with a clear error (same as Flyway).
  *
@@ -18,6 +22,7 @@ import { createHash } from "crypto";
 
 const MIGRATIONS_DIR = path.resolve(__dirname, "../../prisma/migrations");
 const MIGRATIONS_TABLE = "_migrations";
+const PRISMA_MIGRATIONS_TABLE = "_prisma_migrations";
 
 // ─── Compute checksum for a SQL string ───────────────────────────────────────
 function checksum(sql: string): string {
@@ -45,6 +50,57 @@ async function ensureMigrationsTable(): Promise<void> {
       `ALTER TABLE "${MIGRATIONS_TABLE}" ADD COLUMN checksum VARCHAR(32) NOT NULL DEFAULT '';`
     );
     logger.warn("MIGRATE", "Added checksum column to _migrations table (existing records have empty checksum — will not be validated).");
+  }
+}
+
+// ─── Import previously-applied Prisma migrations into our tracking table ──────
+async function importPrismaMigrations(): Promise<void> {
+  // Check if _prisma_migrations table exists
+  const tableExists = await prisma.$queryRawUnsafe(
+    `SELECT table_name FROM information_schema.tables WHERE table_name = '${PRISMA_MIGRATIONS_TABLE}';`
+  ) as Array<{ table_name: string }>;
+
+  if (tableExists.length === 0) {
+    logger.info("MIGRATE", "No _prisma_migrations table found — fresh database, no import needed.");
+    return;
+  }
+
+  // Get Prisma-applied migration names
+  const prismaRows = await prisma.$queryRawUnsafe(
+    `SELECT migration_name FROM "${PRISMA_MIGRATIONS_TABLE}" WHERE finished_at IS NOT NULL;`
+  ) as Array<{ migration_name: string }>;
+
+  if (prismaRows.length === 0) {
+    logger.info("MIGRATE", "_prisma_migrations table exists but has no records — no import needed.");
+    return;
+  }
+
+  // Get our already-tracked migrations
+  const ourRows = await prisma.$queryRawUnsafe(
+    `SELECT name FROM "${MIGRATIONS_TABLE}";`
+  ) as Array<{ name: string }>;
+  const ourNames = new Set(ourRows.map((r) => r.name));
+
+  // Discover local migration files to compute checksums
+  const localMigrations = discoverMigrations();
+  const localMap = new Map(localMigrations.map((m) => [m.name, m.checksum]));
+
+  // Import any Prisma-applied migrations that we haven't tracked yet
+  let imported = 0;
+  for (const row of prismaRows) {
+    if (ourNames.has(row.migration_name)) continue;
+
+    const cs = localMap.get(row.migration_name) ?? ""; // empty checksum if file not found locally
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${MIGRATIONS_TABLE}" (name, checksum) VALUES ('${row.migration_name}', '${cs}');`
+    );
+    imported++;
+  }
+
+  if (imported > 0) {
+    logger.info("MIGRATE", `Imported ${imported} previously-applied Prisma migration(s) into _migrations table.`);
+  } else {
+    logger.info("MIGRATE", "All Prisma migrations already tracked — no import needed.");
   }
 }
 
@@ -86,6 +142,10 @@ export async function runMigrations(): Promise<void> {
   logger.info("MIGRATE", "Checking for pending database migrations...");
 
   await ensureMigrationsTable();
+
+  // Import previously-applied Prisma migrations so we don't re-run them
+  await importPrismaMigrations();
+
   const applied = await getAppliedMigrations();
   const all = discoverMigrations();
 
@@ -94,7 +154,7 @@ export async function runMigrations(): Promise<void> {
     const recordedChecksum = applied.get(migration.name);
     if (recordedChecksum === undefined) continue; // pending, not yet applied
 
-    // Empty checksum = backfilled from v1 table, skip validation
+    // Empty checksum = imported from Prisma or backfilled, skip validation
     if (recordedChecksum === "") continue;
 
     if (recordedChecksum !== migration.checksum) {
