@@ -3,7 +3,7 @@ name: Build iOS
 on:
   push:
     tags:
-      - "mobile-v*"
+      - "ios-v*"
     paths:
       - "apps/mobile/**"
       - ".github/workflows/build-ios.yml"
@@ -65,7 +65,7 @@ jobs:
             console.log(url);
           ")
           if [ -n "$BUILD_URL" ]; then
-            VERSION="${GITHUB_REF_NAME#mobile-v}"
+            VERSION="${GITHUB_REF_NAME#ios-v}"
             curl -L -o "dist/imwallet-${VERSION}.ipa" "$BUILD_URL"
             echo "✅ IPA downloaded: imwallet-${VERSION}.ipa"
           else

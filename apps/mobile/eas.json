@@ -28,6 +28,7 @@
     },
     "production": {
       "autoIncrement": true,
+      "environment": "production",
       "distribution": "internal",
       "env": {
         "API_BASE_URL": "https://imwallet.dpdns.org/api/v1"

@@ -3,7 +3,7 @@ name: Build Android
 on:
   push:
     tags:
-      - "mobile-v*"
+      - "android-v*"
 
 permissions:
   contents: write
@@ -98,7 +98,7 @@ jobs:
             console.log(url);
           ")
           if [ -n "$BUILD_URL" ]; then
-            VERSION="${GITHUB_REF_NAME#mobile-v}"
+            VERSION="${GITHUB_REF_NAME#android-v}"
             curl -L -o "dist/imwallet-${VERSION}-${{ matrix.abi }}.apk" "$BUILD_URL"
             echo "✅ APK downloaded: imwallet-${VERSION}-${{ matrix.abi }}.apk"
           else

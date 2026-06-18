@@ -6,15 +6,9 @@
     "orientation": "portrait",
     "icon": "./assets/app_logo.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0A1628"
-    },
     "ios": {
       "bundleIdentifier": "com.aquad.app",
       "supportsTablet": true,
-      "buildNumber": "1",
       "deploymentTarget": "15.1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -41,7 +35,7 @@
     "extra": {
       "apiBaseUrl": "https://imwallet.dpdns.org/api/v1",
       "eas": {
-        "projectId": ""
+        "projectId": "b7ed4934-0f02-4cc5-8e21-7a0c4aba9d38"
       }
     }
   }
