@@ -52,8 +52,12 @@ jobs:
         run: |
           cd /tmp/prod-install/node_modules
 
+          # Remove build cache (npm cache, not needed at runtime)
+          rm -rf .cache
           # Remove Prisma CLI (dev tool, not needed at runtime)
           rm -rf prisma
+          # Remove TypeScript compiler (dev tool, not needed at runtime)
+          rm -rf typescript
           # Remove migration and introspection engines (not needed at runtime)
           rm -rf .prisma/client/migration-engine-*
           rm -rf .prisma/client/introspection-engine-*

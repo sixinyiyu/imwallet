@@ -51,7 +51,9 @@ jobs:
         run: |
           cd /tmp/prod-install/node_modules
 
+          rm -rf .cache
           rm -rf prisma
+          rm -rf typescript
           rm -rf .prisma/client/migration-engine-*
           rm -rf .prisma/client/introspection-engine-*
           rm -f .prisma/client/schema.prisma
