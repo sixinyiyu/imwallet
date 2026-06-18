@@ -41,6 +41,7 @@ jobs:
         run: |
           mkdir -p /tmp/prod-install
           cp apps/server/package.json /tmp/prod-install/
+          cp -r apps/server/prisma /tmp/prod-install/prisma
           cd /tmp/prod-install
           npm install --omit=dev
           npx prisma@6 generate
