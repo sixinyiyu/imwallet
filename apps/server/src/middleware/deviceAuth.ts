@@ -111,18 +111,7 @@ export async function deviceAuthMiddleware(
   }
   nonceCache.set(nonce, Date.now());
 
-  // 5. 查询设备是否已注册
-  const device = await prisma.device.findUnique({
-    where: { device_id: deviceId },
-  });
-
-  if (!device) {
-    logger.warn("DEVICE_AUTH", `签名验证失败: 设备未注册 - device_id=${deviceId.slice(0, 8)}...`);
-    res.status(401).json({ error: "Device not registered" });
-    return;
-  }
-
-  // 6. 构造签名消息并验证
+  // 5. 构造签名消息并验证（先验签名，再查设备）
   //    客户端使用 axios config.url（不含 /api/v1 前缀和 query string）作为签名路径，
   //    服务端需对 req.originalUrl 做同样处理以保持一致。
   const fullPath = req.originalUrl.split('?')[0]; // 去除 query string
@@ -151,7 +140,24 @@ export async function deviceAuthMiddleware(
     return;
   }
 
-  // 7. 设置 req.device
+  // 6. 签名合法，查询设备是否已注册
+  let device = await prisma.device.findUnique({
+    where: { device_id: deviceId },
+  });
+
+  // 7. 设备不存在但签名合法 → 数据库被清空/重置，自动重建设备记录
+  if (!device) {
+    logger.info("DEVICE_AUTH", `设备未注册但签名合法，自动重建设备记录 - device_id=${deviceId.slice(0, 8)}...`);
+    device = await prisma.device.create({
+      data: {
+        device_id: deviceId,
+        platform: "android",
+      },
+    });
+    logger.info("DEVICE_AUTH", `设备自动注册成功: id=${device.id}, device_id=${deviceId.slice(0, 8)}...`);
+  }
+
+  // 8. 设置 req.device
   req.device = {
     deviceId,
     dbId: device.id,
