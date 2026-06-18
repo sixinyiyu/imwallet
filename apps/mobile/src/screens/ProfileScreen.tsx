@@ -7,7 +7,6 @@ import { useAuthStore } from "../stores/authStore";
 import { useWalletStore } from "../stores/walletStore";
 import { notificationService } from "../services/authService";
 import { WalletIcon, AboutIcon, LogoutIcon, CopyIcon } from "../components/icons";
-import AdminIcon from "../components/icons/AdminIcon";
 import BellIcon from "../components/icons/BellIcon";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -27,9 +26,6 @@ export default function ProfileScreen() {
   const totalAccountCount = wallets.reduce((sum, w) => sum + w.accountCount, 0);
   const [unreadCount, setUnreadCount] = React.useState(0);
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);
-
-  // Admin check: for now, no admin role in device-based auth
-  const isAdmin = false;
 
   const fetchUnreadCount = async () => {
     try {
@@ -63,9 +59,6 @@ export default function ProfileScreen() {
   const menuItems: MenuItem[] = [
     { icon: <WalletIcon size={22} color="#3B82F6" />, label: "钱包管理", screen: "WalletManage", badge: `${totalAccountCount} 个钱包` },
     { icon: <CopyIcon size={22} color="#10B981" />, label: "地址本", screen: "AddressBook" },
-    ...(isAdmin
-      ? [{ icon: <AdminIcon size={22} color="#3B82F6" />, label: "管理", screen: "Admin" as keyof RootStackParamList }]
-      : []),
     { icon: <Text style={styles.emojiIcon}>⚙️</Text>, label: "通用设置", screen: "Settings" },
     { icon: <Text style={styles.emojiIcon}>🔐</Text>, label: "安全与隐私", screen: "Security" },
     { icon: <AboutIcon size={22} color="#8B5CF6" />, label: "关于我们", screen: "About" },

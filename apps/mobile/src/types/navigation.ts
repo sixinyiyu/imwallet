@@ -19,8 +19,6 @@ export type RootStackParamList = {
   Settings: undefined;
   Security: undefined;
   About: undefined;
-  Admin: undefined;
-  UserManage: undefined;
   Notifications: undefined;
   BackupConfirm: { walletId: string };
   BackupGuide: { walletId: string; source?: "create" | "detail" };

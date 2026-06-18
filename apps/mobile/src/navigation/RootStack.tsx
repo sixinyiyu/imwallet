@@ -22,8 +22,6 @@ import SecurityScreen from "../screens/SecurityScreen";
 import AboutScreen from "../screens/AboutScreen";
 import ScanScreen from "../screens/ScanScreen";
 import TradeDetailScreen from "../screens/TradeDetailScreen";
-import AdminScreen from "../screens/AdminScreen";
-import UserManageScreen from "../screens/UserManageScreen";
 import NotificationScreen from "../screens/NotificationScreen";
 import ForgotPasswordScreen from "../screens/ForgotPasswordScreen";
 import ResetPasswordScreen from "../screens/ResetPasswordScreen";
@@ -165,16 +163,6 @@ export function RootStack() {
         name="About"
         component={AboutScreen}
         options={{ ...CENTERED_HEADER, title: "关于我们" }}
-      />
-      <Stack.Screen
-        name="Admin"
-        component={AdminScreen}
-        options={{ ...CENTERED_HEADER, title: "管理" }}
-      />
-      <Stack.Screen
-        name="UserManage"
-        component={UserManageScreen}
-        options={{ ...CENTERED_HEADER, title: "用户管理" }}
       />
       <Stack.Screen
         name="Notifications"

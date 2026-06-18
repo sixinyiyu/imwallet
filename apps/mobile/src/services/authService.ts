@@ -49,25 +49,3 @@ export const notificationService = {
     await api.put("/notifications/read-all");
   },
 };
-
-export const adminService = {
-  async getAllDevices() {
-    const { data } = await api.get("/admin/devices");
-    return data.devices;
-  },
-
-  async getAllWallets() {
-    const { data } = await api.get("/admin/wallets");
-    return data.wallets;
-  },
-
-  async getAllSubscriptions() {
-    const { data } = await api.get("/admin/subscriptions");
-    return data.subscriptions;
-  },
-
-  async getAllTransactions() {
-    const { data } = await api.get("/admin/transactions");
-    return data.transactions;
-  },
-};
