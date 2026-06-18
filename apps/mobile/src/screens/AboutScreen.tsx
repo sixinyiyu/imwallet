@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet, ScrollView, Image } from "react-native";
 
-const appLogoImage = require("../../assets/app_logo.jpg");
+const appLogoImage = require("../../assets/app_logo.png");
 
 export default function AboutScreen() {
   return (
