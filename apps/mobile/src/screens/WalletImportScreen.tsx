@@ -46,6 +46,18 @@ export default function WalletImportScreen() {
 
   // Step 1: mnemonic
   const [mnemonic, setMnemonic] = useState("");
+
+  // Auto-clean mnemonic on input: trim each word, collapse whitespace, lowercase
+  const handleMnemonicChange = (text: string) => {
+    // Preserve trailing space for word separation during typing
+    const trailingSpace = text.endsWith(' ') ? ' ' : '';
+    const cleaned = text
+      .split(/\s+/)
+      .map(w => w.trim().toLowerCase())
+      .filter(w => w.length > 0)
+      .join(' ');
+    setMnemonic(cleaned + trailingSpace);
+  };
   const [validating, setValidating] = useState(false);
 
   // Step 2: wallet settings
@@ -145,7 +157,7 @@ export default function WalletImportScreen() {
             placeholder="输入助记单词，并使用空格分割"
             placeholderTextColor="#9CA3AF"
             value={mnemonic}
-            onChangeText={setMnemonic}
+            onChangeText={handleMnemonicChange}
             autoCapitalize="none"
             autoCorrect={false}
             multiline

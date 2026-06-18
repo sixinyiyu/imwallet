@@ -59,6 +59,17 @@ export default function ResetPasswordScreen() {
 
   // Step 1: mnemonic
   const [mnemonicInput, setMnemonicInput] = useState("");
+
+  // Auto-clean mnemonic on input
+  const handleMnemonicInputChange = (text: string) => {
+    const trailingSpace = text.endsWith(' ') ? ' ' : '';
+    const cleaned = text
+      .split(/\s+/)
+      .map(w => w.trim().toLowerCase())
+      .filter(w => w.length > 0)
+      .join(' ');
+    setMnemonicInput(cleaned + trailingSpace);
+  };
   const [loading, setLoading] = useState(false);
   const [showLearnModal, setShowLearnModal] = useState(false);
 
@@ -214,7 +225,7 @@ export default function ResetPasswordScreen() {
             placeholder="输入助记单词，并使用空格分割"
             placeholderTextColor="#9CA3AF"
             value={mnemonicInput}
-            onChangeText={setMnemonicInput}
+            onChangeText={handleMnemonicInputChange}
             autoCapitalize="none"
             autoCorrect={false}
             multiline
