@@ -234,6 +234,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   /** Mark wallet as backed up */
   backupWallet: async (walletId: string) => {
     try {
+      // 如果本地已标记为已备份，直接返回，避免重复调用服务端报错
+      const wallet = get().wallets.find((w) => w.id === walletId);
+      if (wallet?.isBackedUp) {
+        await SecureStore.setItemAsync(IS_BACKED_UP_KEY, "true");
+        set({ isBackedUp: true });
+        return;
+      }
       await walletService.backupWallet(walletId);
       await SecureStore.setItemAsync(IS_BACKED_UP_KEY, "true");
       set({ isBackedUp: true });

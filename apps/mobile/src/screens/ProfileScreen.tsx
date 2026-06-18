@@ -23,7 +23,7 @@ interface MenuItem {
 export default function ProfileScreen() {
   const navigation = useNavigation<Nav>();
   const { deviceId, logout } = useAuthStore();
-  const { wallets } = useWalletStore();
+  const { wallets, logout: walletStoreLogout } = useWalletStore();
   const totalAccountCount = wallets.reduce((sum, w) => sum + w.accountCount, 0);
   const [unreadCount, setUnreadCount] = React.useState(0);
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);
@@ -52,6 +52,8 @@ export default function ProfileScreen() {
   const handleLogout = async () => {
     setShowLogoutModal(false);
     try {
+      // 先清除钱包数据（会重置 hasWallets=false，触发导航跳转到 Start）
+      await walletStoreLogout();
       await logout();
     } catch {
       // ignore
