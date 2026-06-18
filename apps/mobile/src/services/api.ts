@@ -174,15 +174,15 @@ api.interceptors.request.use(async (config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     // 当设备未注册时（数据库被清空等情况），清除本地标记
     // 使应用回到创建钱包引导页
     if (error.response?.status === 401) {
       const errorMsg = error.response?.data?.error;
       if (errorMsg === "Device not registered") {
-        SecureStore.deleteItemAsync(DEVICE_REGISTERED);
-        SecureStore.deleteItemAsync("aquad_has_wallets");
-        SecureStore.deleteItemAsync("aquad_is_backed_up");
+        await SecureStore.deleteItemAsync(DEVICE_REGISTERED);
+        await SecureStore.deleteItemAsync("aquad_has_wallets");
+        await SecureStore.deleteItemAsync("aquad_is_backed_up");
       }
     }
     return Promise.reject(error);
@@ -197,6 +197,75 @@ export async function getDevicePublicKey(): Promise<string | null> {
 
 export async function isDeviceRegistered(): Promise<boolean> {
   return (await SecureStore.getItemAsync(DEVICE_REGISTERED)) === "true";
+}
+
+/**
+ * 启动时主动向服务端验证设备是否已注册。
+ *
+ * 解决场景：设备上安装了老版本 app，SecureStore 中残留了
+ * DEVICE_REGISTERED="true" 标记，但服务端数据库是新的（为空），
+ * 导致后续请求因 "设备未注册" 而失败。
+ *
+ * 流程：
+ * 1. 若本地无密钥 → 返回 false（由后续请求拦截器自动生成密钥并注册）
+ * 2. 若本地有密钥 → 调用 GET /devices/me 验证服务端是否存在该设备
+ *    - 成功 → 设备已注册，返回 true
+ *    - 401  → 服务端无此设备，清除本地标记后重新注册，返回 true
+ *    - 其他错误（网络等）→ 假设设备可能已注册，返回 true 不阻塞
+ */
+export async function verifyAndReRegisterDevice(): Promise<boolean> {
+  const keys = await ensureDeviceKeys();
+  if (!keys) {
+    // 无密钥对，后续请求拦截器会自动生成并注册
+    return false;
+  }
+
+  try {
+    // 通过 api 实例发送请求（拦截器会自动添加签名头）
+    // 若服务端有此设备 → 200 OK
+    await api.get("/devices/me");
+    console.log("✅ 设备验证通过（服务端已注册）");
+    return true;
+  } catch (err: any) {
+    if (err?.response?.status === 401) {
+      // 服务端无此设备记录（新数据库等）
+      // 响应拦截器已清除 DEVICE_REGISTERED，但为确保时序正确，显式清除一次
+      await SecureStore.deleteItemAsync(DEVICE_REGISTERED);
+      await SecureStore.deleteItemAsync("aquad_has_wallets");
+      await SecureStore.deleteItemAsync("aquad_is_backed_up");
+
+      console.log("🔄 设备在服务端不存在，正在重新注册...");
+
+      // 直接调用注册接口（不走 api 拦截器，避免循环依赖）
+      try {
+        await axios.post(`${BASE_URL}/devices`, {
+          device_id: keys.publicKeyHex,
+          platform: "web",
+          os: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 32) : "unknown",
+          model: "Web Browser",
+          locale: typeof navigator !== "undefined" ? navigator.language : "en",
+          version: "1.0.0",
+          currency: "CNY",
+        });
+        await SecureStore.setItemAsync(DEVICE_REGISTERED, "true");
+        console.log("✅ 设备重新注册成功:", keys.publicKeyHex.slice(0, 8) + "...");
+        return true;
+      } catch (regErr: any) {
+        // 设备已存在（幂等），也算成功
+        if (regErr.response?.status === 409 || regErr.response?.status === 200) {
+          await SecureStore.setItemAsync(DEVICE_REGISTERED, "true");
+          console.log("✅ 设备已存在（幂等）");
+          return true;
+        }
+        console.error("❌ 设备重新注册失败:", regErr.message);
+        return false;
+      }
+    }
+
+    // 网络错误等 — 不阻塞启动，后续请求会重试
+    console.warn("⚠️ 设备验证请求失败（非401），不阻塞启动:", err.message);
+    return true;
+  }
 }
 
 export async function clearDeviceKeys(): Promise<void> {
