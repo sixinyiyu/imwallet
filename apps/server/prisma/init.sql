@@ -28,11 +28,6 @@ EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
 DO $$ BEGIN
-    CREATE TYPE "AdminRole" AS ENUM ('ADMIN');
-EXCEPTION WHEN duplicate_object THEN null;
-END $$;
-
-DO $$ BEGIN
     CREATE TYPE "Platform" AS ENUM ('ios', 'android', 'web');
 EXCEPTION WHEN duplicate_object THEN null;
 END $$;
@@ -43,17 +38,6 @@ EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
 -- ─── Tables ──────────────────────────────────────────────────────────────────
-
--- 管理员表
-CREATE TABLE IF NOT EXISTS "admins" (
-    "id"         SERIAL      NOT NULL,
-    "device_id"  VARCHAR(64) NOT NULL,
-    "role"       "AdminRole" NOT NULL DEFAULT 'ADMIN',
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "admins_pkey" PRIMARY KEY ("id")
-);
-CREATE UNIQUE INDEX IF NOT EXISTS "admins_device_id_key" ON "admins"("device_id");
 
 -- 设备表
 CREATE TABLE IF NOT EXISTS "devices" (

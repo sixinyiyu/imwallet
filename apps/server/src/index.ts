@@ -11,7 +11,6 @@ import fiatRoutes from "./routes/fiat";
 import contactRoutes from "./routes/contact";
 import rsaRoutes from "./routes/rsa";
 import configRoutes from "./routes/config";
-import adminRoutes from "./routes/admin";
 import accountRoutes from "./routes/account";
 import notificationRoutes from "./routes/notification";
 import { initRSAKeys } from "./services/rsaService";
@@ -52,7 +51,6 @@ app.use("/api/v1/fiat", fiatRoutes);
 app.use("/api/v1/contacts", contactRoutes);
 app.use("/api/v1/rsa", rsaRoutes);
 app.use("/api/v1/config", configRoutes);
-app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/accounts", accountRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 

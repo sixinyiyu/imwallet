@@ -30,18 +30,16 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
-  // 权限校验：管理员可查看所有钱包交易，普通设备需验证关联
-  if (!req.device!.isAdmin) {
-    const subscription = await prisma.walletSubscription.findFirst({
-      where: {
-        wallet_id: walletId,
-        device: { device_id: req.device!.deviceId },
-      },
-    });
-    if (!subscription) {
-      res.status(403).json({ error: "You do not have permission to view this wallet's transactions" });
-      return;
-    }
+  // 权限校验：验证设备是否关联该钱包
+  const subscription = await prisma.walletSubscription.findFirst({
+    where: {
+      wallet_id: walletId,
+      device: { device_id: req.device!.deviceId },
+    },
+  });
+  if (!subscription) {
+    res.status(403).json({ error: "You do not have permission to view this wallet's transactions" });
+    return;
   }
 
   const page = parseInt((req.query.page as string) || "1", 10);
@@ -67,17 +65,15 @@ router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   const txId = req.params.id as string;
   const tx = await transactionService.getTransactionDetail(txId);
 
-  // 权限校验：管理员可查看任意交易，普通设备需验证关联
-  if (!req.device!.isAdmin) {
-    const deviceSubs = await prisma.walletSubscription.findMany({
-      where: { device: { device_id: req.device!.deviceId } },
-      select: { wallet_id: true },
-    });
-    const myWalletIds = deviceSubs.map((s: any) => s.wallet_id);
-    if (!myWalletIds.includes(tx.fromWalletId) && !myWalletIds.includes(tx.toWalletId)) {
-      res.status(403).json({ error: "You do not have permission to view this transaction" });
-      return;
-    }
+  // 权限校验：验证设备是否关联该交易的钱包
+  const deviceSubs = await prisma.walletSubscription.findMany({
+    where: { device: { device_id: req.device!.deviceId } },
+    select: { wallet_id: true },
+  });
+  const myWalletIds = deviceSubs.map((s: any) => s.wallet_id);
+  if (!myWalletIds.includes(tx.fromWalletId) && !myWalletIds.includes(tx.toWalletId)) {
+    res.status(403).json({ error: "You do not have permission to view this transaction" });
+    return;
   }
 
   res.json(tx);

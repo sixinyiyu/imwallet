@@ -56,7 +56,7 @@ router.put(
         device: { device_id: req.device!.deviceId },
       },
     });
-    if (!subscription && !req.device!.isAdmin) {
+    if (!subscription) {
       res.status(403).json({ error: "You do not have permission to reset this wallet password" });
       return;
     }
@@ -75,18 +75,16 @@ router.put(
 router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   const walletId = req.params.id as string;
 
-  // 管理员可查看任意钱包，普通设备需验证关联
-  if (!req.device!.isAdmin) {
-    const subscription = await prisma.walletSubscription.findFirst({
-      where: {
-        wallet_id: walletId,
-        device: { device_id: req.device!.deviceId },
-      },
-    });
-    if (!subscription) {
-      res.status(403).json({ error: "You do not have permission to view this wallet" });
-      return;
-    }
+  // Verify device-wallet ownership
+  const subscription = await prisma.walletSubscription.findFirst({
+    where: {
+      wallet_id: walletId,
+      device: { device_id: req.device!.deviceId },
+    },
+  });
+  if (!subscription) {
+    res.status(403).json({ error: "You do not have permission to view this wallet" });
+    return;
   }
 
   const wallet = await walletService.getWalletDetail(walletId, req.device!.deviceId);
@@ -142,7 +140,7 @@ router.post(
         device: { device_id: req.device!.deviceId },
       },
     });
-    if (!subscription && !req.device!.isAdmin) {
+    if (!subscription) {
       res.status(403).json({ error: "You do not have permission to verify this wallet" });
       return;
     }

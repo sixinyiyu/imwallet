@@ -24,7 +24,6 @@ export interface DevicePayload {
   deviceId: string;   // 公钥 hex (64字符)
   dbId: number;       // devices 表自增 ID
   platform: string;
-  isAdmin: boolean;
 }
 
 declare global {
@@ -152,20 +151,14 @@ export async function deviceAuthMiddleware(
     return;
   }
 
-  // 7. 检查是否为管理员
-  const admin = await prisma.admin.findUnique({
-    where: { device_id: deviceId },
-  });
-
-  // 8. 设置 req.device
+  // 7. 设置 req.device
   req.device = {
     deviceId,
     dbId: device.id,
     platform: device.platform,
-    isAdmin: !!admin,
   };
 
-  logger.info("DEVICE_AUTH", `设备认证成功: device_id=${deviceId.slice(0, 8)}..., isAdmin=${!!admin}`);
+  logger.info("DEVICE_AUTH", `设备认证成功: device_id=${deviceId.slice(0, 8)}...`);
   next();
 }
 

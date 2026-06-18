@@ -18,9 +18,8 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
   res.json({ tokens });
 }));
 
-// 权限校验辅助函数：管理员可查看任意钱包，普通设备需验证关联
-async function checkWalletPermission(walletId: string, deviceId: string, isAdmin: boolean): Promise<boolean> {
-  if (isAdmin) return true;
+// 权限校验辅助函数：验证设备是否关联该钱包
+async function checkWalletPermission(walletId: string, deviceId: string): Promise<boolean> {
   const subscription = await prisma.walletSubscription.findFirst({
     where: { wallet_id: walletId, device: { device_id: deviceId } },
   });
@@ -29,7 +28,7 @@ async function checkWalletPermission(walletId: string, deviceId: string, isAdmin
 
 router.get("/:walletId/balance", asyncHandler(async (req: Request, res: Response) => {
   const walletId = req.params.walletId as string;
-  const hasPermission = await checkWalletPermission(walletId, req.device!.deviceId, req.device!.isAdmin);
+  const hasPermission = await checkWalletPermission(walletId, req.device!.deviceId);
   if (!hasPermission) {
     res.status(403).json({ error: "You do not have permission to view this wallet" });
     return;
@@ -40,7 +39,7 @@ router.get("/:walletId/balance", asyncHandler(async (req: Request, res: Response
 
 router.get("/:walletId/list", asyncHandler(async (req: Request, res: Response) => {
   const walletId = req.params.walletId as string;
-  const hasPermission = await checkWalletPermission(walletId, req.device!.deviceId, req.device!.isAdmin);
+  const hasPermission = await checkWalletPermission(walletId, req.device!.deviceId);
   if (!hasPermission) {
     res.status(403).json({ error: "You do not have permission to view this wallet" });
     return;

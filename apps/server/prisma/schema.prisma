@@ -27,12 +27,7 @@ enum NotificationType {
   TRANSFER_OUT
 }
 
-/// 管理员角色
-enum AdminRole {
-  ADMIN
-}
 
-/// 设备平台
 enum Platform {
   ios
   android
@@ -44,18 +39,6 @@ enum PlatformStore {
   appStore
   googlePlay
   fdroid
-}
-
-/// 管理员表：极简设计，通过直接修改数据库绑定设备标识
-model Admin {
-  id        Int      @id @default(autoincrement())
-  /// 管理员设备的公钥 hex（64字符），即 deviceId
-  device_id String   @unique @db.VarChar(64)
-  /// 管理员角色
-  role      AdminRole @default(ADMIN)
-  created_at DateTime @default(now()) @map("created_at")
-
-  @@map("admins")
 }
 
 /// 设备表：存储设备信息，设备标识 = Ed25519 公钥 hex
