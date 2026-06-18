@@ -23,7 +23,7 @@ EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
 DO $$ BEGIN
-    CREATE TYPE "NotificationType" AS ENUM ('TRANSFER_IN', 'TRANSFER_OUT', 'ACCOUNT_ACTIVATED', 'ACCOUNT_REJECTED');
+    CREATE TYPE "NotificationType" AS ENUM ('TRANSFER_IN', 'TRANSFER_OUT');
 EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
@@ -190,18 +190,31 @@ CREATE TABLE IF NOT EXISTS "contacts" (
     CONSTRAINT "contacts_pkey" PRIMARY KEY ("id")
 );
 
--- 通知表
+-- 通知表（关联钱包）
 CREATE TABLE IF NOT EXISTS "notifications" (
     "id"         TEXT        NOT NULL,
-    "device_id"  INT         NOT NULL,
+    "wallet_id"  VARCHAR(36) NOT NULL,
     "title"      VARCHAR(128) NOT NULL,
     "content"    TEXT        NOT NULL,
     "type"       "NotificationType" NOT NULL,
-    "is_read"    BOOLEAN     NOT NULL DEFAULT false,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "notifications_pkey" PRIMARY KEY ("id")
 );
+CREATE INDEX IF NOT EXISTS "notifications_wallet_id_idx" ON "notifications"("wallet_id");
+
+-- 通知阅读状态表（每个设备对每条通知的独立阅读状态）
+CREATE TABLE IF NOT EXISTS "notification_reads" (
+    "id"              SERIAL      NOT NULL,
+    "notification_id" TEXT        NOT NULL,
+    "device_id"       INT         NOT NULL,
+    "is_read"         BOOLEAN     NOT NULL DEFAULT false,
+    "read_at"         TIMESTAMP(3),
+    "created_at"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "notification_reads_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "notification_reads_notification_id_device_id_idx" ON "notification_reads"("notification_id", "device_id");
 
 -- ─── Foreign Keys ────────────────────────────────────────────────────────────
 -- 不建立数据库外键约束，数据完整性和级联删除由业务代码保证

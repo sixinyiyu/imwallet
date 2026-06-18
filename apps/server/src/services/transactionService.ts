@@ -184,43 +184,29 @@ export async function transfer(
 
   logger.info("TRANSFER", `转账成功: txHash=${txHash}, from=${input.fromWalletId}, to=${toWallet.id}, amount=${amount}, fee=${fee}, received=${recipientReceived.toFixed(8)}, feeMode=${FEE_MODE}`);
 
-  // Send notifications to devices that subscribe the involved wallets
-  const [fromDeviceSubs, toDeviceSubs] = await Promise.all([
-    prisma.walletSubscription.findMany({
-      where: { wallet_id: tx.fromWalletId },
-      select: { device_id: true },
-    }),
-    prisma.walletSubscription.findMany({
-      where: { wallet_id: tx.toWalletId },
-      select: { device_id: true },
-    }),
-  ]);
-
+  // Create notifications linked to wallets (not devices)
+  // Each wallet gets one notification; devices see it via their subscriptions
   const toName = tx.toWallet.alias || tx.toWallet.address.slice(0, 10);
   const fromName = tx.fromWallet.alias || tx.fromWallet.address.slice(0, 10);
   const tokenSymbol = token.symbol;
 
-  for (const sub of fromDeviceSubs) {
-    await prisma.notification.create({
-      data: {
-        device_id: sub.device_id,
-        title: "转账成功",
-        content: `您已向 ${toName} 转出 ${amount} ${tokenSymbol}`,
-        type: "TRANSFER_OUT",
-      },
-    });
-  }
+  await prisma.notification.create({
+    data: {
+      wallet_id: tx.fromWalletId,
+      title: "转账成功",
+      content: `您已向 ${toName} 转出 ${amount} ${tokenSymbol}`,
+      type: "TRANSFER_OUT",
+    },
+  });
 
-  for (const sub of toDeviceSubs) {
-    await prisma.notification.create({
-      data: {
-        device_id: sub.device_id,
-        title: "收到转账",
-        content: `您收到来自 ${fromName} 的 ${recipientReceived.toFixed(8)} ${tokenSymbol}`,
-        type: "TRANSFER_IN",
-      },
-    });
-  }
+  await prisma.notification.create({
+    data: {
+      wallet_id: tx.toWalletId,
+      title: "收到转账",
+      content: `您收到来自 ${fromName} 的 ${recipientReceived.toFixed(8)} ${tokenSymbol}`,
+      type: "TRANSFER_IN",
+    },
+  });
 
   return {
     id: tx.id,

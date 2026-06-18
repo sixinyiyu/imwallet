@@ -73,7 +73,7 @@ model Device {
 
   walletSubscriptions WalletSubscription[]
   contacts           Contact[]
-  notifications       Notification[]
+  notificationReadStatuses NotificationRead[]
 
   @@map("devices")
 }
@@ -131,6 +131,7 @@ model Wallet {
   receivedTxs  Transaction[] @relation("ToWallet")
   tokenBalances WalletToken[]
   subscriptions WalletSubscription[]
+  notifications  Notification[]
 
   @@map("wallets")
 }
@@ -259,22 +260,39 @@ model Contact {
   @@map("contacts")
 }
 
-/// 通知/消息表：站内信通知（关联到设备）
+/// 通知/消息表：站内信通知（关联到钱包）
 model Notification {
   id        String           @id @default(uuid())
-  /// 接收通知的设备 ID
-  device_id Int              @map("device_id")
+  /// 关联钱包 ID
+  wallet_id String           @map("wallet_id") @db.VarChar(36)
   /// 通知标题
   title     String           @db.VarChar(128)
   /// 通知内容
   content   String           @db.Text
   /// 通知类型
   type      NotificationType @map("type")
-  /// 是否已读
-  isRead    Boolean          @default(false) @map("is_read")
   createdAt DateTime         @default(now()) @map("created_at")
 
-  device Device @relation(fields: [device_id], references: [id], onDelete: Cascade)
+  wallet Wallet @relation(fields: [wallet_id], references: [id], onDelete: Cascade)
+  readStatuses NotificationRead[]
 
   @@map("notifications")
+}
+
+/// 通知阅读状态：每个设备对每条通知的独立阅读状态
+model NotificationRead {
+  id              Int      @id @default(autoincrement())
+  notification_id String   @map("notification_id")
+  device_id       Int      @map("device_id")
+  /// 是否已读
+  isRead          Boolean  @default(false) @map("is_read")
+  /// 阅读时间
+  readAt          DateTime? @map("read_at")
+  created_at      DateTime @default(now()) @map("created_at")
+
+  notification Notification @relation(fields: [notification_id], references: [id], onDelete: Cascade)
+  device       Device      @relation(fields: [device_id], references: [id], onDelete: Cascade)
+
+  @@unique([notification_id, device_id])
+  @@map("notification_reads")
 }
