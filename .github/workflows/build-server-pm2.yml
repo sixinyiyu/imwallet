@@ -46,11 +46,24 @@ jobs:
         run: npx prisma@6 generate
         working-directory: apps/server
 
+      - name: Copy Prisma client into server node_modules
+        run: |
+          # In npm workspaces, @prisma/client is hoisted to root node_modules,
+          # so .prisma/client is generated there — copy it into apps/server/node_modules
+          if [ -d "node_modules/.prisma" ] && [ ! -d "apps/server/node_modules/.prisma" ]; then
+            mkdir -p apps/server/node_modules/.prisma
+            cp -r node_modules/.prisma/client apps/server/node_modules/.prisma/client
+            echo "✅ Copied .prisma/client from root node_modules to apps/server/node_modules"
+          fi
+
       - name: Verify Prisma client generated
         run: |
           if [ ! -d "apps/server/node_modules/.prisma/client" ]; then
             echo "❌ FATAL: .prisma/client not found in node_modules!"
-            ls -la apps/server/node_modules/.prisma/ 2>/dev/null || echo "  .prisma directory does not exist"
+            echo "  Root node_modules/.prisma:"
+            ls -la node_modules/.prisma/ 2>/dev/null || echo "    (does not exist)"
+            echo "  apps/server/node_modules/.prisma:"
+            ls -la apps/server/node_modules/.prisma/ 2>/dev/null || echo "    (does not exist)"
             exit 1
           fi
           echo "✅ .prisma/client exists:"
