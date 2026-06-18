@@ -53,7 +53,7 @@ jobs:
         run: |
           echo "Checking critical modules..."
           test -d "/tmp/prod-install/node_modules/express" || { echo "❌ express missing"; exit 1; }
-          test -d "/tmp/prod-install/node_modules/bcrypt" || { echo "❌ bcrypt missing"; exit 1; }
+          test -d "/tmp/prod-install/node_modules/bcryptjs" || { echo "❌ bcryptjs missing"; exit 1; }
           test -d "/tmp/prod-install/node_modules/.prisma/client" || { echo "❌ .prisma/client missing"; exit 1; }
           test -f "apps/server/prisma/init.sql" || { echo "❌ prisma/init.sql missing"; exit 1; }
           echo "✅ All production dependencies verified"
