@@ -46,6 +46,35 @@ jobs:
           npm install --omit=dev
           npx prisma@6 generate
 
+      - name: Prune node_modules to reduce package size
+        run: |
+          cd /tmp/prod-install/node_modules
+          rm -rf .prisma/client/schema.prisma
+          rm -rf .prisma/client/migration-engine-*
+          rm -rf .prisma/client/introspection-engine-*
+          rm -rf .prisma/client/query-engine-windows*
+          rm -rf .prisma/client/query-engine-darwin*
+          rm -rf .prisma/client/libquery_engine-windows*
+          rm -rf .prisma/client/libquery_engine-darwin*
+          rm -rf .prisma/client/libquery_engine-debian-*
+          rm -rf prisma
+          find . -type f -name "README*" -delete 2>/dev/null || true
+          find . -type f -name "CHANGELOG*" -delete 2>/dev/null || true
+          find . -type f -name "LICENSE*" -delete 2>/dev/null || true
+          find . -type f -name "*.md" -not -path "*/.prisma/*" -delete 2>/dev/null || true
+          find . -type d -name "test" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name "__tests__" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name ".github" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name "docs" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name "example" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name "examples" -exec rm -rf {} + 2>/dev/null || true
+          find . -type f -name "*.ts" -delete 2>/dev/null || true
+          find . -type f -name "*.d.ts" -not -path "*/.prisma/*" -delete 2>/dev/null || true
+          find . -type f -name "*.js.map" -delete 2>/dev/null || true
+          echo "✅ node_modules pruned"
+          du -sh .
+
       - name: Verify production dependencies
         run: |
           echo "Checking critical modules..."
@@ -68,13 +97,13 @@ jobs:
           cp apps/server/ecosystem.config.js /tmp/imwallet-server/ecosystem.config.js
           cp apps/server/deploy-pm2.sh /tmp/imwallet-server/deploy-pm2.sh
           
-          # Ensure shell scripts have Unix line endings (LF)
           sed -i 's/\r$//' /tmp/imwallet-server/deploy-pm2.sh
           
           cd /tmp
           tar -czf imwallet-server-pm2-${VERSION}.tar.gz imwallet-server/
+          SIZE=$(du -sh imwallet-server-pm2-${VERSION}.tar.gz | cut -f1)
           cp /tmp/imwallet-server-pm2-${VERSION}.tar.gz $GITHUB_WORKSPACE/
-          echo "✅ Packaged: imwallet-server-pm2-${VERSION}.tar.gz"
+          echo "✅ Packaged: imwallet-server-pm2-${VERSION}.tar.gz (size: $SIZE)"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

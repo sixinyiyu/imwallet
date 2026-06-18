@@ -39,15 +39,56 @@ jobs:
 
       - name: Install production dependencies (standalone, no workspace hoisting)
         run: |
-          # Create a standalone directory to install production deps without npm workspace hoisting.
-          # This ensures ALL dependencies (express, bcrypt, etc.) are in one node_modules,
-          # not split between root and workspace directories.
           mkdir -p /tmp/prod-install
           cp apps/server/package.json /tmp/prod-install/
           cp -r apps/server/prisma /tmp/prod-install/prisma
           cd /tmp/prod-install
           npm install --omit=dev
           npx prisma@6 generate
+
+      - name: Prune node_modules to reduce package size
+        run: |
+          cd /tmp/prod-install/node_modules
+
+          # 1. Remove Prisma engines for non-Linux platforms (keep only linux-musl for Alpine, linux for glibc)
+          #    .prisma/client/engines contains: query-engine + migration-engine + introspection-engine
+          #    Production only needs query-engine
+          rm -rf .prisma/client/schema.prisma
+          rm -rf .prisma/client/migration-engine-debian-*
+          rm -rf .prisma/client/introspection-engine-debian-*
+          rm -rf .prisma/client/query-engine-windows*
+          rm -rf .prisma/client/query-engine-darwin*
+          rm -rf .prisma/client/libquery_engine-windows*
+          rm -rf .prisma/client/libquery_engine-darwin*
+          rm -rf .prisma/client/libquery_engine-debian-*
+          # Keep only: libquery_engine-linux-musl.so (for Alpine) or libquery_engine-linux.so (for glibc)
+          # Also remove migration and introspection engines (not needed at runtime)
+          rm -rf .prisma/client/migration-engine-*
+          rm -rf .prisma/client/introspection-engine-*
+
+          # 2. Remove prisma CLI (dev tool, not needed at runtime)
+          rm -rf prisma
+
+          # 3. Strip common bloat from all packages
+          find . -type f -name "README*" -delete 2>/dev/null || true
+          find . -type f -name "CHANGELOG*" -delete 2>/dev/null || true
+          find . -type f -name "LICENSE*" -delete 2>/dev/null || true
+          find . -type f -name "*.md" -not -path "*/.prisma/*" -delete 2>/dev/null || true
+          find . -type d -name "test" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name "__tests__" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name ".github" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name "docs" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name "example" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name "examples" -exec rm -rf {} + 2>/dev/null || true
+
+          # 4. Remove TypeScript source maps and declarations (not needed at runtime)
+          find . -type f -name "*.ts" -delete 2>/dev/null || true
+          find . -type f -name "*.d.ts" -not -path "*/.prisma/*" -delete 2>/dev/null || true
+          find . -type f -name "*.js.map" -delete 2>/dev/null || true
+
+          echo "✅ node_modules pruned"
+          du -sh .
 
       - name: Verify production dependencies
         run: |
@@ -77,8 +118,9 @@ jobs:
           
           cd /tmp
           tar -czf imwallet-server-systemd-${VERSION}.tar.gz imwallet-server/
+          SIZE=$(du -sh imwallet-server-systemd-${VERSION}.tar.gz | cut -f1)
           cp /tmp/imwallet-server-systemd-${VERSION}.tar.gz $GITHUB_WORKSPACE/
-          echo "✅ Packaged: imwallet-server-systemd-${VERSION}.tar.gz"
+          echo "✅ Packaged: imwallet-server-systemd-${VERSION}.tar.gz (size: $SIZE)"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
