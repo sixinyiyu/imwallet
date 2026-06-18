@@ -4,6 +4,22 @@ import Constants from "expo-constants";
 import "react-native-get-random-values";
 import { getPublicKey, sign } from "@noble/ed25519";
 import { sha256 } from "@noble/hashes/sha2.js";
+import { sha512 } from "@noble/hashes/sha2.js";
+import { etc } from "@noble/ed25519";
+
+// Configure sha512 for @noble/ed25519 (required by v2+)
+etc.sha512Sync = (...m: Uint8Array[]) => sha512(concatBytes(...m));
+
+function concatBytes(...arrays: Uint8Array[]): Uint8Array {
+  const totalLength = arrays.reduce((acc, arr) => acc + arr.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const arr of arrays) {
+    result.set(arr, offset);
+    offset += arr.length;
+  }
+  return result;
+}
 
 const DEVICE_PRIV_JWK = "imwallet_device_priv_jwk";
 const DEVICE_PUB_JWK = "imwallet_device_pub_jwk";
