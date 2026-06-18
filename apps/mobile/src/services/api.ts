@@ -1,6 +1,9 @@
 import axios from "axios";
 import * as SecureStore from "../utils/secureStorage";
 import Constants from "expo-constants";
+import "react-native-get-random-values";
+import { getPublicKey, sign } from "@noble/ed25519";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 const DEVICE_PRIV_JWK = "imwallet_device_priv_jwk";
 const DEVICE_PUB_JWK = "imwallet_device_pub_jwk";
@@ -28,22 +31,20 @@ function bytesToHex(bytes: Uint8Array): string {
     .join("");
 }
 
-/** base64url → hex */
-function base64urlToHex(b64url: string): string {
-  let b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
-  while (b64.length % 4) b64 += "=";
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytesToHex(bytes);
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+  }
+  return bytes;
 }
 
 async function computeBodyHash(body: any): Promise<string> {
   if (!body || Object.keys(body).length === 0) return "";
   const bodyStr = typeof body === "string" ? body : JSON.stringify(body);
   const data = new TextEncoder().encode(bodyStr);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  return bytesToHex(new Uint8Array(hashBuffer));
+  const hash = sha256(data);
+  return bytesToHex(hash);
 }
 
 function buildSignMessage(
@@ -57,61 +58,48 @@ function buildSignMessage(
 
 function generateNonce(): string {
   const arr = new Uint8Array(16);
+  // react-native-get-randomValues polyfill makes crypto.getRandomValues available
   crypto.getRandomValues(arr);
   return bytesToHex(arr);
 }
 
-// ===== Ed25519 密钥操作（纯 Web Crypto API） =====
+// ===== Ed25519 密钥操作（@noble/ed25519，纯 JS，跨平台兼容） =====
 
 async function generateKeyPair(): Promise<{
   publicKeyHex: string;
-  privJwk: JsonWebKey;
-  pubJwk: JsonWebKey;
+  privateKeyHex: string;
 }> {
-  const keyPair = await crypto.subtle.generateKey(
-    { name: "Ed25519" },
-    true,
-    ["sign", "verify"]
-  );
-
-  const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
-  const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
-  const publicKeyHex = base64urlToHex(pubJwk.x!);
-
-  return { publicKeyHex, privJwk, pubJwk };
+  const privateKey = crypto.getRandomValues(new Uint8Array(32));
+  const publicKey = await getPublicKey(privateKey);
+  return {
+    publicKeyHex: bytesToHex(publicKey),
+    privateKeyHex: bytesToHex(privateKey),
+  };
 }
 
-async function signMessage(message: string, privJwk: JsonWebKey): Promise<string> {
-  const privateKey = await crypto.subtle.importKey(
-    "jwk",
-    privJwk,
-    { name: "Ed25519" },
-    false,
-    ["sign"]
-  );
-
+async function signMessage(message: string, privateKeyHex: string): Promise<string> {
   const msgBytes = new TextEncoder().encode(message);
-  const sigBuffer = await crypto.subtle.sign("Ed25519", privateKey, msgBytes);
-  return bytesToHex(new Uint8Array(sigBuffer));
+  const privateKey = hexToBytes(privateKeyHex);
+  const signature = await sign(msgBytes, privateKey);
+  return bytesToHex(signature);
 }
 
 // ===== 设备管理 =====
 
-async function ensureDeviceKeys(): Promise<{ publicKeyHex: string; privJwk: JsonWebKey } | null> {
+async function ensureDeviceKeys(): Promise<{ publicKeyHex: string; privateKeyHex: string } | null> {
   let publicKeyHex = await SecureStore.getItemAsync(DEVICE_PUBLIC_KEY);
-  let privJwkStr = await SecureStore.getItemAsync(DEVICE_PRIV_JWK);
+  let privateKeyHex = await SecureStore.getItemAsync(DEVICE_PRIV_JWK);
 
-  if (publicKeyHex && privJwkStr) {
-    return { publicKeyHex, privJwk: JSON.parse(privJwkStr) };
+  if (publicKeyHex && privateKeyHex) {
+    return { publicKeyHex, privateKeyHex };
   }
 
   try {
     const keys = await generateKeyPair();
-    await SecureStore.setItemAsync(DEVICE_PRIV_JWK, JSON.stringify(keys.privJwk));
-    await SecureStore.setItemAsync(DEVICE_PUB_JWK, JSON.stringify(keys.pubJwk));
+    await SecureStore.setItemAsync(DEVICE_PRIV_JWK, keys.privateKeyHex);
     await SecureStore.setItemAsync(DEVICE_PUBLIC_KEY, keys.publicKeyHex);
     console.log("🔑 设备密钥对已生成:", keys.publicKeyHex.slice(0, 8) + "...");
-    return { publicKeyHex: keys.publicKeyHex, privJwk: keys.privJwk };
+    return { publicKeyHex: keys.publicKeyHex, privateKeyHex: keys.privateKeyHex };
   } catch (err) {
     console.error("❌ 生成设备密钥对失败:", err);
     return null;
@@ -158,7 +146,7 @@ api.interceptors.request.use(async (config) => {
   const bodyHash = await computeBodyHash(config.data);
 
   const message = buildSignMessage(timestamp, method, path, bodyHash);
-  const signature = await signMessage(message, keys.privJwk);
+  const signature = await signMessage(message, keys.privateKeyHex);
 
   config.headers["x-device-id"] = keys.publicKeyHex;
   config.headers["x-signature"] = signature;
@@ -197,7 +185,6 @@ export async function isDeviceRegistered(): Promise<boolean> {
 
 export async function clearDeviceKeys(): Promise<void> {
   await SecureStore.deleteItemAsync(DEVICE_PRIV_JWK);
-  await SecureStore.deleteItemAsync(DEVICE_PUB_JWK);
   await SecureStore.deleteItemAsync(DEVICE_PUBLIC_KEY);
   await SecureStore.deleteItemAsync(DEVICE_REGISTERED);
 }
