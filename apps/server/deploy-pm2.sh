@@ -1,17 +1,38 @@
 #!/bin/bash
-# IMWallet Server - PM2 部署脚本
+# IMWallet Server - PM2 部署脚本（方案 B：制品包含完整 node_modules）
 # 用法: ./deploy-pm2.sh <version>
-# 示例: ./deploy-pm2.sh 1.0.0
+# 示例: ./deploy-pm2.sh 1.0.3
+#
+# 制品包含完整 node_modules，服务器无需联网安装依赖。
+# 自动检测平台，下载对应的平台包（debian/rhel/windows）。
 
 set -e
 
-VERSION="${1:?请指定版本号，如: ./deploy-pm2.sh 1.0.0}"
+VERSION="${1:?请指定版本号，如: ./deploy-pm2.sh 1.0.3}"
 APP_DIR="/opt/imwallet-server"
 ENV_FILE="$APP_DIR/.env.production"
-RELEASE_URL="https://github.com/sixinyiyu/imwallet/releases/download/server-pm2-v${VERSION}/imwallet-server-pm2-${VERSION}.tar.gz"
+
+# 自动检测平台
+detect_platform() {
+  if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    case "$ID" in
+      ubuntu|debian|linuxmint|pop) echo "debian" ;;
+      amzn|rhel|centos|fedora|rocky|alma) echo "rhel" ;;
+      *) echo "rhel" ;;
+    esac
+  elif [ -f /etc/redhat-release ]; then
+    echo "rhel"
+  else
+    echo "debian"
+  fi
+}
+
+PLATFORM=$(detect_platform)
+RELEASE_URL="https://github.com/sixinyiyu/imwallet/releases/download/server-pm2-v${VERSION}/imwallet-server-pm2-${VERSION}-${PLATFORM}.tar.gz"
 
 echo "========================================="
-echo "  IMWallet Server (PM2) 部署 v${VERSION}"
+echo "  IMWallet Server (PM2) 部署 v${VERSION} (${PLATFORM})"
 echo "========================================="
 
 # 1. 检查 PM2
@@ -38,19 +59,19 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-# 5. 下载制品
-echo "⬇️  下载 imwallet-server-pm2-${VERSION}.tar.gz ..."
+# 5. 下载平台对应的制品包（包含完整 node_modules）
+echo "⬇️  下载 imwallet-server-pm2-${VERSION}-${PLATFORM}.tar.gz ..."
 cd /tmp
-curl -L -o "imwallet-server-pm2-${VERSION}.tar.gz" "$RELEASE_URL"
+curl -L -o "imwallet-server-pm2-${VERSION}-${PLATFORM}.tar.gz" "$RELEASE_URL"
 
-# 6. 解压覆盖
+# 6. 解压覆盖（制品包含完整 node_modules，无需服务器联网安装）
 echo "📂 解压到 $APP_DIR ..."
-tar -xzf "imwallet-server-pm2-${VERSION}.tar.gz" -C /tmp
-cp -r /tmp/imwallet-server/dist "$APP_DIR/"
-cp -r /tmp/imwallet-server/node_modules "$APP_DIR/"
-cp -r /tmp/imwallet-server/prisma "$APP_DIR/"
-cp /tmp/imwallet-server/package.json "$APP_DIR/"
-cp /tmp/imwallet-server/ecosystem.config.js "$APP_DIR/"
+tar -xzf "imwallet-server-pm2-${VERSION}-${PLATFORM}.tar.gz" -C /tmp
+cp -r /tmp/imwallet-server-${PLATFORM}/dist "$APP_DIR/"
+cp -r /tmp/imwallet-server-${PLATFORM}/node_modules "$APP_DIR/"
+cp -r /tmp/imwallet-server-${PLATFORM}/prisma "$APP_DIR/"
+cp /tmp/imwallet-server-${PLATFORM}/package.json "$APP_DIR/"
+cp /tmp/imwallet-server-${PLATFORM}/ecosystem.config.js "$APP_DIR/"
 
 # 7. 执行数据库迁移
 echo "🗄️  执行数据库迁移..."
@@ -58,17 +79,12 @@ cd "$APP_DIR"
 export DATABASE_URL=$(grep -E '^DATABASE_URL=' "$ENV_FILE" | sed 's/^DATABASE_URL=//')
 npx prisma@6 migrate deploy
 
-# 8. 加载环境变量并重启 PM2
+# 8. 重启 PM2
 echo "🔄 重启 imwallet (PM2)..."
 cd "$APP_DIR"
 
-# 停止旧进程（如果存在）
 pm2 delete imwallet 2>/dev/null || true
-
-# 启动新进程
 pm2 start ecosystem.config.js --env production
-
-# 保存 PM2 进程列表
 pm2 save
 
 # 9. 检查状态
@@ -76,8 +92,8 @@ sleep 3
 pm2 status
 
 # 10. 清理临时文件
-rm -f "/tmp/imwallet-server-pm2-${VERSION}.tar.gz"
-rm -rf /tmp/imwallet-server
+rm -f "/tmp/imwallet-server-pm2-${VERSION}-${PLATFORM}.tar.gz"
+rm -rf /tmp/imwallet-server-${PLATFORM}
 
 echo "🎉 PM2 部署完成!"
 echo ""

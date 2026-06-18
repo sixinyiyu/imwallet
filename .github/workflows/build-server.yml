@@ -29,7 +29,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate Prisma client
+      - name: Generate Prisma client (all platforms)
         run: npx prisma@6 generate
         working-directory: apps/server
 
@@ -44,32 +44,23 @@ jobs:
           cp -r apps/server/prisma /tmp/prod-install/prisma
           cd /tmp/prod-install
           npm install --omit=dev
-          npx prisma@6 generate
+          # Overwrite Prisma client with pre-generated version (includes all platform engines)
+          # npm workspaces hoist @prisma/client to root, so the generated client is there
+          cp -r $GITHUB_WORKSPACE/node_modules/.prisma/client node_modules/.prisma/client
 
-      - name: Prune node_modules to reduce package size
+      - name: Prune node_modules
         run: |
           cd /tmp/prod-install/node_modules
 
-          # 1. Remove Prisma engines for non-Linux platforms (keep only linux-musl for Alpine, linux for glibc)
-          #    .prisma/client/engines contains: query-engine + migration-engine + introspection-engine
-          #    Production only needs query-engine
-          rm -rf .prisma/client/schema.prisma
-          rm -rf .prisma/client/migration-engine-debian-*
-          rm -rf .prisma/client/introspection-engine-debian-*
-          rm -rf .prisma/client/query-engine-windows*
-          rm -rf .prisma/client/query-engine-darwin*
-          rm -rf .prisma/client/libquery_engine-windows*
-          rm -rf .prisma/client/libquery_engine-darwin*
-          rm -rf .prisma/client/libquery_engine-debian-*
-          # Keep only: libquery_engine-linux-musl.so (for Alpine) or libquery_engine-linux.so (for glibc)
-          # Also remove migration and introspection engines (not needed at runtime)
+          # Remove Prisma CLI (dev tool, not needed at runtime)
+          rm -rf prisma
+          # Remove migration and introspection engines (not needed at runtime)
           rm -rf .prisma/client/migration-engine-*
           rm -rf .prisma/client/introspection-engine-*
+          # Remove schema.prisma from client (already in prisma/ directory)
+          rm -f .prisma/client/schema.prisma
 
-          # 2. Remove prisma CLI (dev tool, not needed at runtime)
-          rm -rf prisma
-
-          # 3. Strip common bloat from all packages
+          # Strip common bloat from all packages
           find . -type f -name "README*" -delete 2>/dev/null || true
           find . -type f -name "CHANGELOG*" -delete 2>/dev/null || true
           find . -type f -name "LICENSE*" -delete 2>/dev/null || true
@@ -82,7 +73,7 @@ jobs:
           find . -type d -name "example" -exec rm -rf {} + 2>/dev/null || true
           find . -type d -name "examples" -exec rm -rf {} + 2>/dev/null || true
 
-          # 4. Remove TypeScript source maps and declarations (not needed at runtime)
+          # Remove TypeScript source maps and declarations (not needed at runtime)
           find . -type f -name "*.ts" -delete 2>/dev/null || true
           find . -type f -name "*.d.ts" -not -path "*/.prisma/*" -delete 2>/dev/null || true
           find . -type f -name "*.js.map" -delete 2>/dev/null || true
@@ -99,28 +90,54 @@ jobs:
           test -f "apps/server/prisma/init.sql" || { echo "❌ prisma/init.sql missing"; exit 1; }
           echo "✅ All production dependencies verified"
 
-      - name: Package release artifact
+      - name: Package platform-specific artifacts
         run: |
           VERSION="${GITHUB_REF_NAME#server-v}"
-          mkdir -p /tmp/imwallet-server
-          
-          cp -r apps/server/dist /tmp/imwallet-server/dist
-          cp -r /tmp/prod-install/node_modules /tmp/imwallet-server/node_modules
-          cp -r apps/server/prisma /tmp/imwallet-server/prisma
-          cp apps/server/package.json /tmp/imwallet-server/package.json
-          cp apps/server/.env.example /tmp/imwallet-server/.env.example
-          cp apps/server/imwallet.service /tmp/imwallet-server/imwallet.service
-          cp apps/server/setup-ec2.sh /tmp/imwallet-server/setup-ec2.sh
-          cp apps/server/deploy.sh /tmp/imwallet-server/deploy.sh
-          
+
+          # Prepare base files (common to all platforms)
+          BASE=/tmp/pkg-base
+          mkdir -p $BASE
+          cp -r apps/server/dist $BASE/dist
+          cp -r apps/server/prisma $BASE/prisma
+          cp apps/server/package.json $BASE/package.json
+          cp apps/server/package-lock.json $BASE/package-lock.json
+          cp apps/server/.env.example $BASE/.env.example
+          cp apps/server/imwallet.service $BASE/imwallet.service
+          cp apps/server/setup-ec2.sh $BASE/setup-ec2.sh
+          cp apps/server/deploy.sh $BASE/deploy.sh
+
           # Ensure shell scripts have Unix line endings (LF)
-          sed -i 's/\r$//' /tmp/imwallet-server/deploy.sh /tmp/imwallet-server/setup-ec2.sh
-          
-          cd /tmp
-          tar -czf imwallet-server-systemd-${VERSION}.tar.gz imwallet-server/
-          SIZE=$(du -sh imwallet-server-systemd-${VERSION}.tar.gz | cut -f1)
-          cp /tmp/imwallet-server-systemd-${VERSION}.tar.gz $GITHUB_WORKSPACE/
-          echo "✅ Packaged: imwallet-server-systemd-${VERSION}.tar.gz (size: $SIZE)"
+          sed -i 's/\r$//' $BASE/deploy.sh $BASE/setup-ec2.sh
+
+          # Create platform-specific packages
+          for PLATFORM in debian rhel windows; do
+            PKG=/tmp/imwallet-server-$PLATFORM
+            mkdir -p $PKG
+            cp -r $BASE/* $PKG/
+            cp -r /tmp/prod-install/node_modules $PKG/node_modules
+
+            # Remove irrelevant Prisma query engines (keep only target platform)
+            case $PLATFORM in
+              debian)
+                rm -f $PKG/node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node
+                rm -f $PKG/node_modules/.prisma/client/query_engine-windows.dll.node
+                ;;
+              rhel)
+                rm -f $PKG/node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node
+                rm -f $PKG/node_modules/.prisma/client/query_engine-windows.dll.node
+                ;;
+              windows)
+                rm -f $PKG/node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node
+                rm -f $PKG/node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node
+                ;;
+            esac
+
+            cd /tmp
+            tar -czf imwallet-server-systemd-${VERSION}-${PLATFORM}.tar.gz imwallet-server-$PLATFORM/
+            SIZE=$(du -sh imwallet-server-systemd-${VERSION}-${PLATFORM}.tar.gz | cut -f1)
+            cp imwallet-server-systemd-${VERSION}-${PLATFORM}.tar.gz $GITHUB_WORKSPACE/
+            echo "✅ Packaged: imwallet-server-systemd-${VERSION}-${PLATFORM}.tar.gz (size: $SIZE)"
+          done
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
