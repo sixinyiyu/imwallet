@@ -17,6 +17,7 @@ import EmptyState from "../components/EmptyState";
 import { transactionService, type TransactionFilter } from "../services/transactionService";
 import type { Transaction } from "../types";
 import { SearchIcon, USDTIcon } from "../components/icons";
+import TronIcon from "../components/icons/TronIcon";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type RecordsRoute = RouteProp<RootStackParamList, "Records">;
@@ -45,6 +46,11 @@ function formatTime(iso: string): string {
 
 function shortenAddress(addr: string): string {
   return `${addr.slice(0, 8)}...${addr.slice(-6)}`;
+}
+
+function renderTokenIcon(symbol: string, size: number) {
+  if (symbol === "TRX") return <TronIcon size={size} />;
+  return <USDTIcon size={size} />;
 }
 
 export default function RecordsScreen() {
@@ -290,13 +296,16 @@ export function TransactionCard({
           <Text style={card.label}>{label}</Text>
         </View>
         <Text style={[card.amount, { color: amountColor }]}>
-          {prefix}{transaction.amount} USDT
+          {prefix}{transaction.amount} {transaction.tokenSymbol}
         </Text>
       </View>
 
-      {/* 第二行：对方信息 */}
+      {/* 第二行：方向箭头 + 代币icon + 对方信息 */}
       <View style={card.middleRow}>
         <Text style={card.directionSymbol}>{isReceive ? "←" : "→"}</Text>
+        <View style={card.tokenIconWrap}>
+          {renderTokenIcon(transaction.tokenSymbol, 14)}
+        </View>
         <Text style={card.counterpartyAddr} numberOfLines={1}>
           {shortenAddress(counterpartyWallet.address)}
         </Text>
@@ -307,7 +316,7 @@ export function TransactionCard({
       <View style={card.bottomRow}>
         <Text style={card.time}>{formatTime(transaction.createdAt)}</Text>
         {feeNum > 0 && (
-          <Text style={card.fee}>手续费 {transaction.fee} USDT</Text>
+          <Text style={card.fee}>手续费 {transaction.fee} {transaction.tokenSymbol}</Text>
         )}
       </View>
     </TouchableOpacity>
@@ -385,6 +394,7 @@ const card = StyleSheet.create({
   // 第二行
   middleRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   directionSymbol: { fontSize: 13, color: "#9CA3AF", marginRight: 4 },
+  tokenIconWrap: { marginRight: 6, alignItems: "center", justifyContent: "center" },
   counterpartyAddr: { fontSize: 12, color: "#6B7280", fontFamily: "monospace", marginRight: 8 },
   counterpartyName: { fontSize: 13, color: "#374151", fontWeight: "500" },
   // 第三行
