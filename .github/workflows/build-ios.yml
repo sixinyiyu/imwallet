@@ -55,24 +55,55 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Download IPA from EAS
+        working-directory: apps/mobile
         run: |
           mkdir -p dist
-          BUILD_INFO=$(eas build:list --platform ios --limit 5 --json)
-          BUILD_URL=$(echo "$BUILD_INFO" | node -e "
-            const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-            const build = data.find(b => b.buildProfile === 'production' && b.status === 'finished' && b.platform === 'ios');
-            const url = build?.artifacts?.buildUrl || '';
-            console.log(url);
-          ")
-          if [ -n "$BUILD_URL" ]; then
-            VERSION="${GITHUB_REF_NAME#ios-v}"
-            curl -L -o "dist/imwallet-${VERSION}.ipa" "$BUILD_URL"
-            echo "✅ IPA downloaded: imwallet-${VERSION}.ipa"
-          else
-            echo "⚠️ Could not find IPA download URL"
+          VERSION="${GITHUB_REF_NAME#ios-v}"
+
+          # Retry logic: EAS API may have delay after build completes
+          MAX_RETRIES=5
+          BUILD_URL=""
+
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "🔄 Attempt $i/$MAX_RETRIES: querying EAS build list..."
+            BUILD_INFO=$(eas build:list --platform ios --limit 20 --json 2>/dev/null)
+
+            # Debug: print raw output
+            echo "📋 Raw build list (first 2000 chars):"
+            echo "$BUILD_INFO" | head -c 2000
+            echo ""
+
+            BUILD_URL=$(echo "$BUILD_INFO" | node -e "
+              const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+              // Find the most recent finished iOS build
+              const build = data.find(b =>
+                (b.buildProfile === 'production') &&
+                (b.status === 'finished' || b.status === 'FINISHED') &&
+                (b.platform === 'ios' || b.platform === 'IOS' || b.platform === 'iOS')
+              );
+              const url = build?.artifacts?.buildUrl || '';
+              console.log(url);
+            " 2>/dev/null)
+
+            if [ -n "$BUILD_URL" ]; then
+              echo "✅ Found IPA download URL: $BUILD_URL"
+              break
+            fi
+
+            echo "⚠️ No finished build found yet, retrying in 30s..."
+            sleep 30
+          done
+
+          if [ -z "$BUILD_URL" ]; then
+            echo "❌ Could not find IPA download URL after $MAX_RETRIES attempts"
+            echo "📋 Full build list for debugging:"
+            eas build:list --platform ios --limit 20 --json
             exit 1
           fi
-        working-directory: apps/mobile
+
+          curl -L -o "dist/imwallet-${VERSION}.ipa" "$BUILD_URL"
+          echo "✅ IPA downloaded: imwallet-${VERSION}.ipa"
+          ls -la dist/
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
