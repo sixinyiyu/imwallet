@@ -81,6 +81,38 @@ export default function WalletScreen() {
 
   const closeWalletMenu = () => setWalletMenuOpen(false);
 
+  // 无钱包时显示空状态引导
+  if (wallets.length === 0 && !loading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.walletSelectorText}>钱包</Text>
+        </View>
+
+        <View style={styles.emptyContent}>
+          <Text style={styles.emptyIcon}>👛</Text>
+          <Text style={styles.emptyTitle}>还没有钱包</Text>
+          <Text style={styles.emptyDesc}>创建或导入一个钱包，开始使用</Text>
+          <TouchableOpacity
+            style={styles.emptyCreateButton}
+            onPress={() => navigation.navigate("WalletCreate")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.emptyCreateButtonText}>创建钱包</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.emptyImportButton}
+            onPress={() => navigation.navigate("WalletImport")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.emptyImportButtonText}>导入钱包</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -243,5 +275,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginTop: 20,
     marginBottom: 8,
+  },
+  // ─── 空状态样式 ───
+  emptyContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 8,
+  },
+  emptyDesc: {
+    fontSize: 14,
+    color: "#9CA3AF",
+    marginBottom: 32,
+  },
+  emptyCreateButton: {
+    backgroundColor: "#287220",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  emptyCreateButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  emptyImportButton: {
+    backgroundColor: "#E8F9B0",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    alignItems: "center",
+  },
+  emptyImportButtonText: {
+    color: "#287220",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -11,7 +11,6 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useWalletStore } from "../stores/walletStore";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -20,14 +19,8 @@ const bgImage = require("../../assets/app_bg.png");
 export default function StartScreen() {
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
-  const { loadLocalState } = useWalletStore();
 
-  useEffect(() => {
-    loadLocalState();
-  }, []);
-
-  // 注意：不再监听 hasWallets 变化来强制 reset 到 Main
-  // RootStack 的 initialRouteName 已经根据 hasWallets 决定初始页面
+  // loadLocalState 已在 RootStack 中调用，此处不再重复
   // 创建钱包流程中的导航由 WalletCreateScreen 自行控制
 
   return (

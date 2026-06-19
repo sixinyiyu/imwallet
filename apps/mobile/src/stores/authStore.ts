@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import * as SecureStore from "../utils/secureStorage";
-import { getDevicePublicKey, isDeviceRegistered, clearDeviceKeys } from "../services/api";
+import { getDevicePublicKey, clearDeviceKeys } from "../services/api";
 
 const DEVICE_READY_KEY = "imwallet_device_ready";
 
@@ -9,8 +9,7 @@ interface AuthState {
   isReady: boolean;
   /** 设备公钥 hex（64字符） */
   deviceId: string | null;
-  loading: boolean;
-  /** 初始化设备认证（App启动时调用） */
+  /** 初始化设备认证（从 walletStore.loadLocalState 调用，设备已在启动时初始化） */
   initDevice: () => Promise<void>;
   /** 登出：清除设备密钥 */
   logout: () => Promise<void>;
@@ -19,25 +18,18 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   isReady: false,
   deviceId: null,
-  loading: true,
 
+  /** 初始化设备认证 — 设备密钥和注册已在 walletStore.loadLocalState 中完成 */
   initDevice: async () => {
     try {
       const publicKey = await getDevicePublicKey();
-      const registered = await isDeviceRegistered();
-
-      if (publicKey && registered) {
-        set({ isReady: true, deviceId: publicKey, loading: false });
-      } else if (publicKey) {
-        // 有密钥但未注册，api.ts 拦截器会自动注册
-        set({ isReady: true, deviceId: publicKey, loading: false });
+      if (publicKey) {
+        set({ isReady: true, deviceId: publicKey });
       } else {
-        // 无密钥，api.ts 拦截器会在首次请求时自动生成
-        // 触发一次请求来初始化
-        set({ isReady: false, deviceId: null, loading: false });
+        set({ isReady: false, deviceId: null });
       }
     } catch {
-      set({ isReady: false, deviceId: null, loading: false });
+      set({ isReady: false, deviceId: null });
     }
   },
 

@@ -102,7 +102,7 @@ async function signMessage(message: string, privateKeyHex: string): Promise<stri
 
 // ===== 设备管理 =====
 
-async function ensureDeviceKeys(): Promise<{ publicKeyHex: string; privateKeyHex: string } | null> {
+export async function ensureDeviceKeys(): Promise<{ publicKeyHex: string; privateKeyHex: string } | null> {
   let publicKeyHex = await SecureStore.getItemAsync(DEVICE_PUBLIC_KEY);
   let privateKeyHex = await SecureStore.getItemAsync(DEVICE_PRIV_JWK);
 
@@ -122,7 +122,7 @@ async function ensureDeviceKeys(): Promise<{ publicKeyHex: string; privateKeyHex
   }
 }
 
-async function ensureDeviceRegistered(publicKeyHex: string): Promise<void> {
+export async function ensureDeviceRegistered(publicKeyHex: string): Promise<void> {
   const registered = await SecureStore.getItemAsync(DEVICE_REGISTERED);
   if (registered === "true") return;
 
@@ -150,10 +150,11 @@ async function ensureDeviceRegistered(publicKeyHex: string): Promise<void> {
 // ===== 拦截器 =====
 
 api.interceptors.request.use(async (config) => {
-  const keys = await ensureDeviceKeys();
-  if (!keys) return config;
-
-  await ensureDeviceRegistered(keys.publicKeyHex);
+  // 设备密钥和注册已在 walletStore.loadLocalState 中显式初始化
+  // 拦截器只负责签名，不再隐式初始化设备
+  const publicKeyHex = await SecureStore.getItemAsync(DEVICE_PUBLIC_KEY);
+  const privateKeyHex = await SecureStore.getItemAsync(DEVICE_PRIV_JWK);
+  if (!publicKeyHex || !privateKeyHex) return config;
 
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const nonce = generateNonce();
@@ -162,9 +163,9 @@ api.interceptors.request.use(async (config) => {
   const bodyHash = await computeBodyHash(config.data);
 
   const message = buildSignMessage(timestamp, method, path, bodyHash);
-  const signature = await signMessage(message, keys.privateKeyHex);
+  const signature = await signMessage(message, privateKeyHex);
 
-  config.headers["x-device-id"] = keys.publicKeyHex;
+  config.headers["x-device-id"] = publicKeyHex;
   config.headers["x-signature"] = signature;
   config.headers["x-timestamp"] = timestamp;
   config.headers["x-nonce"] = nonce;

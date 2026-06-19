@@ -1,6 +1,5 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { CommonActions, useNavigation } from "@react-navigation/native";
 import { MainTabs } from "./MainTabs";
 import StartScreen from "../screens/StartScreen";
 import WalletCreateScreen from "../screens/WalletCreateScreen";
@@ -36,29 +35,11 @@ const CENTERED_HEADER = {
 };
 
 export function RootStack() {
-  const { hasWallets, hasFetched, loadLocalState } = useWalletStore();
-  const navigation = useNavigation();
-  const prevHasWallets = useRef(hasWallets);
+  const { hasFetched, loadLocalState } = useWalletStore();
 
   useEffect(() => {
     loadLocalState();
   }, []);
-
-  // Only reset navigation when hasWallets changes from true → false
-  // (e.g. server returns empty list, device not registered)
-  // Do NOT reset when false → true (wallet creation handles its own navigation)
-  useEffect(() => {
-    if (prevHasWallets.current === true && hasWallets === false) {
-      try {
-        navigation.dispatch(
-          CommonActions.reset({ index: 0, routes: [{ name: "Start" }] })
-        );
-      } catch {
-        // Navigation may not be ready
-      }
-    }
-    prevHasWallets.current = hasWallets;
-  }, [hasWallets]);
 
   // Wait for local state to load before rendering navigator
   if (!hasFetched) {
@@ -68,7 +49,7 @@ export function RootStack() {
   return (
     <Stack.Navigator
       screenOptions={{ headerShown: false }}
-      initialRouteName={hasWallets ? "Main" : "Start"}
+      initialRouteName="Main"
     >
       {/* Start screen - always available */}
       <Stack.Screen name="Start" component={StartScreen} />

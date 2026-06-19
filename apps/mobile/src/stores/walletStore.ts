@@ -3,6 +3,8 @@ import * as SecureStore from "../utils/secureStorage";
 import { walletService } from "../services/walletService";
 import { accountService } from "../services/accountService";
 import { generateMnemonic, cleanMnemonic } from "../utils/mnemonic";
+import { ensureDeviceKeys, ensureDeviceRegistered } from "../services/api";
+import { useAuthStore } from "./authStore";
 import type { Wallet, Account, TokenBalance } from "../types";
 
 const MNEMONIC_KEY_PREFIX = "aquad_mnemonic_";
@@ -59,9 +61,18 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   hasFetched: false,
   accountCount: 0,
 
-  /** Load local state from SecureStore */
+  /** Load local state from SecureStore; initialize device identity first */
   loadLocalState: async () => {
     try {
+      // 1. Initialize device identity (generate keys + register)
+      const keys = await ensureDeviceKeys();
+      if (keys) {
+        await ensureDeviceRegistered(keys.publicKeyHex);
+        // 显式初始化 authStore，设置 isReady 和 deviceId
+        await useAuthStore.getState().initDevice();
+      }
+
+      // 2. Read wallet state
       const isBackedUpStr = await SecureStore.getItemAsync(IS_BACKED_UP_KEY);
       const hasWalletsStr = await SecureStore.getItemAsync(HAS_WALLETS_KEY);
 
