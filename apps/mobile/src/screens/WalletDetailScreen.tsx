@@ -231,7 +231,7 @@ export default function WalletDetailScreen() {
           {/* 名称 */}
           <View style={styles.infoRow}>
             <View style={styles.infoLeft}>
-              <WalletIcon size={18} color="#3B82F6" />
+              <WalletIcon size={18} color="#287220" />
               <Text style={styles.infoLabel}>名称</Text>
             </View>
             <View style={styles.infoRightWithIcon}>

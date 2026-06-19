@@ -190,45 +190,52 @@ export default function AddressBookScreen() {
         onRefresh={loadContacts}
         renderItem={({ item }) => (
           <View style={styles.contactItem}>
-            {/* 第一行：名称 + 网络icon + 网络类型 */}
-            <View style={styles.row1}>
-              <Text style={styles.contactName} numberOfLines={1} ellipsizeMode="tail">
-                {item.name}
-              </Text>
-              <View style={styles.networkBadge}>
-                <NetworkIcon network={item.network} size={16} />
-                <Text style={styles.networkBadgeText}>{item.network || "未知"}</Text>
+            {/* 左侧：网络icon */}
+            <View style={styles.contactIconWrap}>
+              <NetworkIcon network={item.network} size={28} />
+            </View>
+
+            {/* 右侧：名称 + 地址 + 操作链接 */}
+            <View style={styles.contactInfo}>
+              {/* 第一行：名称 + 网络类型badge */}
+              <View style={styles.contactNameRow}>
+                <Text style={styles.contactName} numberOfLines={1} ellipsizeMode="tail">
+                  {item.name}
+                </Text>
+                <View style={styles.networkBadge}>
+                  <Text style={styles.networkBadgeText}>{item.network || "未知"}</Text>
+                </View>
               </View>
-            </View>
 
-            {/* 第二行：地址 + 复制icon */}
-            <View style={styles.row2}>
-              <Text style={styles.contactAddress} numberOfLines={1} ellipsizeMode="middle">
-                {item.address}
-              </Text>
-              <TouchableOpacity
-                style={styles.copyBtn}
-                onPress={() => handleCopyAddress(item.address)}
-                activeOpacity={0.6}
-              >
-                <CopyIcon size={16} color="#9CA3AF" />
-              </TouchableOpacity>
-            </View>
+              {/* 第二行：地址 + 复制icon */}
+              <View style={styles.contactAddressRow}>
+                <Text style={styles.contactAddress} numberOfLines={1} ellipsizeMode="middle">
+                  {item.address}
+                </Text>
+                <TouchableOpacity
+                  style={styles.copyBtn}
+                  onPress={() => handleCopyAddress(item.address)}
+                  activeOpacity={0.6}
+                >
+                  <CopyIcon size={14} color="#9CA3AF" />
+                </TouchableOpacity>
+              </View>
 
-            {/* 第三行：文字链接（居右对齐） */}
-            <View style={styles.row3}>
-              <TouchableOpacity
-                onPress={() => openEditForm(item)}
-                activeOpacity={0.6}
-              >
-                <Text style={styles.linkText}>编辑</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => handleDelete(item)}
-                activeOpacity={0.6}
-              >
-                <Text style={styles.linkTextDanger}>删除</Text>
-              </TouchableOpacity>
+              {/* 第三行：文字链接（居右对齐） */}
+              <View style={styles.row3}>
+                <TouchableOpacity
+                  onPress={() => openEditForm(item)}
+                  activeOpacity={0.6}
+                >
+                  <Text style={styles.linkText}>编辑</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => handleDelete(item)}
+                  activeOpacity={0.6}
+                >
+                  <Text style={styles.linkTextDanger}>删除</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         )}
@@ -350,30 +357,42 @@ const styles = StyleSheet.create({
   },
   // ─── 卡片布局 ───
   contactItem: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
+    marginBottom: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  // 第一行：名称 + 网络类型
-  row1: {
+  contactIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  contactInfo: {
+    flex: 1,
+  },
+  // 第一行：名称 + 网络类型badge
+  contactNameRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 8,
   },
   contactName: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "500",
     color: "#1F2937",
     flex: 1,
-    marginRight: 8,
   },
   networkBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
     backgroundColor: "#E8F5E9",
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -386,17 +405,17 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   // 第二行：地址 + 复制icon
-  row2: {
+  contactAddressRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 6,
+    marginTop: 2,
   },
   contactAddress: {
     fontSize: 12,
-    color: "#6B7280",
+    color: "#9CA3AF",
     fontFamily: "monospace",
     flex: 1,
-    marginRight: 8,
+    marginRight: 4,
   },
   copyBtn: {
     padding: 4,
