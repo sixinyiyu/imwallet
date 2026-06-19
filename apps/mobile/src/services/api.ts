@@ -2,11 +2,14 @@ import axios from "axios";
 import * as SecureStore from "../utils/secureStorage";
 import Constants from "expo-constants";
 import "react-native-get-random-values";
-import { getPublicKey, sign, hashes } from "@noble/ed25519";
+import * as ed25519 from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
-// Configure sha512 for @noble/ed25519 v3+ (hashes object is extensible, etc is frozen)
-hashes.sha512 = sha512;
+// Configure sha512 for @noble/ed25519
+// v2: etc.sha512Sync for sync methods; v3: hashes.sha512
+// hashes is not in v2's type exports but exists at runtime
+(ed25519.etc as any).sha512Sync = (...m: Uint8Array[]) => sha512(m[0]);
+(ed25519 as any).hashes.sha512 = sha512;
 
 
 
@@ -75,7 +78,7 @@ async function generateKeyPair(): Promise<{
   privateKeyHex: string;
 }> {
   const privateKey = crypto.getRandomValues(new Uint8Array(32));
-  const publicKey = await getPublicKey(privateKey);
+  const publicKey = await ed25519.getPublicKey(privateKey);
   return {
     publicKeyHex: bytesToHex(publicKey),
     privateKeyHex: bytesToHex(privateKey),
@@ -85,7 +88,7 @@ async function generateKeyPair(): Promise<{
 async function signMessage(message: string, privateKeyHex: string): Promise<string> {
   const msgBytes = new TextEncoder().encode(message);
   const privateKey = hexToBytes(privateKeyHex);
-  const signature = await sign(msgBytes, privateKey);
+  const signature = await ed25519.sign(msgBytes, privateKey);
   return bytesToHex(signature);
 }
 
