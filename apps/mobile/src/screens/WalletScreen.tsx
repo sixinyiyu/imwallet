@@ -5,7 +5,6 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   RefreshControl,
   Modal,
   Pressable,
@@ -58,14 +57,6 @@ export default function WalletScreen() {
       await fetchBalance(activeWallet.id);
     }
     setRefreshing(false);
-  };
-
-  const handleCopyAddress = () => {
-    if (activeWallet?.address) {
-      const Clipboard = require("expo-clipboard");
-      Clipboard.setStringAsync(activeWallet.address);
-      Alert.alert("已复制", "钱包地址已复制到剪贴板");
-    }
   };
 
   const handleReceive = (token: TokenBalance) => {
@@ -174,8 +165,6 @@ export default function WalletScreen() {
         {/* Balance Card */}
         <BalanceCard
           totalBalanceUsd={totalBalanceUsd}
-          address={activeWallet?.address ?? ""}
-          onCopy={handleCopyAddress}
         />
 
         {/* Action Buttons */}

@@ -6,17 +6,11 @@ import { EyeIcon, EyeOffIcon } from "../components/icons";
 
 interface Props {
   totalBalanceUsd: string;
-  address: string;
-  onCopy: () => void;
 }
 
-export default function BalanceCard({ totalBalanceUsd, address, onCopy }: Props) {
+export default function BalanceCard({ totalBalanceUsd }: Props) {
   const { currency } = useFiatStore();
   const [balanceVisible, setBalanceVisible] = useState(true);
-
-  const shortAddr = address
-    ? `${address.slice(0, 10)}...${address.slice(-8)}`
-    : "—";
 
   const displayBalance = balanceVisible
     ? `${currency.symbol} ${totalBalanceUsd ? parseFloat(totalBalanceUsd).toFixed(2) : "0.00"}`
@@ -45,15 +39,6 @@ export default function BalanceCard({ totalBalanceUsd, address, onCopy }: Props)
       <Text style={styles.balanceValue} adjustsFontSizeToFit numberOfLines={1}>
         {displayBalance}
       </Text>
-      <View style={styles.addressRow}>
-        <Text style={styles.addressLabel}>钱包地址</Text>
-        <Text style={styles.addressText} adjustsFontSizeToFit numberOfLines={1}>
-          {shortAddr}
-        </Text>
-        <TouchableOpacity onPress={onCopy} style={styles.copyBtn}>
-          <Text style={styles.copyText}>复制</Text>
-        </TouchableOpacity>
-      </View>
     </LinearGradient>
   );
 }
@@ -71,10 +56,5 @@ const styles = StyleSheet.create({
   },
   balanceLabel: { fontSize: 14, color: "rgba(255,255,255,0.7)" },
   eyeBtn: { padding: 4 },
-  balanceValue: { fontSize: 28, fontWeight: "700", color: "#FFFFFF", marginBottom: 16 },
-  addressRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  addressLabel: { fontSize: 13, color: "rgba(255,255,255,0.7)" },
-  addressText: { fontSize: 13, color: "#FFFFFF", fontFamily: "monospace", flex: 1, marginLeft: 8 },
-  copyBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.2)" },
-  copyText: { color: "#FFFFFF", fontSize: 13, fontWeight: "500" },
+  balanceValue: { fontSize: 28, fontWeight: "700", color: "#FFFFFF" },
 });
