@@ -346,9 +346,11 @@ export default function TransferScreen() {
         </View>
         <View style={z.tokenCard}>
           <View style={z.tokenHeader}>
-            <View style={z.tokenBadge}>
-              <Text style={z.tokenBadgeText}>{detectedNetwork ? `${selectedToken?.symbol || "USDT"} · ${detectedNetwork}` : "待识别"}</Text>
-            </View>
+            {detectedNetwork && (
+              <View style={z.tokenBadge}>
+                <Text style={z.tokenBadgeText}>{selectedToken?.symbol || "USDT"} · {detectedNetwork}</Text>
+              </View>
+            )}
             <View style={z.modeSwitch}>
               <TouchableOpacity
                 style={[z.modeBtn, mode === "amount" && z.modeBtnActive]}
