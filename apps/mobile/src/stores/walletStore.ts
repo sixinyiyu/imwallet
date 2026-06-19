@@ -61,7 +61,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   hasFetched: false,
   accountCount: 0,
 
-  /** Load local state from SecureStore; initialize device identity first */
+  /** Load local state: initialize device identity then fetch wallets from server */
   loadLocalState: async () => {
     try {
       // 1. Initialize device identity (generate keys + register)
@@ -72,21 +72,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         await useAuthStore.getState().initDevice();
       }
 
-      // 2. Read wallet state
-      const isBackedUpStr = await SecureStore.getItemAsync(IS_BACKED_UP_KEY);
-      const hasWalletsStr = await SecureStore.getItemAsync(HAS_WALLETS_KEY);
-
-      if (hasWalletsStr === "true") {
-        set({
-          mnemonic: null,
-          isBackedUp: isBackedUpStr === "true",
-          hasWallets: true,
-          hasFetched: true,
-        });
-        await get().fetchWallets();
-      } else {
-        set({ hasFetched: true, hasWallets: false });
-      }
+      // 2. Fetch wallet state from server (sets hasFetched + hasWallets)
+      // 不再依赖本地 SecureStore 标记预判，避免过期标记导致 Navigator 先挂载到 Main
+      await get().fetchWallets();
     } catch {
       set({ hasFetched: true, hasWallets: false });
     }
