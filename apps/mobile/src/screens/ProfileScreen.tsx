@@ -48,9 +48,10 @@ export default function ProfileScreen() {
   const handleLogout = async () => {
     setShowLogoutModal(false);
     try {
-      // 先清除钱包数据（会重置 hasWallets=false，触发导航跳转到 Start）
       await walletStoreLogout();
       await logout();
+      // 登出后跳转到 Start 导航页
+      navigation.replace("Start" as any);
     } catch {
       // ignore
     }

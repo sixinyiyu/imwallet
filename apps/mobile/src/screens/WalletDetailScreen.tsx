@@ -170,7 +170,13 @@ export default function WalletDetailScreen() {
       if (verified) {
         await deleteWallet(wallet.id);
         setShowRemoveDrawer(false);
-        navigation.goBack();
+        // 删除最后一个钱包后跳转到 Start 导航页
+        const remaining = useWalletStore.getState().wallets;
+        if (remaining.length === 0) {
+          navigation.replace("Start" as any);
+        } else {
+          navigation.goBack();
+        }
       } else {
         setShowRemoveDrawer(false);
         setPasswordErrorContext("remove");
