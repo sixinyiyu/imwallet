@@ -18,10 +18,15 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
   res.json({ tokens });
 }));
 
-// 权限校验辅助函数：验证设备是否关联该钱包
+// 权限校验辅助函数：验证设备是否关联该钱包（手动查找设备，不使用 relation filter）
 async function checkWalletPermission(walletId: string, deviceId: string): Promise<boolean> {
+  const device = await prisma.device.findUnique({
+    where: { device_id: deviceId },
+  });
+  if (!device) return false;
+
   const subscription = await prisma.walletSubscription.findFirst({
-    where: { wallet_id: walletId, device: { device_id: deviceId } },
+    where: { wallet_id: walletId, device_id: device.id },
   });
   return !!subscription;
 }

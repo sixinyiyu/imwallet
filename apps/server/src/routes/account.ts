@@ -21,6 +21,24 @@ const createAccountSchema = z.object({
 });
 
 /**
+ * Helper: 验证设备是否关联该钱包（手动查找设备，不使用 relation filter）
+ */
+async function checkWalletOwnership(walletId: string, deviceId: string): Promise<boolean> {
+  const device = await prisma.device.findUnique({
+    where: { device_id: deviceId },
+  });
+  if (!device) return false;
+
+  const subscription = await prisma.walletSubscription.findFirst({
+    where: {
+      wallet_id: walletId,
+      device_id: device.id,
+    },
+  });
+  return !!subscription;
+}
+
+/**
  * POST /wallets/:walletId/accounts — Create account under a wallet for a network
  */
 router.post(
@@ -30,13 +48,8 @@ router.post(
     const walletId = req.params.walletId as string;
 
     // Verify wallet belongs to device
-    const subscription = await prisma.walletSubscription.findFirst({
-      where: {
-        wallet_id: walletId,
-        device: { device_id: req.device!.deviceId },
-      },
-    });
-    if (!subscription) {
+    const hasPermission = await checkWalletOwnership(walletId, req.device!.deviceId);
+    if (!hasPermission) {
       res.status(403).json({ error: "You do not have permission to access this wallet" });
       return;
     }
@@ -60,13 +73,8 @@ router.get(
     const walletId = req.params.walletId as string;
 
     // Verify wallet belongs to device
-    const subscription = await prisma.walletSubscription.findFirst({
-      where: {
-        wallet_id: walletId,
-        device: { device_id: req.device!.deviceId },
-      },
-    });
-    if (!subscription) {
+    const hasPermission = await checkWalletOwnership(walletId, req.device!.deviceId);
+    if (!hasPermission) {
       res.status(403).json({ error: "You do not have permission to access this wallet" });
       return;
     }
@@ -87,13 +95,8 @@ router.get(
     const account = await accountService.getAccountDetail(accountId);
 
     // Verify wallet belongs to device
-    const subscription = await prisma.walletSubscription.findFirst({
-      where: {
-        wallet_id: account.walletId,
-        device: { device_id: req.device!.deviceId },
-      },
-    });
-    if (!subscription) {
+    const hasPermission = await checkWalletOwnership(account.walletId, req.device!.deviceId);
+    if (!hasPermission) {
       res.status(403).json({ error: "You do not have permission to access this account" });
       return;
     }
@@ -113,13 +116,8 @@ router.delete(
     const account = await accountService.getAccountDetail(accountId);
 
     // Verify wallet belongs to device
-    const subscription = await prisma.walletSubscription.findFirst({
-      where: {
-        wallet_id: account.walletId,
-        device: { device_id: req.device!.deviceId },
-      },
-    });
-    if (!subscription) {
+    const hasPermission = await checkWalletOwnership(account.walletId, req.device!.deviceId);
+    if (!hasPermission) {
       res.status(403).json({ error: "You do not have permission to delete this account" });
       return;
     }

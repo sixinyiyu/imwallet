@@ -71,10 +71,6 @@ model Device {
   created_at   DateTime  @default(now()) @map("created_at")
   updated_at   DateTime  @updatedAt @map("updated_at")
 
-  walletSubscriptions WalletSubscription[]
-  contacts           Contact[]
-  notificationReadStatuses NotificationRead[]
-
   @@map("devices")
 }
 
@@ -100,9 +96,6 @@ model Token {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  walletTokens    WalletToken[]
-  transactions    Transaction[]
-
   @@map("tokens")
 }
 
@@ -125,12 +118,6 @@ model Wallet {
   memo         String        @default("") @db.VarChar(256)
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
-  accounts     Account[]
-  sentTxs      Transaction[] @relation("FromWallet")
-  receivedTxs  Transaction[] @relation("ToWallet")
-  tokenBalances WalletToken[]
-  subscriptions WalletSubscription[]
-  notifications  Notification[]
 
   @@map("wallets")
 }
@@ -144,9 +131,6 @@ model WalletToken {
   balance   Decimal  @default(0) @db.Decimal(30, 8)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-
-  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  token  Token  @relation(fields: [tokenId], references: [id], onDelete: Cascade)
 
   @@unique([walletId, tokenId])
   @@map("wallet_tokens")
@@ -165,8 +149,6 @@ model Account {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
-
   @@unique([walletId, network])
   @@map("accounts")
 }
@@ -183,9 +165,6 @@ model WalletSubscription {
   /// 地址标识（预留）
   address_id String?  @db.VarChar(36)
   created_at DateTime @default(now()) @map("created_at")
-
-  wallet Wallet @relation(fields: [wallet_id], references: [id], onDelete: Cascade)
-  device Device @relation(fields: [device_id], references: [id], onDelete: Cascade)
 
   @@unique([wallet_id, device_id, chain, address_id])
   @@map("wallet_subscriptions")
@@ -216,8 +195,10 @@ model Transaction {
   txHash       String   @unique @map("tx_hash") @db.VarChar(66)
   /// 付款钱包 ID
   fromWalletId String   @map("from_wallet_id") @db.VarChar(36)
-  /// 收款钱包 ID
-  toWalletId   String   @map("to_wallet_id") @db.VarChar(36)
+  /// 收款钱包 ID（系统内用户时关联，外部地址时为空字符串）
+  toWalletId   String   @default("") @map("to_wallet_id") @db.VarChar(36)
+  /// 收款地址（链上地址，始终记录）
+  toAddress    String   @map("to_address") @db.VarChar(128)
   /// 代币 ID
   tokenId      String   @map("token_id") @db.VarChar(36)
   /// 交易金额
@@ -230,10 +211,6 @@ model Transaction {
   memo         String   @default("") @db.VarChar(256)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
-
-  fromWallet Wallet @relation("FromWallet", fields: [fromWalletId], references: [id])
-  toWallet   Wallet @relation("ToWallet", fields: [toWalletId], references: [id])
-  token      Token  @relation(fields: [tokenId], references: [id])
 
   @@map("transactions")
 }
@@ -254,8 +231,6 @@ model Contact {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  device Device @relation(fields: [device_id], references: [id], onDelete: Cascade)
-
   @@map("contacts")
 }
 
@@ -272,9 +247,6 @@ model Notification {
   type      NotificationType @map("type")
   createdAt DateTime         @default(now()) @map("created_at")
 
-  wallet Wallet @relation(fields: [wallet_id], references: [id], onDelete: Cascade)
-  readStatuses NotificationRead[]
-
   @@map("notifications")
 }
 
@@ -288,9 +260,6 @@ model NotificationRead {
   /// 阅读时间
   readAt          DateTime? @map("read_at")
   created_at      DateTime @default(now()) @map("created_at")
-
-  notification Notification @relation(fields: [notification_id], references: [id], onDelete: Cascade)
-  device       Device      @relation(fields: [device_id], references: [id], onDelete: Cascade)
 
   @@unique([notification_id, device_id])
   @@map("notification_reads")

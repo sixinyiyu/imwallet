@@ -73,25 +73,33 @@ export async function transfer(
   }
 
   // 收款地址查找：先查 wallets 表（EVM 地址 0x...），再查 accounts 表（TRX 地址 T... 等）
-  let toWallet = await prisma.wallet.findUnique({
+  // 如果收款方在系统内，关联其 wallet 以记录交易；不在系统内则使用 toAddress 作为外部地址
+  let toWalletId: string = "";
+  let toWalletAddress: string = input.toAddress;
+  let toWalletAlias: string = input.toAddress.slice(0, 10);
+
+  const toWalletByAddress = await prisma.wallet.findUnique({
     where: { address: input.toAddress },
   });
 
-  // 如果 wallets 表没找到，尝试通过 accounts 表查找对应的 wallet
-  if (!toWallet) {
+  if (toWalletByAddress) {
+    toWalletId = toWalletByAddress.id;
+    toWalletAddress = toWalletByAddress.address;
+    toWalletAlias = toWalletByAddress.alias || toWalletAddress.slice(0, 10);
+  } else {
     const account = await prisma.account.findFirst({
       where: { address: input.toAddress },
     });
     if (account) {
-      toWallet = await prisma.wallet.findUnique({
+      const accountWallet = await prisma.wallet.findUnique({
         where: { id: account.walletId },
       });
+      if (accountWallet) {
+        toWalletId = accountWallet.id;
+        toWalletAddress = accountWallet.address;
+        toWalletAlias = accountWallet.alias || accountWallet.address.slice(0, 10);
+      }
     }
-  }
-
-  if (!toWallet) {
-    logger.warn("TRANSFER", `转账失败: 收款地址未注册 - toAddress=${input.toAddress}`);
-    throw createError(404, "收款地址未注册，请确认对方已创建钱包");
   }
 
   const fromWallet = await prisma.wallet.findUnique({
@@ -103,7 +111,7 @@ export async function transfer(
     throw createError(404, "Sender wallet not found");
   }
 
-  if (fromWallet.id === toWallet.id) {
+  if (fromWallet.id === toWalletId) {
     logger.warn("TRANSFER", `转账失败: 不能向自己转账 - walletId=${fromWallet.id}`);
     throw createError(400, "Cannot transfer to the same wallet");
   }
@@ -144,23 +152,27 @@ export async function transfer(
     throw createError(400, "Insufficient balance");
   }
 
-  // Ensure recipient has a WalletToken entry for this token
-  const recipientWalletToken = await prisma.walletToken.upsert({
-    where: {
-      walletId_tokenId: { walletId: toWallet.id, tokenId: input.tokenId },
-    },
-    update: {},
-    create: {
-      walletId: toWallet.id,
-      tokenId: input.tokenId,
-      balance: 0,
-    },
-  });
+  // Ensure recipient has a WalletToken entry for this token (only for in-system recipients)
+  let recipientWalletTokenId: string | null = null;
+  if (toWalletId) {
+    const recipientWalletToken = await prisma.walletToken.upsert({
+      where: {
+        walletId_tokenId: { walletId: toWalletId, tokenId: input.tokenId },
+      },
+      update: {},
+      create: {
+        walletId: toWalletId,
+        tokenId: input.tokenId,
+        balance: 0,
+      },
+    });
+    recipientWalletTokenId = recipientWalletToken.id;
+  }
 
   const txHash =
     "0x" +
     createHash("sha256")
-      .update(`${input.fromWalletId}-${toWallet.id}-${amount}-${Date.now()}-${uuid()}`)
+      .update(`${input.fromWalletId}-${toWalletId || toWalletAddress}-${amount}-${Date.now()}-${uuid()}`)
       .digest("hex");
 
   const tx = await prisma.$transaction(async (tx: any) => {
@@ -170,37 +182,34 @@ export async function transfer(
       data: { balance: { decrement: senderDeduction } },
     });
 
-    // Update recipient WalletToken balance
-    await tx.walletToken.update({
-      where: { id: recipientWalletToken.id },
-      data: { balance: { increment: recipientReceived } },
-    });
+    // Update recipient WalletToken balance (only for in-system recipients)
+    if (recipientWalletTokenId) {
+      await tx.walletToken.update({
+        where: { id: recipientWalletTokenId },
+        data: { balance: { increment: recipientReceived } },
+      });
+    }
 
     return tx.transaction.create({
       data: {
         txHash,
         fromWalletId: input.fromWalletId,
-        toWalletId: toWallet.id,
+        toWalletId: toWalletId || "",
+        toAddress: toWalletAddress,
         tokenId: input.tokenId,
         amount,
         fee,
         status: "CONFIRMED",
         memo: input.memo || "",
       },
-      include: {
-        fromWallet: { select: { alias: true, address: true } },
-        toWallet: { select: { alias: true, address: true } },
-        token: { select: { symbol: true, name: true } },
-      },
     });
   });
 
-  logger.info("TRANSFER", `转账成功: txHash=${txHash}, from=${input.fromWalletId}, to=${toWallet.id}, amount=${amount}, fee=${fee}, received=${recipientReceived.toFixed(8)}, feeMode=${FEE_MODE}`);
+  logger.info("TRANSFER", `转账成功: txHash=${txHash}, from=${input.fromWalletId}, to=${toWalletId || toWalletAddress}, amount=${amount}, fee=${fee}, received=${recipientReceived.toFixed(8)}, feeMode=${FEE_MODE}`);
 
   // Create notifications linked to wallets (not devices)
-  // Each wallet gets one notification; devices see it via their subscriptions
-  const toName = tx.toWallet.alias || tx.toWallet.address.slice(0, 10);
-  const fromName = tx.fromWallet.alias || tx.fromWallet.address.slice(0, 10);
+  const toName = toWalletAlias;
+  const fromName = fromWallet.alias || fromWallet.address.slice(0, 10);
   const tokenSymbol = token.symbol;
 
   await prisma.notification.create({
@@ -212,14 +221,17 @@ export async function transfer(
     },
   });
 
-  await prisma.notification.create({
-    data: {
-      wallet_id: tx.toWalletId,
-      title: "收到转账",
-      content: `您收到来自 ${fromName} 的 ${recipientReceived.toFixed(8)} ${tokenSymbol}`,
-      type: "TRANSFER_IN",
-    },
-  });
+  // Only notify in-system recipients
+  if (tx.toWalletId) {
+    await prisma.notification.create({
+      data: {
+        wallet_id: tx.toWalletId,
+        title: "收到转账",
+        content: `您收到来自 ${fromName} 的 ${recipientReceived.toFixed(8)} ${tokenSymbol}`,
+        type: "TRANSFER_IN",
+      },
+    });
+  }
 
   return {
     id: tx.id,
@@ -234,8 +246,8 @@ export async function transfer(
     status: tx.status,
     memo: tx.memo,
     createdAt: tx.createdAt,
-    fromWallet: tx.fromWallet,
-    toWallet: tx.toWallet,
+    fromWallet: { alias: fromWallet.alias, address: fromWallet.address },
+    toWallet: toWalletId ? { alias: toWalletAlias, address: toWalletAddress } : { alias: toWalletAlias, address: toWalletAddress },
     fromContactName: "",
     toContactName: "",
     tokenSymbol: token.symbol,
@@ -316,6 +328,7 @@ export async function getTransactions(
     const walletIds = matchingWallets.map((w: any) => w.id);
     const contactAddresses = matchingContacts.map((c: any) => c.address);
 
+    // Build search conditions without relation filters
     const typeConditions = filter.type === "send" ? [{ fromWalletId: walletId }] : filter.type === "receive" ? [{ toWalletId: walletId }] : [{ fromWalletId: walletId }, { toWalletId: walletId }];
     where.OR = typeConditions.map((cond) => ({
       ...cond,
@@ -324,24 +337,27 @@ export async function getTransactions(
         { toWalletId: { in: walletIds } },
       ],
     }));
-    const extraConditions = contactAddresses.map((addr: any) => {
-      if (filter.type === "send") return { fromWalletId: walletId, toWallet: { address: addr } };
-      if (filter.type === "receive") return { toWalletId: walletId, fromWallet: { address: addr } };
-      return { OR: [{ fromWalletId: walletId, toWallet: { address: addr } }, { toWalletId: walletId, fromWallet: { address: addr } }] };
-    });
-    if (extraConditions.length > 0) {
-      where.OR = [...where.OR, ...extraConditions];
+
+    // For contact address search, use toAddress field instead of relation
+    if (contactAddresses.length > 0) {
+      const addressConditions: any[] = [];
+      if (filter.type === "send") {
+        addressConditions.push({ fromWalletId: walletId, toAddress: { in: contactAddresses } });
+      } else if (filter.type === "receive") {
+        addressConditions.push({ toWalletId: walletId, toAddress: { in: contactAddresses } });
+      } else {
+        addressConditions.push(
+          { fromWalletId: walletId, toAddress: { in: contactAddresses } },
+          { toWalletId: walletId, toAddress: { in: contactAddresses } }
+        );
+      }
+      where.OR = [...where.OR, ...addressConditions];
     }
   }
 
   const [transactions, total] = await Promise.all([
     prisma.transaction.findMany({
       where,
-      include: {
-        fromWallet: { select: { alias: true, address: true } },
-        toWallet: { select: { alias: true, address: true } },
-        token: { select: { symbol: true, name: true } },
-      },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * limit,
       take: limit,
@@ -349,10 +365,32 @@ export async function getTransactions(
     prisma.transaction.count({ where }),
   ]);
 
+  // Manually fetch related wallets and tokens
+  const fromWalletIds = [...new Set(transactions.map((tx: any) => tx.fromWalletId))];
+  const toWalletIds = [...new Set(transactions.filter((tx: any) => tx.toWalletId).map((tx: any) => tx.toWalletId))];
+  const tokenIds = [...new Set(transactions.map((tx: any) => tx.tokenId))];
+
+  const [fromWallets, toWallets, tokens] = await Promise.all([
+    prisma.wallet.findMany({ where: { id: { in: fromWalletIds } }, select: { id: true, alias: true, address: true } }),
+    prisma.wallet.findMany({ where: { id: { in: toWalletIds } }, select: { id: true, alias: true, address: true } }),
+    prisma.token.findMany({ where: { id: { in: tokenIds } }, select: { id: true, symbol: true, name: true } }),
+  ]);
+
+  const fromWalletMap = new Map(fromWallets.map((w: any) => [w.id, w]));
+  const toWalletMap = new Map(toWallets.map((w: any) => [w.id, w]));
+  const tokenMap = new Map(tokens.map((t: any) => [t.id, t]));
+
+  // Collect addresses for contact lookup
   const addresses = new Set<string>();
   for (const tx of transactions) {
-    addresses.add(tx.fromWallet.address);
-    addresses.add(tx.toWallet.address);
+    const fw = fromWalletMap.get(tx.fromWalletId);
+    if (fw) addresses.add(fw.address);
+    const tw = toWalletMap.get(tx.toWalletId);
+    if (tw) addresses.add(tw.address);
+    // Also add toAddress for external recipients
+    if (!tx.toWalletId && tx.toAddress) {
+      addresses.add(tx.toAddress);
+    }
   }
 
   const contacts = await prisma.contact.findMany({
@@ -363,7 +401,7 @@ export async function getTransactions(
   const contactMap = new Map<string, string>(contacts.map((c: any) => [c.address, c.name]));
 
   return {
-    transactions: transactions.map((tx: any) => formatTransaction(tx, contactMap)),
+    transactions: transactions.map((tx: any) => formatTransaction(tx, fromWalletMap, toWalletMap, tokenMap, contactMap)),
     total,
   };
 }
@@ -373,31 +411,44 @@ export async function getTransactionDetail(
 ): Promise<TransactionResult> {
   const tx = await prisma.transaction.findUnique({
     where: { id: txId },
-    include: {
-      fromWallet: { select: { alias: true, address: true } },
-      toWallet: { select: { alias: true, address: true } },
-      token: { select: { symbol: true, name: true } },
-    },
   });
 
   if (!tx) {
     throw createError(404, "Transaction not found");
   }
 
-  const addresses = [tx.fromWallet.address, tx.toWallet.address];
+  // Manually fetch related wallets and token
+  const [fromWallet, toWallet, tokenObj] = await Promise.all([
+    prisma.wallet.findUnique({ where: { id: tx.fromWalletId }, select: { alias: true, address: true } }),
+    tx.toWalletId ? prisma.wallet.findUnique({ where: { id: tx.toWalletId }, select: { alias: true, address: true } }) : Promise.resolve(null),
+    prisma.token.findUnique({ where: { id: tx.tokenId }, select: { symbol: true, name: true } }),
+  ]);
+
+  const fromWalletMap = new Map([[tx.fromWalletId, fromWallet]]);
+  const toWalletMap = new Map(tx.toWalletId && toWallet ? [[tx.toWalletId, toWallet]] : []);
+  const tokenMap = new Map(tokenObj ? [[tx.tokenId, tokenObj]] : []);
+
+  // Collect addresses for contact lookup
+  const addressList: string[] = [];
+  if (fromWallet) addressList.push(fromWallet.address);
+  if (toWallet) addressList.push(toWallet.address);
+  if (!tx.toWalletId && tx.toAddress) addressList.push(tx.toAddress);
 
   const contacts = await prisma.contact.findMany({
-    where: { address: { in: addresses } },
+    where: { address: { in: addressList } },
     select: { address: true, name: true },
   });
 
   const contactMap = new Map<string, string>(contacts.map((c: any) => [c.address, c.name]));
 
-  return formatTransaction(tx, contactMap);
+  return formatTransaction(tx, fromWalletMap, toWalletMap, tokenMap, contactMap);
 }
 
 function formatTransaction(
   tx: any,
+  fromWalletMap: Map<string, any>,
+  toWalletMap: Map<string, any>,
+  tokenMap: Map<string, any>,
   contactMap?: Map<string, string>
 ): TransactionResult {
   const cMap = contactMap || new Map<string, string>();
@@ -411,11 +462,18 @@ function formatTransaction(
     receivedAmount = (amountNum - feeNum).toFixed(8);
   }
 
+  const fw = fromWalletMap.get(tx.fromWalletId);
+  const tw = toWalletMap.get(tx.toWalletId);
+  const tk = tokenMap.get(tx.tokenId);
+
+  const fromWalletInfo = fw ? { alias: fw.alias || "", address: fw.address } : { alias: tx.fromWalletId.slice(0, 10), address: tx.fromWalletId };
+  const toWalletInfo = tw ? { alias: tw.alias || "", address: tw.address } : { alias: (tx.toAddress || "").slice(0, 10), address: tx.toAddress || "" };
+
   return {
     id: tx.id,
     txHash: tx.txHash,
     fromWalletId: tx.fromWalletId,
-    toWalletId: tx.toWalletId,
+    toWalletId: tx.toWalletId || "",
     tokenId: tx.tokenId,
     amount: tx.amount.toString(),
     fee: tx.fee.toString(),
@@ -424,11 +482,11 @@ function formatTransaction(
     status: tx.status,
     memo: tx.memo,
     createdAt: tx.createdAt,
-    fromWallet: tx.fromWallet,
-    toWallet: tx.toWallet,
-    fromContactName: cMap.get(tx.fromWallet.address) || "",
-    toContactName: cMap.get(tx.toWallet.address) || "",
-    tokenSymbol: tx.token?.symbol || "",
-    tokenName: tx.token?.name || "",
+    fromWallet: fromWalletInfo,
+    toWallet: toWalletInfo,
+    fromContactName: cMap.get(fromWalletInfo.address) || "",
+    toContactName: cMap.get(toWalletInfo.address) || "",
+    tokenSymbol: tk?.symbol || "",
+    tokenName: tk?.name || "",
   };
 }

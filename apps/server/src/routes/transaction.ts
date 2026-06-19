@@ -30,11 +30,19 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
-  // 权限校验：验证设备是否关联该钱包
+  // 权限校验：验证设备是否关联该钱包（手动查找设备，不使用 relation filter）
+  const device = await prisma.device.findUnique({
+    where: { device_id: req.device!.deviceId },
+  });
+  if (!device) {
+    res.status(404).json({ error: "Device not found" });
+    return;
+  }
+
   const subscription = await prisma.walletSubscription.findFirst({
     where: {
       wallet_id: walletId,
-      device: { device_id: req.device!.deviceId },
+      device_id: device.id,
     },
   });
   if (!subscription) {
@@ -65,13 +73,21 @@ router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   const txId = req.params.id as string;
   const tx = await transactionService.getTransactionDetail(txId);
 
-  // 权限校验：验证设备是否关联该交易的钱包
+  // 权限校验：验证设备是否关联该交易的钱包（手动查找设备，不使用 relation filter）
+  const device = await prisma.device.findUnique({
+    where: { device_id: req.device!.deviceId },
+  });
+  if (!device) {
+    res.status(404).json({ error: "Device not found" });
+    return;
+  }
+
   const deviceSubs = await prisma.walletSubscription.findMany({
-    where: { device: { device_id: req.device!.deviceId } },
+    where: { device_id: device.id },
     select: { wallet_id: true },
   });
   const myWalletIds = deviceSubs.map((s: any) => s.wallet_id);
-  if (!myWalletIds.includes(tx.fromWalletId) && !myWalletIds.includes(tx.toWalletId)) {
+  if (!myWalletIds.includes(tx.fromWalletId) && !(tx.toWalletId && myWalletIds.includes(tx.toWalletId))) {
     res.status(403).json({ error: "You do not have permission to view this transaction" });
     return;
   }

@@ -66,10 +66,16 @@ async function computeTokenBalances(walletId: string): Promise<{
   tokenBalances: WalletTokenBalance[];
   totalBalanceCny: string;
 }> {
+  // Fetch WalletTokens and Tokens separately (no relation include)
   const walletTokens = await prisma.walletToken.findMany({
     where: { walletId },
-    include: { token: true },
   });
+
+  const tokenIds = walletTokens.map((wt: any) => wt.tokenId);
+  const tokens = await prisma.token.findMany({
+    where: { id: { in: tokenIds } },
+  });
+  const tokenMap = new Map(tokens.map((t: any) => [t.id, t]));
 
   const [usdtFiat, cnyFiat] = await Promise.all([
     prisma.fiatCurrency.findUnique({ where: { code: "USD" } }),
@@ -82,6 +88,7 @@ async function computeTokenBalances(walletId: string): Promise<{
   let totalCny = 0;
 
   const tokenBalances: WalletTokenBalance[] = walletTokens.map((wt: any) => {
+    const tk = tokenMap.get(wt.tokenId);
     const balance = wt.balance.toString();
     const usdValue = (parseFloat(balance) * usdRate).toFixed(2);
     const cnyValue = (parseFloat(balance) * cnyRate).toFixed(2);
@@ -90,14 +97,14 @@ async function computeTokenBalances(walletId: string): Promise<{
     return {
       id: wt.id,
       tokenId: wt.tokenId,
-      symbol: wt.token.symbol,
-      name: wt.token.name,
+      symbol: tk?.symbol || "",
+      name: tk?.name || "",
       balance,
       usdValue,
       cnyValue,
-      decimals: wt.token.decimals,
-      network: wt.token.network,
-      iconUrl: wt.token.iconUrl || undefined,
+      decimals: tk?.decimals || 6,
+      network: tk?.network || "",
+      iconUrl: tk?.iconUrl || undefined,
     };
   });
 
@@ -197,7 +204,7 @@ export async function createOrImportWallet(
     };
   }
 
-  // 地址不存在，创建新钱包
+  // 地址不存在，创建新钱包（不使用 nested write，分步创建）
   const wallet = await prisma.wallet.create({
     data: {
       identifier,
@@ -206,11 +213,14 @@ export async function createOrImportWallet(
       source,
       password: passwordHash,
       passwordHint: passwordHint || null,
-      subscriptions: {
-        create: {
-          device_id: device.id,
-        },
-      },
+    },
+  });
+
+  // 创建钱包-设备订阅关系（不使用 nested create）
+  await prisma.walletSubscription.create({
+    data: {
+      wallet_id: wallet.id,
+      device_id: device.id,
     },
   });
 
@@ -320,24 +330,32 @@ export async function getDeviceWallets(deviceId: string): Promise<WalletSummary[
     throw createError(404, "Device not found", "DEVICE_NOT_FOUND");
   }
 
+  // Fetch subscriptions and wallets separately (no relation include)
   const subscriptions = await prisma.walletSubscription.findMany({
     where: { device_id: device.id },
-    include: { wallet: true },
     orderBy: { created_at: "desc" },
   });
 
+  const walletIds = subscriptions.map((sub: any) => sub.wallet_id);
+  const wallets = await prisma.wallet.findMany({
+    where: { id: { in: walletIds } },
+  });
+  const walletMap = new Map(wallets.map((w: any) => [w.id, w]));
+
   const walletSummaries: WalletSummary[] = [];
   for (const sub of subscriptions) {
-    const { tokenBalances, totalBalanceCny } = await computeTokenBalances(sub.wallet.id);
-    const accountCount = await prisma.account.count({ where: { walletId: sub.wallet.id } });
+    const wallet = walletMap.get(sub.wallet_id);
+    if (!wallet) continue;
+    const { tokenBalances, totalBalanceCny } = await computeTokenBalances(wallet.id);
+    const accountCount = await prisma.account.count({ where: { walletId: wallet.id } });
     walletSummaries.push({
-      id: sub.wallet.id,
-      identifier: sub.wallet.identifier,
-      alias: sub.wallet.alias,
-      address: sub.wallet.address,
-      source: sub.wallet.source as string,
+      id: wallet.id,
+      identifier: wallet.identifier,
+      alias: wallet.alias,
+      address: wallet.address,
+      source: wallet.source as string,
       accountCount,
-      createdAt: sub.wallet.createdAt,
+      createdAt: wallet.createdAt,
       tokenBalances,
       totalBalanceCny,
     });

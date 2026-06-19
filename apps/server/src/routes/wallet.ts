@@ -49,11 +49,19 @@ router.put(
   asyncHandler(async (req: Request, res: Response) => {
     const walletId = req.params.id as string;
 
-    // 验证设备与钱包关联
+    // 验证设备与钱包关联（手动查找设备，不使用 relation filter）
+    const device = await prisma.device.findUnique({
+      where: { device_id: req.device!.deviceId },
+    });
+    if (!device) {
+      res.status(404).json({ error: "Device not found" });
+      return;
+    }
+
     const subscription = await prisma.walletSubscription.findFirst({
       where: {
         wallet_id: walletId,
-        device: { device_id: req.device!.deviceId },
+        device_id: device.id,
       },
     });
     if (!subscription) {
@@ -75,11 +83,19 @@ router.put(
 router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   const walletId = req.params.id as string;
 
-  // Verify device-wallet ownership
+  // Verify device-wallet ownership (手动查找设备，不使用 relation filter)
+  const device = await prisma.device.findUnique({
+    where: { device_id: req.device!.deviceId },
+  });
+  if (!device) {
+    res.status(404).json({ error: "Device not found" });
+    return;
+  }
+
   const subscription = await prisma.walletSubscription.findFirst({
     where: {
       wallet_id: walletId,
-      device: { device_id: req.device!.deviceId },
+      device_id: device.id,
     },
   });
   if (!subscription) {
@@ -106,11 +122,19 @@ router.put("/:id", asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
-  // 验证设备与钱包关联
+  // 验证设备与钱包关联（手动查找设备，不使用 relation filter）
+  const device = await prisma.device.findUnique({
+    where: { device_id: req.device!.deviceId },
+  });
+  if (!device) {
+    res.status(404).json({ error: "Device not found" });
+    return;
+  }
+
   const subscription = await prisma.walletSubscription.findFirst({
     where: {
       wallet_id: walletId,
-      device: { device_id: req.device!.deviceId },
+      device_id: device.id,
     },
   });
   if (!subscription) {
@@ -133,11 +157,19 @@ router.post(
       return;
     }
 
-    // 验证设备与钱包关联
+    // 验证设备与钱包关联（手动查找设备，不使用 relation filter）
+    const device = await prisma.device.findUnique({
+      where: { device_id: req.device!.deviceId },
+    });
+    if (!device) {
+      res.status(404).json({ error: "Device not found" });
+      return;
+    }
+
     const subscription = await prisma.walletSubscription.findFirst({
       where: {
         wallet_id: walletId,
-        device: { device_id: req.device!.deviceId },
+        device_id: device.id,
       },
     });
     if (!subscription) {

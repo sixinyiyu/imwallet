@@ -46,11 +46,16 @@ export async function getTokenBalances(
     throw createError(404, "Wallet not found");
   }
 
-  // Get all WalletToken entries for this wallet, including Token info
+  // Fetch WalletTokens and Tokens separately (no relation include)
   const walletTokens = await prisma.walletToken.findMany({
     where: { walletId },
-    include: { token: true },
   });
+
+  const tokenIds = walletTokens.map((wt: any) => wt.tokenId);
+  const tokens = await prisma.token.findMany({
+    where: { id: { in: tokenIds } },
+  });
+  const tokenMap = new Map(tokens.map((t: any) => [t.id, t]));
 
   // Get fiat rates for USD and CNY
   const [usdtFiat, cnyFiat] = await Promise.all([
@@ -62,6 +67,7 @@ export async function getTokenBalances(
   const cnyRate = cnyFiat ? parseFloat(cnyFiat.rate.toString()) : 7.25;
 
   return walletTokens.map((wt: any) => {
+    const tk = tokenMap.get(wt.tokenId);
     const tokenBalance = wt.balance.toString();
     const usdValue = (parseFloat(tokenBalance) * usdRate).toFixed(2);
     const cnyValue = (parseFloat(tokenBalance) * cnyRate).toFixed(2);
@@ -69,15 +75,15 @@ export async function getTokenBalances(
     return {
       id: wt.id,
       tokenId: wt.tokenId,
-      symbol: wt.token.symbol,
-      name: wt.token.name,
+      symbol: tk?.symbol || "",
+      name: tk?.name || "",
       balance: tokenBalance,
       usdValue,
       cnyValue,
-      decimals: wt.token.decimals,
-      contractAddress: wt.token.contractAddress || undefined,
-      network: wt.token.network,
-      iconUrl: wt.token.iconUrl || undefined,
+      decimals: tk?.decimals || 6,
+      contractAddress: tk?.contractAddress || undefined,
+      network: tk?.network || "",
+      iconUrl: tk?.iconUrl || undefined,
     };
   });
 }
@@ -117,10 +123,9 @@ export async function getWalletBalance(
     throw createError(404, "Wallet not found");
   }
 
-  // Compute total balance in CNY from WalletToken entries
+  // Compute total balance in CNY from WalletToken entries (no relation include)
   const walletTokens = await prisma.walletToken.findMany({
     where: { walletId },
-    include: { token: true },
   });
 
   const [usdtFiat, cnyFiat] = await Promise.all([

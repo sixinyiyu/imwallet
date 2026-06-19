@@ -93,7 +93,7 @@ export interface Transaction {
   id: string;
   txHash: string;
   fromWalletId: string;
-  toWalletId: string;
+  toWalletId: string;  // 默认空字符串，系统内用户时关联钱包ID
   tokenId: string;
   amount: string;
   fee: string;

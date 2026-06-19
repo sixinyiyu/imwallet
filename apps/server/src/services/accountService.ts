@@ -114,6 +114,7 @@ export async function createAccount(
 
 /**
  * Get token balances for a wallet on a specific network
+ * (No relation include - fetch tokens separately)
  */
 async function getAccountTokenBalances(
   walletId: string,
@@ -127,23 +128,32 @@ async function getAccountTokenBalances(
   decimals: number;
   iconUrl?: string;
 }>> {
+  // First find tokens for this network, then filter WalletTokens by those token IDs
+  const networkTokens = await prisma.token.findMany({
+    where: { network },
+  });
+  const networkTokenIds = networkTokens.map((t: any) => t.id);
+  const tokenMap = new Map(networkTokens.map((t: any) => [t.id, t]));
+
   const walletTokens = await prisma.walletToken.findMany({
     where: {
       walletId,
-      token: { network },
+      tokenId: { in: networkTokenIds },
     },
-    include: { token: true },
   });
 
-  return walletTokens.map((wt: any) => ({
-    tokenId: wt.tokenId,
-    symbol: wt.token.symbol,
-    name: wt.token.name,
-    network: wt.token.network,
-    balance: wt.balance.toString(),
-    decimals: wt.token.decimals,
-    iconUrl: wt.token.iconUrl || undefined,
-  }));
+  return walletTokens.map((wt: any) => {
+    const tk = tokenMap.get(wt.tokenId);
+    return {
+      tokenId: wt.tokenId,
+      symbol: tk?.symbol || "",
+      name: tk?.name || "",
+      network: tk?.network || network,
+      balance: wt.balance.toString(),
+      decimals: tk?.decimals || 6,
+      iconUrl: tk?.iconUrl || undefined,
+    };
+  });
 }
 
 /**

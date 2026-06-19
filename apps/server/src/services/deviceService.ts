@@ -275,7 +275,7 @@ export async function unsubscribeWallet(deviceId: string, walletId: string): Pro
   logger.info("DEVICE", `取消订阅钱包成功: wallet_id=${walletId}`);
 }
 
-/** 获取设备订阅的所有钱包 */
+/** 获取设备订阅的所有钱包（不使用 relation include，手动查询关联数据） */
 export async function getDeviceWallets(deviceId: string): Promise<any[]> {
   const device = await prisma.device.findUnique({
     where: { device_id: deviceId },
@@ -284,43 +284,67 @@ export async function getDeviceWallets(deviceId: string): Promise<any[]> {
     throw createError(404, "Device not found", "DEVICE_NOT_FOUND");
   }
 
+  // Fetch subscriptions separately (no relation include)
   const subscriptions = await prisma.walletSubscription.findMany({
     where: { device_id: device.id },
-    include: {
-      wallet: {
-        include: {
-          tokenBalances: {
-            include: { token: true },
-          },
-          accounts: true,
-        },
-      },
-    },
     orderBy: { created_at: "desc" },
   });
 
-  return subscriptions.map((sub: any) => ({
-    subscription_id: sub.id,
-    chain: sub.chain,
-    address_id: sub.address_id,
-    wallet: {
-      id: sub.wallet.id,
-      identifier: sub.wallet.identifier,
-      alias: sub.wallet.alias,
-      address: sub.wallet.address,
-      source: sub.wallet.source,
-      memo: sub.wallet.memo,
-      createdAt: sub.wallet.createdAt,
-      updatedAt: sub.wallet.updatedAt,
-      tokenBalances: sub.wallet.tokenBalances.map((tb: any) => ({
-        id: tb.id,
-        symbol: tb.token.symbol,
-        name: tb.token.name,
-        balance: tb.balance.toString(),
-        decimals: tb.token.decimals,
-        network: tb.token.network,
-      })),
-      accountCount: sub.wallet.accounts?.length || 0,
-    },
-  }));
+  const walletIds = subscriptions.map((sub: any) => sub.wallet_id);
+
+  // Fetch wallets, walletTokens, tokens, and accounts separately
+  const wallets = await prisma.wallet.findMany({ where: { id: { in: walletIds } } });
+  const walletMap = new Map(wallets.map((w: any) => [w.id, w]));
+
+  const walletTokens = await prisma.walletToken.findMany({ where: { walletId: { in: walletIds } } });
+  const tokenIds = [...new Set(walletTokens.map((wt: any) => wt.tokenId))];
+  const tokens = await prisma.token.findMany({ where: { id: { in: tokenIds } } });
+  const tokenMap = new Map(tokens.map((t: any) => [t.id, t]));
+
+  // Group walletTokens by walletId
+  const walletTokensByWallet = new Map<string, any[]>();
+  for (const wt of walletTokens) {
+    const list = walletTokensByWallet.get(wt.walletId) || [];
+    list.push(wt);
+    walletTokensByWallet.set(wt.walletId, list);
+  }
+
+  const accounts = await prisma.account.findMany({ where: { walletId: { in: walletIds } } });
+  const accountsByWallet = new Map<string, number>();
+  for (const acc of accounts) {
+    accountsByWallet.set(acc.walletId, (accountsByWallet.get(acc.walletId) || 0) + 1);
+  }
+
+  return subscriptions.map((sub: any) => {
+    const wallet = walletMap.get(sub.wallet_id);
+    if (!wallet) return null;
+    const wts = walletTokensByWallet.get(wallet.id) || [];
+    return {
+      subscription_id: sub.id,
+      chain: sub.chain,
+      address_id: sub.address_id,
+      wallet: {
+        id: wallet.id,
+        identifier: wallet.identifier,
+        alias: wallet.alias,
+        address: wallet.address,
+        source: wallet.source,
+        memo: wallet.memo,
+        createdAt: wallet.createdAt,
+        updatedAt: wallet.updatedAt,
+        tokenBalances: wts.map((tb: any) => {
+          const tk = tokenMap.get(tb.tokenId);
+          return {
+            id: tb.id,
+            symbol: tk?.symbol || "",
+            name: tk?.name || "",
+            balance: tb.balance.toString(),
+            decimals: tk?.decimals || 6,
+            network: tk?.network || "",
+          };
+        }),
+        accountCount: accountsByWallet.get(wallet.id) || 0,
+      },
+    };
+  }).filter(Boolean);
 }
