@@ -25,23 +25,10 @@ import { configService } from "../services/configService";
 import type { FeeConfig } from "../services/configService";
 import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, CopyIcon } from "../components/icons";
 import type { Contact, TokenBalance } from "../types";
+import { detectNetwork, isValidAddressFormat } from "../utils/address";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Transfer">;
 type RouteType = RouteProp<RootStackParamList, "Transfer">;
-
-/** 根据链上地址格式推断网络类型 */
-function detectNetwork(addr: string): string | null {
-  const a = addr.trim();
-  if (/^T[A-Za-z0-9]{33}$/.test(a)) return "TRON";      // TRON: T + 33位
-  if (/^0x[a-zA-Z0-9]{40}$/.test(a)) return "EVM";       // EVM: 0x + 40位
-  if (/^[13][a-zA-Z0-9]{25,34}$/.test(a)) return "BTC";  // BTC: 1/3 + 25-34位
-  if (/^bc1[a-zA-Z0-9]{39,59}$/.test(a)) return "BTC";   // BTC: bc1 + 39-59位
-  return null;
-}
-
-function isValidAddressFormat(addr: string): boolean {
-  return detectNetwork(addr) !== null;
-}
 
 export default function TransferScreen() {
   const navigation = useNavigation<Nav>();
@@ -76,8 +63,7 @@ export default function TransferScreen() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [addressInContacts, setAddressInContacts] = useState(false);
   const [addingToContacts, setAddingToContacts] = useState(false);
-  const [addressExists, setAddressExists] = useState(false);
-  const [addressChecking, setAddressChecking] = useState(false);
+
   const [result, setResult] = useState<{
     success: boolean;
     txHash?: string;
@@ -115,33 +101,23 @@ export default function TransferScreen() {
 
   const addressFormatValid = useMemo(() => isValidAddressFormat(toAddress), [toAddress]);
 
-  // 当地址格式正确时，调用后端校验地址是否真实存在
+  // 当地址格式正确时，检查是否已在地址本中
   useEffect(() => {
     if (!addressFormatValid || !toAddress.trim()) {
-      setAddressExists(false);
       setAddressInContacts(false);
-      setAddressChecking(false);
       return;
     }
-    setAddressChecking(true);
-    Promise.all([
-      contactService.lookupAddress(toAddress.trim()),
-      contactService.getContacts(),
-    ]).then(([exists, list]) => {
-      setAddressExists(exists);
+    contactService.getContacts().then((list) => {
       setContacts(list);
       const found = list.some((c) => c.address.toLowerCase() === toAddress.trim().toLowerCase());
       setAddressInContacts(found);
     }).catch(() => {
-      setAddressExists(false);
       setAddressInContacts(false);
-    }).finally(() => {
-      setAddressChecking(false);
     });
   }, [addressFormatValid, toAddress]);
 
-  // 地址是否真正有效（格式正确 + 后端确认存在）
-  const addressValid = addressFormatValid && addressExists;
+  // 地址有效 = 格式合法（链上地址格式正确即可转账，无需收款方在系统中存在）
+  const addressValid = addressFormatValid;
   const amountNum = parseFloat(amount);
   const amountValid = !isNaN(amountNum) && amountNum > 0;
 
@@ -178,7 +154,7 @@ export default function TransferScreen() {
       await contactService.createContact({
         name: contactName,
         address: toAddress.trim(),
-        network: "TRON",
+        network: detectedNetwork || undefined,
       });
       setAddressInContacts(true);
       const list = await contactService.getContacts();
@@ -346,15 +322,11 @@ export default function TransferScreen() {
         {/* 地址校验状态行 */}
         {toAddress.trim() && (
           <View style={z.statusRow}>
-            {addressChecking ? (
-              <ActivityIndicator size="small" color="#287220" style={z.statusSpinner} />
-            ) : !addressFormatValid ? (
+            {!addressFormatValid ? (
               <Text style={[z.statusText, { color: "#EF4444" }]}>✗ 无效的地址格式</Text>
-            ) : !addressExists ? (
-              <Text style={[z.statusText, { color: "#EF4444" }]}>✗ 地址不存在</Text>
             ) : (
               <>
-                <Text style={[z.statusText, { color: "#10B981" }]}>✓ 地址验证通过</Text>
+                <Text style={[z.statusText, { color: "#10B981" }]}>✓ 地址格式正确</Text>
                 {!addressInContacts && !addingToContacts && (
                   <TouchableOpacity onPress={handleAddToContacts}>
                     <Text style={z.addToContactLinkText}>＋ 添加到地址本</Text>
@@ -609,7 +581,6 @@ const z = StyleSheet.create({
   },
   inputValid: { borderColor: "#10B981" },
   statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6, marginLeft: 4 },
-  statusSpinner: { marginLeft: 4 },
   statusText: { fontSize: 13 },
   addToContactLinkText: { fontSize: 13, color: "#287220", fontWeight: "500" },
   // Token

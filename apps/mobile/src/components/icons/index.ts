@@ -23,3 +23,5 @@ export { default as EditIcon } from "./EditIcon";
 export { default as CameraIcon } from "./CameraIcon";
 export { default as NoScreenshotIcon } from "./NoScreenshotIcon";
 export { default as WarningIcon } from "./WarningIcon";
+export { default as EthIcon } from "./EthIcon";
+export { default as BtcIcon } from "./BtcIcon";

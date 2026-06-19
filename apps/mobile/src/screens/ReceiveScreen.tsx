@@ -5,15 +5,16 @@ import QRCode from "react-native-qrcode-svg";
 import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import { useWalletStore } from "../stores/walletStore";
-import { CopyIcon, ShareIcon, USDTIcon } from "../components/icons";
-import TronIcon from "../components/icons/TronIcon";
+import { CopyIcon, ShareIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import type { RootStackParamList } from "../types/navigation";
 
 type ReceiveRouteProp = RouteProp<RootStackParamList, "Receive">;
 
-function renderTokenIcon(symbol: string, size: number) {
-  if (symbol === "TRX") return <TronIcon size={size} />;
-  return <USDTIcon size={size} />;
+function renderNetworkIcon(network: string, size: number) {
+  if (network === "Tron") return <TronIcon size={size} />;
+  if (network === "Ethereum") return <EthIcon size={size} />;
+  if (network === "Bitcoin") return <BtcIcon size={size} />;
+  return null;
 }
 
 export default function ReceiveScreen() {
@@ -77,13 +78,15 @@ export default function ReceiveScreen() {
       {/* 代币 icon + 名称 + network */}
       <View style={styles.tokenHeader}>
         <View style={styles.tokenIconWrap}>
-          {renderTokenIcon(currentToken.symbol, 36)}
+          {renderNetworkIcon(network, 36) || <View style={styles.tokenIconPlaceholder} />}
         </View>
         <View style={styles.tokenNameRow}>
           <Text style={styles.tokenName}>{currentToken.symbol}</Text>
-          <View style={styles.networkBadge}>
-            <Text style={styles.networkBadgeText}>{network}</Text>
-          </View>
+          {network && renderNetworkIcon(network, 0) !== null && (
+            <View style={styles.networkBadge}>
+              <Text style={styles.networkBadgeText}>{network}</Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -150,6 +153,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 10,
+  },
+  tokenIconPlaceholder: {
+    width: 36,
+    height: 36,
   },
   tokenNameRow: {
     flexDirection: "row",

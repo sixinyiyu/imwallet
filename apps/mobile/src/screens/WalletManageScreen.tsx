@@ -15,18 +15,18 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { accountService } from "../services/accountService";
-import { WalletIcon, TronIcon, USDTIcon } from "../components/icons";
+import { WalletIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import { ChevronRightIcon } from "../components/icons";
 import type { Account } from "../types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-/** 根据 symbol 获取对应图标组件 */
-function getTokenIcon(network: string): React.FC<{ size?: number; color?: string }> {
-  const lower = network.toUpperCase();
-  if (lower === "TRON") return TronIcon;
-  if (lower === "USDT") return USDTIcon;
-  return TronIcon; // fallback
+/** 根据 network 获取对应图标组件（PascalCase） */
+function getNetworkIcon(network: string): React.FC<{ size?: number; color?: string }> | null {
+  if (network === "Tron") return TronIcon;
+  if (network === "Ethereum") return EthIcon;
+  if (network === "Bitcoin") return BtcIcon;
+  return null;
 }
 
 export default function WalletManageScreen() {
@@ -206,8 +206,8 @@ export default function WalletManageScreen() {
                   {hasAccounts ? (
                     <View style={styles.iconRow}>
                       {walletAccounts.map((acc, i) => {
-                        const IconComp = getTokenIcon(acc.network);
-                        return <IconComp key={acc.id} size={20} />;
+                        const IconComp = getNetworkIcon(acc.network);
+                        return IconComp ? <IconComp key={acc.id} size={20} /> : null;
                       })}
                     </View>
                   ) : (

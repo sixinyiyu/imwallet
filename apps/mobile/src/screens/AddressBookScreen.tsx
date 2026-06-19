@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -11,19 +11,23 @@ import {
   Modal,
 } from "react-native";
 import { contactService } from "../services/contactService";
+import { detectNetwork } from "../utils/address";
+import { TronIcon, EthIcon, BtcIcon, ContactIcon } from "../components/icons";
 import type { Contact } from "../types";
 import EmptyState from "../components/EmptyState";
 
 /** 联系人表单模式：新增 / 编辑 */
 type FormMode = "add" | "edit";
 
-/** 支持的链类型 */
-const NETWORK_OPTIONS = ["TRON", "EVM", "BTC"];
-const NETWORK_LABELS: Record<string, string> = {
-  TRON: "TRON",
-  EVM: "EVM (Ethereum)",
-  BTC: "Bitcoin",
-};
+/** 根据网络类型渲染对应图标 */
+function NetworkIcon({ network, size = 32 }: { network: string; size?: number }) {
+  switch (network) {
+    case "Tron": return <TronIcon size={size} />;
+    case "Ethereum":  return <EthIcon size={size} />;
+    case "Bitcoin":  return <BtcIcon size={size} />;
+    default:     return <ContactIcon size={size} color="#6B7280" />;
+  }
+}
 
 export default function AddressBookScreen() {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -35,9 +39,11 @@ export default function AddressBookScreen() {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [formName, setFormName] = useState("");
   const [formAddress, setFormAddress] = useState("");
-  const [formNetwork, setFormNetwork] = useState("TRON");
   const [formMemo, setFormMemo] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // 根据地址自动推导网络类型
+  const detectedNetwork = useMemo(() => detectNetwork(formAddress), [formAddress]);
 
   useEffect(() => {
     loadContacts();
@@ -60,7 +66,6 @@ export default function AddressBookScreen() {
     setEditingContact(null);
     setFormName("");
     setFormAddress("");
-    setFormNetwork("TRON");
     setFormMemo("");
     setFormVisible(true);
   };
@@ -71,7 +76,6 @@ export default function AddressBookScreen() {
     setEditingContact(contact);
     setFormName(contact.name);
     setFormAddress(contact.address);
-    setFormNetwork(contact.network || "TRON");
     setFormMemo(contact.memo || "");
     setFormVisible(true);
   };
@@ -81,7 +85,6 @@ export default function AddressBookScreen() {
     setFormVisible(false);
     setFormName("");
     setFormAddress("");
-    setFormNetwork("TRON");
     setFormMemo("");
     setEditingContact(null);
   };
@@ -92,13 +95,17 @@ export default function AddressBookScreen() {
       Alert.alert("提示", "请填写名称和地址");
       return;
     }
+    if (!detectedNetwork) {
+      Alert.alert("提示", "无法识别地址格式，请输入有效的链上地址 (T.../0x.../1...)");
+      return;
+    }
     setSubmitting(true);
     try {
       if (formMode === "add") {
         await contactService.createContact({
           name: formName.trim(),
           address: formAddress.trim(),
-          network: formNetwork,
+          network: detectedNetwork,
           memo: formMemo.trim() || undefined,
         });
         Alert.alert("成功", "联系人已添加");
@@ -106,7 +113,7 @@ export default function AddressBookScreen() {
         await contactService.updateContact(editingContact.id, {
           name: formName.trim(),
           address: formAddress.trim(),
-          network: formNetwork,
+          network: detectedNetwork,
           memo: formMemo.trim() || undefined,
         });
         Alert.alert("成功", "联系人已更新");
@@ -163,7 +170,7 @@ export default function AddressBookScreen() {
         renderItem={({ item }) => (
           <View style={styles.contactItem}>
             <View style={styles.contactIconWrap}>
-              <Text style={styles.contactIcon}>👤</Text>
+              <NetworkIcon network={item.network} size={36} />
             </View>
             <View style={styles.contactInfo}>
               <View style={styles.contactNameRow}>
@@ -226,38 +233,31 @@ export default function AddressBookScreen() {
               onChangeText={setFormName}
             />
 
-            <Text style={modalStyles.label}>链类型</Text>
-            <View style={modalStyles.networkRow}>
-              {NETWORK_OPTIONS.map((net) => (
-                <TouchableOpacity
-                  key={net}
-                  style={[
-                    modalStyles.networkOption,
-                    formNetwork === net && modalStyles.networkOptionActive,
-                  ]}
-                  onPress={() => setFormNetwork(net)}
-                >
-                  <Text
-                    style={[
-                      modalStyles.networkOptionText,
-                      formNetwork === net && modalStyles.networkOptionTextActive,
-                    ]}
-                  >
-                    {NETWORK_LABELS[net]}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
             <Text style={modalStyles.label}>链上地址</Text>
             <TextInput
               style={modalStyles.input}
               placeholder="请输入链上地址 (如 T.../0x.../1...)"
               value={formAddress}
               onChangeText={setFormAddress}
-              autoCapitalize="none"
+              autoCapitalize="characters"
               autoCorrect={false}
             />
+
+            {/* 地址格式校验提示 */}
+            {formAddress.trim() && (
+              <View style={modalStyles.detectRow}>
+                {!detectedNetwork ? (
+                  <Text style={modalStyles.detectError}>✗ 无法识别地址格式</Text>
+                ) : (
+                  <View style={modalStyles.detectSuccess}>
+                    <NetworkIcon network={detectedNetwork} size={20} />
+                    <Text style={modalStyles.detectSuccessText}>
+                      ✓ {detectedNetwork} 地址格式正确
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
 
             <Text style={modalStyles.label}>备注 (可选)</Text>
             <TextInput
@@ -325,12 +325,10 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
   },
-  contactIcon: { fontSize: 18 },
   contactInfo: { flex: 1 },
   contactNameRow: {
     flexDirection: "row",
@@ -406,34 +404,26 @@ const modalStyles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     fontSize: 15,
-    marginBottom: 16,
+    marginBottom: 12,
     color: "#1F2937",
   },
-  networkRow: {
-    flexDirection: "row",
-    gap: 8,
+  detectRow: {
     marginBottom: 16,
   },
-  networkOption: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 10,
-    padding: 10,
-    alignItems: "center",
-  },
-  networkOptionActive: {
-    borderColor: "#287220",
-    backgroundColor: "#E8F5E9",
-  },
-  networkOptionText: {
+  detectError: {
     fontSize: 13,
-    color: "#6B7280",
+    color: "#EF4444",
     fontWeight: "500",
   },
-  networkOptionTextActive: {
-    color: "#287220",
-    fontWeight: "600",
+  detectSuccess: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  detectSuccessText: {
+    fontSize: 13,
+    color: "#10B981",
+    fontWeight: "500",
   },
   buttonRow: {
     flexDirection: "row",

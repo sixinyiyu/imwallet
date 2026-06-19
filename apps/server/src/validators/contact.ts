@@ -6,6 +6,6 @@ export const contactSchema = z.object({
     .min(1, "Name is required")
     .max(64, "Name must be at most 64 characters"),
   address: z.string().min(1, "Address is required"),
-  network: z.string().min(1, "Network is required"),
+  network: z.string().optional(),
   memo: z.string().max(256).optional(),
 });

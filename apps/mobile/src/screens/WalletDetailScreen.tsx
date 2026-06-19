@@ -26,14 +26,17 @@ import {
   EyeIcon,
   WarningIcon,
   TronIcon,
+  EthIcon,
+  BtcIcon,
 } from "../components/icons";
 import type { Wallet } from "../types";
 
-/** 根据网络名获取对应图标组件 */
-function getNetworkIcon(network: string): React.FC<{ size?: number; color?: string }> {
-  const upper = network.toUpperCase();
-  if (upper === "TRON") return TronIcon;
-  return TronIcon; // fallback
+/** 根据网络名获取对应图标组件（PascalCase） */
+function getNetworkIcon(network: string): React.FC<{ size?: number; color?: string }> | null {
+  if (network === "Tron") return TronIcon;
+  if (network === "Ethereum") return EthIcon;
+  if (network === "Bitcoin") return BtcIcon;
+  return null;
 }
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "WalletDetail">;
@@ -331,7 +334,7 @@ export default function WalletDetailScreen() {
               <View style={styles.accountIconRow}>
                 {(() => {
                   const IconComp = getNetworkIcon(acc.network);
-                  return <IconComp size={28} />;
+                  return IconComp ? <IconComp size={28} /> : null;
                 })()}
               </View>
               <View style={styles.accountInfo}>

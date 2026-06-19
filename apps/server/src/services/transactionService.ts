@@ -72,13 +72,26 @@ export async function transfer(
     throw createError(404, "Token not found");
   }
 
-  const toWallet = await prisma.wallet.findUnique({
+  // 收款地址查找：先查 wallets 表（EVM 地址 0x...），再查 accounts 表（TRX 地址 T... 等）
+  let toWallet = await prisma.wallet.findUnique({
     where: { address: input.toAddress },
   });
 
+  // 如果 wallets 表没找到，尝试通过 accounts 表查找对应的 wallet
   if (!toWallet) {
-    logger.warn("TRANSFER", `转账失败: 收款钱包不存在 - toAddress=${input.toAddress}`);
-    throw createError(404, "Recipient wallet not found");
+    const account = await prisma.account.findFirst({
+      where: { address: input.toAddress },
+    });
+    if (account) {
+      toWallet = await prisma.wallet.findUnique({
+        where: { id: account.walletId },
+      });
+    }
+  }
+
+  if (!toWallet) {
+    logger.warn("TRANSFER", `转账失败: 收款地址未注册 - toAddress=${input.toAddress}`);
+    throw createError(404, "收款地址未注册，请确认对方已创建钱包");
   }
 
   const fromWallet = await prisma.wallet.findUnique({

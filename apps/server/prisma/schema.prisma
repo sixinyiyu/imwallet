@@ -247,7 +247,7 @@ model Contact {
   name      String   @db.VarChar(64)
   /// 链上地址（Account.address，如 T.../0x.../1...）
   address   String   @db.VarChar(64)
-  /// 链类型（TRON/EVM/BTC 等）
+  /// 链类型（Tron/Ethereum/Bitcoin）
   network   String   @db.VarChar(64)
   /// 备注
   memo      String   @default("") @db.VarChar(256)

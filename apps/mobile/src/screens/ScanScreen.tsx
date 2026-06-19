@@ -9,6 +9,7 @@ import {
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { detectNetwork } from "../utils/address";
 import type { RootStackParamList } from "../types/navigation";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Scan">;
@@ -54,9 +55,10 @@ export default function ScanScreen() {
         }
       }
 
-      // Try parsing as a plain address: 0x... (42-char hex)
-      if (/^0x[a-fA-F0-9]{40}$/.test(data.trim())) {
-        navigation.replace("Transfer", { toAddress: data.trim() });
+      // Try parsing as a plain address (TRON / EVM / BTC)
+      const trimmed = data.trim();
+      if (detectNetwork(trimmed)) {
+        navigation.replace("Transfer", { toAddress: trimmed });
         return;
       }
 

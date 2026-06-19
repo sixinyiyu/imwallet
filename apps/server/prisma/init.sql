@@ -181,7 +181,7 @@ CREATE TABLE IF NOT EXISTS "contacts" (
     "device_id"  INT         NOT NULL,
     "name"       VARCHAR(64) NOT NULL,
     "address"    VARCHAR(64) NOT NULL,
-    "network"    VARCHAR(64) NOT NULL DEFAULT 'TRON',
+    "network"    VARCHAR(64) NOT NULL DEFAULT 'Tron',
     "memo"       VARCHAR(256) NOT NULL DEFAULT '',
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
