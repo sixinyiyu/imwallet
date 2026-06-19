@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
   },
   wordIndex: { fontSize: 12, color: "#9CA3AF", fontWeight: "500" },
-  wordText: { fontSize: 14, color: "#1F2937", fontWeight: "600", flex: 1 },
+  wordText: { fontSize: 14, color: "#1F2937", fontWeight: "600" },
   tipsSection: { marginBottom: 24 },
   tipText: { fontSize: 13, color: "#6B7280", lineHeight: 20, marginBottom: 4 },
   confirmBtn: { backgroundColor: "#287220", borderRadius: 12, paddingVertical: 16, alignItems: "center" },
