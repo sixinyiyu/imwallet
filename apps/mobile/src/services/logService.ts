@@ -74,6 +74,21 @@ export async function saveLogToLocal(logType: "crash" | "mnemonic", content: str
 }
 
 /**
+ * Get the count of pending logs in local storage.
+ * Used by SettingsScreen to show how many logs are waiting to be uploaded.
+ */
+export async function getPendingLogCount(): Promise<number> {
+  try {
+    const existing = await SecureStore.getItemAsync(CRASH_LOGS_KEY);
+    if (!existing) return 0;
+    const logs: PendingLog[] = JSON.parse(existing);
+    return logs.length;
+  } catch {
+    return -1; // unknown/error
+  }
+}
+
+/**
  * On app startup: check AsyncStorage for pending crash logs and upload them.
  * After successful upload, clear the local storage.
  * Called once in App.tsx on mount.
