@@ -2,8 +2,11 @@ import axios from "axios";
 import * as SecureStore from "../utils/secureStorage";
 import Constants from "expo-constants";
 import "react-native-get-random-values";
-import { getPublicKey, sign } from "@noble/ed25519";
-import { sha256 } from "@noble/hashes/sha2.js";
+import { getPublicKey, sign, hashes } from "@noble/ed25519";
+import { sha256, sha512 } from "@noble/hashes/sha2.js";
+
+// Configure sha512 for @noble/ed25519 v3+ (hashes object is extensible, etc is frozen)
+hashes.sha512 = sha512;
 
 
 
