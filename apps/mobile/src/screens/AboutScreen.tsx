@@ -1,15 +1,18 @@
 import React from "react";
 import { View, Text, StyleSheet, ScrollView, Image } from "react-native";
+import Constants from "expo-constants";
 
 const appLogoImage = require("../../assets/app_logo.png");
 
 export default function AboutScreen() {
+  const appVersion = Constants.expoConfig?.version || "unknown";
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.section}>
         <Image source={appLogoImage} style={styles.logoImage} resizeMode="contain" />
         <Text style={styles.appName}>AquaD</Text>
-        <Text style={styles.version}>版本 0.1.0</Text>
+        <Text style={styles.version}>版本 {appVersion}</Text>
       </View>
       <View style={styles.section}>
         <Text style={styles.item}>开源协议: MIT</Text>

@@ -30,6 +30,7 @@ export default function WalletScreen() {
     totalBalanceUsd,
     tokens,
     loading,
+    hasFetched,
     fetchWallets,
     setActiveWallet,
     fetchBalance,
@@ -156,6 +157,7 @@ export default function WalletScreen() {
         <Text style={styles.sectionTitle}>代币</Text>
         <TokenList
           tokens={tokens}
+          loading={loading || !hasFetched}
           onTokenPress={(token) =>
             navigation.navigate("TokenDetail", { tokenSymbol: token.symbol })
           }

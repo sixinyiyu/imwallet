@@ -128,6 +128,24 @@ router.delete(
 );
 
 /**
+ * GET /wallets/networks/batch — Batch get account networks for multiple wallets
+ * Returns deduplicated network list per wallet, for lightweight UI display
+ */
+router.get(
+  "/wallets/networks/batch",
+  asyncHandler(async (req: Request, res: Response) => {
+    const walletIds = (req.query.walletIds as string || "").split(",").filter(Boolean);
+    if (walletIds.length === 0) {
+      res.json({ wallets: [] });
+      return;
+    }
+
+    const result = await accountService.getWalletsNetworksBatch(walletIds);
+    res.json({ wallets: result });
+  })
+);
+
+/**
  * GET /networks/available — Get available networks for account creation
  * Only returns tokens where isAccountToken=true, grouped by network
  */

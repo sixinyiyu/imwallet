@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from "react-native";
 import type { TokenBalance } from "../types";
 import { USDTIcon } from "./icons";
 import TronIcon from "./icons/TronIcon";
@@ -9,10 +9,55 @@ import EmptyState from "./EmptyState";
 interface Props {
   tokens: TokenBalance[];
   onTokenPress: (token: TokenBalance) => void;
+  loading?: boolean;
 }
 
-export default function TokenList({ tokens, onTokenPress }: Props) {
+/** 骨架屏占位行 */
+function SkeletonRow() {
+  const opacity = React.useRef(new Animated.Value(0.3)).current;
+
+  React.useEffect(() => {
+    const animate = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.6, duration: 800, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ])
+    );
+    animate.start();
+    return () => animate.stop();
+  }, [opacity]);
+
+  return (
+    <View style={styles.item}>
+      <Animated.View style={[styles.skeletonIcon, { opacity }]} />
+      <View style={styles.info}>
+        <Animated.View style={[styles.skeletonLine, { width: 60, height: 16, opacity }]} />
+        <Animated.View style={[styles.skeletonLine, { width: 80, height: 12, marginTop: 4, opacity }]} />
+      </View>
+      <View style={styles.balance}>
+        <Animated.View style={[styles.skeletonLine, { width: 70, height: 16, opacity }]} />
+        <Animated.View style={[styles.skeletonLine, { width: 50, height: 12, marginTop: 4, opacity }]} />
+      </View>
+    </View>
+  );
+}
+
+export default function TokenList({ tokens, onTokenPress, loading }: Props) {
   const { currency } = useFiatStore();
+
+  // 加载中：显示骨架屏
+  if (loading && tokens.length === 0) {
+    return (
+      <View style={styles.container}>
+        {[0, 1, 2].map((i) => (
+          <View key={i}>
+            <SkeletonRow />
+            {i < 2 && <View style={styles.itemBorder} />}
+          </View>
+        ))}
+      </View>
+    );
+  }
 
   if (tokens.length === 0) {
     return (
@@ -94,6 +139,18 @@ const styles = StyleSheet.create({
   balance: { alignItems: "flex-end" },
   balanceText: { fontSize: 16, fontWeight: "600", color: "#1F2937" },
   fiatValue: { fontSize: 12, color: "#1F2937", marginTop: 2, fontWeight: "500" },
+  // Skeleton
+  skeletonIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#E5E7EB",
+    marginRight: 12,
+  },
+  skeletonLine: {
+    backgroundColor: "#E5E7EB",
+    borderRadius: 4,
+  },
   empty: { alignItems: "center", padding: 32 },
   emptyImage: { width: 120, height: 120, marginBottom: 12 },
   emptyText: { fontSize: 14, color: "#9CA3AF" },

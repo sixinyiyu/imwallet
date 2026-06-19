@@ -11,6 +11,7 @@ import {
   Modal,
   Pressable,
   Keyboard,
+  Clipboard,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import EmptyState from "../components/EmptyState";
@@ -28,6 +29,7 @@ import {
   TronIcon,
   EthIcon,
   BtcIcon,
+  CopyIcon,
 } from "../components/icons";
 import type { Wallet } from "../types";
 
@@ -349,7 +351,21 @@ export default function WalletDetailScreen() {
               </View>
               <View style={styles.accountInfo}>
                 <Text style={styles.accountName}>{acc.name}</Text>
-                <Text style={styles.accountSymbol}>{acc.address}</Text>
+                <View style={styles.accountAddressRow}>
+                  <Text style={styles.accountSymbol} numberOfLines={1} ellipsizeMode="middle">
+                    {acc.address}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      Clipboard.setString(acc.address);
+                      showToast("地址已复制");
+                    }}
+                    activeOpacity={0.6}
+                    style={styles.accountCopyBtn}
+                  >
+                    <CopyIcon size={14} color="#9CA3AF" />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           ))
@@ -862,6 +878,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#9CA3AF",
     marginTop: 2,
+    flex: 1,
+    marginRight: 4,
+  },
+  accountAddressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  accountCopyBtn: {
+    padding: 4,
+    flexShrink: 0,
   },
   // ── Drawer shared ──
   drawerOverlay: {

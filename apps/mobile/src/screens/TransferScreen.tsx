@@ -97,6 +97,15 @@ export default function TransferScreen() {
   });
   const resultRef = useRef<View>(null);
 
+  // Toast state
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMsg, setToastMsg] = useState("");
+  const showToast = useCallback((msg: string) => {
+    setToastMsg(msg);
+    setToastVisible(true);
+    setTimeout(() => setToastVisible(false), 2000);
+  }, []);
+
   // 获取手续费配置
   useEffect(() => {
     configService.getFeeConfig().then(setFeeConfig).catch(() => {});
@@ -179,6 +188,7 @@ export default function TransferScreen() {
       setAddressInContacts(true);
       const list = await contactService.getContacts();
       setContacts(list);
+      showToast("已添加到地址本");
     } catch (err: any) {
       Alert.alert("提示", "添加到地址本失败: " + (err.message || "未知错误"));
     } finally {
@@ -308,6 +318,7 @@ export default function TransferScreen() {
   }
 
   return (
+    <React.Fragment>
     <KeyboardAvoidingView
       style={z.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -541,10 +552,19 @@ export default function TransferScreen() {
           </View>
         </View>
       </Modal>
-    </KeyboardAvoidingView>
-  );
-}
+      </KeyboardAvoidingView>
 
+      {/* Toast */}
+      {toastVisible && (
+        <View style={z.toastWrap} pointerEvents="none">
+          <View style={z.toast}>
+            <Text style={z.toastText}>{toastMsg}</Text>
+          </View>
+        </View>
+      )}
+    </React.Fragment>
+    );
+}
 function SummaryRow({
   label,
   value,
@@ -790,4 +810,8 @@ const z = StyleSheet.create({
     alignItems: "center",
   },
   secondaryBtnText: { color: "#6B7280", fontWeight: "600", fontSize: 16 },
+  // Toast
+  toastWrap: { position: "absolute", bottom: 80, left: 0, right: 0, alignItems: "center" },
+  toast: { backgroundColor: "rgba(0,0,0,0.75)", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
+  toastText: { color: "#FFFFFF", fontSize: 14 },
 });

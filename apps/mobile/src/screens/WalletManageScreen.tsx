@@ -9,6 +9,7 @@ import {
   Modal,
   Pressable,
   SafeAreaView,
+  Animated,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -17,7 +18,6 @@ import { useWalletStore } from "../stores/walletStore";
 import { accountService } from "../services/accountService";
 import { WalletIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import { ChevronRightIcon } from "../components/icons";
-import type { Account } from "../types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -29,6 +29,42 @@ function getNetworkIcon(network: string): React.FC<{ size?: number; color?: stri
   return null;
 }
 
+/** 骨架屏卡片 */
+function SkeletonCard() {
+  const opacity = React.useRef(new Animated.Value(0.3)).current;
+
+  React.useEffect(() => {
+    const animate = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.6, duration: 800, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ])
+    );
+    animate.start();
+    return () => animate.stop();
+  }, [opacity]);
+
+  return (
+    <View style={styles.walletCard}>
+      <View style={[styles.cardTop, { gap: 8 }]}>
+        <Animated.View style={[{ width: 20, height: 20, borderRadius: 10, backgroundColor: "#E5E7EB" }, { opacity }]} />
+        <Animated.View style={[{ width: 100, height: 16, borderRadius: 4, backgroundColor: "#E5E7EB" }, { opacity }]} />
+        <View style={{ marginLeft: "auto" }}>
+          <Animated.View style={[{ width: 18, height: 18, borderRadius: 9, backgroundColor: "#E5E7EB" }, { opacity }]} />
+        </View>
+      </View>
+      <View style={[styles.cardMiddle, { gap: 12, marginTop: 8, paddingLeft: 28 }]}>
+        <Animated.View style={[{ width: 60, height: 13, borderRadius: 4, backgroundColor: "#E5E7EB" }, { opacity }]} />
+        <Animated.View style={[{ width: 50, height: 13, borderRadius: 4, backgroundColor: "#E5E7EB" }, { opacity }]} />
+      </View>
+      <View style={[styles.cardActions, { marginTop: 12, paddingTop: 12 }]}>
+        <Animated.View style={[{ width: 120, height: 13, borderRadius: 4, backgroundColor: "#E5E7EB" }, { opacity }]} />
+        <Animated.View style={[{ width: 70, height: 13, borderRadius: 4, backgroundColor: "#E5E7EB" }, { opacity }]} />
+      </View>
+    </View>
+  );
+}
+
 export default function WalletManageScreen() {
   const navigation = useNavigation<Nav>();
   const {
@@ -38,38 +74,44 @@ export default function WalletManageScreen() {
     backedUpWallets,
   } = useWalletStore();
   const [showAddWalletDrawer, setShowAddWalletDrawer] = useState(false);
-  /** 每个钱包的账户列表映射 walletId -> Account[] */
-  const [walletAccountsMap, setWalletAccountsMap] = useState<Record<string, Account[]>>({});
+  /** 每个钱包的网络列表映射 walletId -> string[]（去重） */
+  const [walletNetworksMap, setWalletNetworksMap] = useState<Record<string, string[]>>({});
+  /** 网络数据是否已加载完成 */
+  const [networksLoaded, setNetworksLoaded] = useState(false);
 
   useEffect(() => {
     fetchWallets();
   }, []);
 
-  /** 为所有钱包获取账户数据 */
-  const fetchAllWalletAccounts = useCallback(async (walletIds: string[]) => {
-    const results = await Promise.all(
-      walletIds.map(async (wid): Promise<[string, Account[]]> => {
-        try {
-          const data = await accountService.getWalletAccounts(wid);
-          return [wid, data.accounts];
-        } catch {
-          return [wid, []];
-        }
-      })
-    );
-    const map: Record<string, Account[]> = {};
-    for (const [wid, accs] of results) {
-      map[wid] = accs;
+  /** 批量获取所有钱包的账户网络（去重） */
+  const fetchAllWalletNetworks = useCallback(async (walletIds: string[]) => {
+    if (walletIds.length === 0) {
+      setWalletNetworksMap({});
+      setNetworksLoaded(true);
+      return;
     }
-    setWalletAccountsMap(map);
+    try {
+      const { wallets: batchData } = await accountService.getWalletsNetworksBatch(walletIds);
+      const map: Record<string, string[]> = {};
+      for (const w of batchData) {
+        map[w.walletId] = w.networks;
+      }
+      setWalletNetworksMap(map);
+    } catch {
+      // silent
+    }
+    setNetworksLoaded(true);
   }, []);
 
-  /** 监听 wallets 变化，获取所有钱包的账户 */
+  /** 监听 wallets 变化，批量获取网络 */
   useEffect(() => {
     if (wallets.length > 0) {
-      fetchAllWalletAccounts(wallets.map((w) => w.id));
+      setNetworksLoaded(false);
+      fetchAllWalletNetworks(wallets.map((w) => w.id));
+    } else {
+      setNetworksLoaded(true);
     }
-  }, [wallets, fetchAllWalletAccounts]);
+  }, [wallets, fetchAllWalletNetworks]);
 
   /** Drawer 弹窗（创建/导入钱包） */
   const renderDrawer = () => (
@@ -128,12 +170,17 @@ export default function WalletManageScreen() {
     </Modal>
   );
 
-  // 加载守卫：未完成首次加载时显示全屏 spinner，避免空→满的视觉跳动
+  // 加载守卫：未完成首次加载时显示骨架屏
   if (!hasFetched) {
     return (
-      <View style={styles.loadingScreen}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-      </View>
+      <SafeAreaView style={styles.container}>
+        <FlatList
+          data={[0, 1, 2]}
+          keyExtractor={(item) => String(item)}
+          contentContainerStyle={styles.listContent}
+          renderItem={() => <SkeletonCard />}
+        />
+      </SafeAreaView>
     );
   }
 
@@ -167,8 +214,10 @@ export default function WalletManageScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         renderItem={({ item, index }) => {
-          const walletAccounts = walletAccountsMap[item.id] || [];
-          const hasAccounts = walletAccounts.length > 0;
+          const networks = walletNetworksMap[item.id] || [];
+          const hasAccounts = networks.length > 0;
+          // 网络数据未加载时，不显示账户区域内容（避免先显示"使用之前先添加账户"再切换）
+          const showNetworks = networksLoaded;
 
           return (
             <View style={styles.walletCard}>
@@ -179,7 +228,7 @@ export default function WalletManageScreen() {
                 activeOpacity={0.6}
               >
                 <WalletIcon size={20} color="#9CA3AF" />
-                <Text style={styles.walletAlias}>{item.alias}</Text>
+                <Text style={styles.walletAlias} numberOfLines={1}>{item.alias}</Text>
                 {index === 0 && (
                   <View style={styles.activeBadge}>
                     <Text style={styles.activeBadgeText}>当前</Text>
@@ -203,16 +252,16 @@ export default function WalletManageScreen() {
               {/* Actions: 左侧提示/图标 + 右侧添加账户 */}
               <View style={styles.cardActions}>
                 <View style={styles.actionLeft}>
-                  {hasAccounts ? (
+                  {showNetworks && hasAccounts ? (
                     <View style={styles.iconRow}>
-                      {walletAccounts.map((acc, i) => {
-                        const IconComp = getNetworkIcon(acc.network);
-                        return IconComp ? <IconComp key={acc.id} size={20} /> : null;
+                      {networks.map((network, i) => {
+                        const IconComp = getNetworkIcon(network);
+                        return IconComp ? <IconComp key={i} size={20} /> : null;
                       })}
                     </View>
-                  ) : (
+                  ) : showNetworks && !hasAccounts ? (
                     <Text style={styles.noAccountHint}>使用之前，先添加账户</Text>
-                  )}
+                  ) : null}
                 </View>
                 <TouchableOpacity
                   onPress={() => navigation.navigate("WalletAddAccount", { walletId: item.id })}
@@ -277,6 +326,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#1F2937",
+    flexShrink: 1,
   },
   activeBadge: {
     backgroundColor: "#DBEAFE",

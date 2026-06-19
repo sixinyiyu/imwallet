@@ -266,3 +266,27 @@ export async function getAvailableNetworks(): Promise<{
 
   return { networks };
 }
+
+/**
+ * Batch get deduplicated networks for multiple wallets.
+ * Lightweight — only returns walletId + unique network names.
+ */
+export async function getWalletsNetworksBatch(walletIds: string[]): Promise<Array<{ walletId: string; networks: string[] }>> {
+  const accounts = await prisma.account.findMany({
+    where: { walletId: { in: walletIds } },
+    select: { walletId: true, network: true },
+  });
+
+  // Group by walletId, deduplicate networks
+  const map = new Map<string, Set<string>>();
+  for (const a of accounts) {
+    const set = map.get(a.walletId) || new Set<string>();
+    set.add(a.network);
+    map.set(a.walletId, set);
+  }
+
+  return walletIds.map((wid) => ({
+    walletId: wid,
+    networks: Array.from(map.get(wid) || new Set<string>()),
+  }));
+}

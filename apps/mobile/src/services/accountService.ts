@@ -40,4 +40,12 @@ export const accountService = {
     const { data } = await api.get("/accounts/networks/available");
     return data;
   },
+
+  /** 批量获取多个钱包的账户网络列表（去重） */
+  async getWalletsNetworksBatch(walletIds: string[]): Promise<{ wallets: Array<{ walletId: string; networks: string[] }> }> {
+    const { data } = await api.get("/accounts/wallets/networks/batch", {
+      params: { walletIds: walletIds.join(",") },
+    });
+    return data;
+  },
 };

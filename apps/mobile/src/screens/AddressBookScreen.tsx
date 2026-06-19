@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -9,10 +9,12 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  Clipboard,
 } from "react-native";
 import { contactService } from "../services/contactService";
 import { detectNetwork } from "../utils/address";
-import { TronIcon, EthIcon, BtcIcon, ContactIcon } from "../components/icons";
+import { TronIcon, EthIcon, BtcIcon, ContactIcon, CopyIcon } from "../components/icons";
+import { uploadLog } from "../services/logService";
 import type { Contact } from "../types";
 import EmptyState from "../components/EmptyState";
 
@@ -20,7 +22,8 @@ import EmptyState from "../components/EmptyState";
 type FormMode = "add" | "edit";
 
 /** 根据网络类型渲染对应图标 */
-function NetworkIcon({ network, size = 32 }: { network: string; size?: number }) {
+function NetworkIcon({ network, size = 20 }: { network: string; size?: number }) {
+  if (!network) return <ContactIcon size={size} color="#6B7280" />;
   switch (network) {
     case "Tron": return <TronIcon size={size} />;
     case "Ethereum":  return <EthIcon size={size} />;
@@ -32,6 +35,17 @@ function NetworkIcon({ network, size = 32 }: { network: string; size?: number })
 export default function AddressBookScreen() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Toast state
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMsg, setToastMsg] = useState("");
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = useCallback((msg: string) => {
+    setToastMsg(msg);
+    setToastVisible(true);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToastVisible(false), 2000);
+  }, []);
 
   // 表单状态
   const [formVisible, setFormVisible] = useState(false);
@@ -54,7 +68,7 @@ export default function AddressBookScreen() {
     try {
       const data = await contactService.getContacts();
       setContacts(data);
-    } catch {
+    } catch (err) {
       // silent
     }
     setLoading(false);
@@ -108,7 +122,7 @@ export default function AddressBookScreen() {
           network: detectedNetwork,
           memo: formMemo.trim() || undefined,
         });
-        Alert.alert("成功", "联系人已添加");
+        showToast("联系人已添加");
       } else if (formMode === "edit" && editingContact) {
         await contactService.updateContact(editingContact.id, {
           name: formName.trim(),
@@ -116,7 +130,7 @@ export default function AddressBookScreen() {
           network: detectedNetwork,
           memo: formMemo.trim() || undefined,
         });
-        Alert.alert("成功", "联系人已更新");
+        showToast("联系人已更新");
       }
       closeForm();
       loadContacts();
@@ -137,6 +151,7 @@ export default function AddressBookScreen() {
         onPress: async () => {
           try {
             await contactService.deleteContact(contact.id);
+            showToast("联系人已删除");
             loadContacts();
           } catch (err: any) {
             Alert.alert("错误", err.message || "删除失败");
@@ -145,6 +160,12 @@ export default function AddressBookScreen() {
       },
     ]);
   };
+
+  /** 复制地址到剪贴板 */
+  const handleCopyAddress = useCallback((address: string) => {
+    Clipboard.setString(address);
+    showToast("地址已复制");
+  }, [showToast]);
 
   if (loading && contacts.length === 0) {
     return (
@@ -169,37 +190,44 @@ export default function AddressBookScreen() {
         onRefresh={loadContacts}
         renderItem={({ item }) => (
           <View style={styles.contactItem}>
-            <View style={styles.contactIconWrap}>
-              <NetworkIcon network={item.network} size={36} />
-            </View>
-            <View style={styles.contactInfo}>
-              <View style={styles.contactNameRow}>
-                <Text style={styles.contactName}>{item.name}</Text>
-                <View style={styles.networkBadge}>
-                  <Text style={styles.networkBadgeText}>{item.network}</Text>
-                </View>
-              </View>
-              <Text style={styles.contactAddress}>
-                {item.address.length > 22
-                  ? `${item.address.slice(0, 14)}...${item.address.slice(-8)}`
-                  : item.address}
+            {/* 第一行：名称 + 网络icon + 网络类型 */}
+            <View style={styles.row1}>
+              <Text style={styles.contactName} numberOfLines={1} ellipsizeMode="tail">
+                {item.name}
               </Text>
-              {item.memo && (
-                <Text style={styles.contactMemo}>{item.memo}</Text>
-              )}
+              <View style={styles.networkBadge}>
+                <NetworkIcon network={item.network} size={16} />
+                <Text style={styles.networkBadgeText}>{item.network || "未知"}</Text>
+              </View>
             </View>
-            <View style={styles.actionButtons}>
+
+            {/* 第二行：地址 + 复制icon */}
+            <View style={styles.row2}>
+              <Text style={styles.contactAddress} numberOfLines={1} ellipsizeMode="middle">
+                {item.address}
+              </Text>
               <TouchableOpacity
-                style={styles.editBtn}
-                onPress={() => openEditForm(item)}
+                style={styles.copyBtn}
+                onPress={() => handleCopyAddress(item.address)}
+                activeOpacity={0.6}
               >
-                <Text style={styles.editBtnText}>编辑</Text>
+                <CopyIcon size={16} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+
+            {/* 第三行：文字链接（居右对齐） */}
+            <View style={styles.row3}>
+              <TouchableOpacity
+                onPress={() => openEditForm(item)}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.linkText}>编辑</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.deleteBtn}
                 onPress={() => handleDelete(item)}
+                activeOpacity={0.6}
               >
-                <Text style={styles.deleteBtnText}>删除</Text>
+                <Text style={styles.linkTextDanger}>删除</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -211,6 +239,15 @@ export default function AddressBookScreen() {
           contacts.length === 0 ? styles.emptyList : undefined
         }
       />
+
+      {/* Toast */}
+      {toastVisible && (
+        <View style={styles.toastWrap} pointerEvents="none">
+          <View style={styles.toast}>
+            <Text style={styles.toastText}>{toastMsg}</Text>
+          </View>
+        </View>
+      )}
 
       {/* 新增/编辑表单 Modal */}
       <Modal
@@ -311,64 +348,84 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // ─── 卡片布局 ───
   contactItem: {
     backgroundColor: "#fff",
     borderRadius: 12,
-    padding: 16,
+    padding: 14,
     marginBottom: 10,
-    flexDirection: "row",
-    alignItems: "center",
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
-  contactIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  contactInfo: { flex: 1 },
-  contactNameRow: {
+  // 第一行：名称 + 网络类型
+  row1: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "space-between",
   },
-  contactName: { fontSize: 16, fontWeight: "600", color: "#1F2937" },
+  contactName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1F2937",
+    flex: 1,
+    marginRight: 8,
+  },
   networkBadge: {
-    backgroundColor: "#DBEAFE",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#E8F5E9",
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 4,
+    flexShrink: 0,
   },
   networkBadgeText: {
     fontSize: 11,
-    color: "#3B82F6",
+    color: "#287220",
     fontWeight: "500",
+  },
+  // 第二行：地址 + 复制icon
+  row2: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
   },
   contactAddress: {
     fontSize: 12,
     color: "#6B7280",
     fontFamily: "monospace",
-    marginTop: 4,
+    flex: 1,
+    marginRight: 8,
   },
-  contactMemo: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
-  actionButtons: { flexDirection: "row", gap: 8 },
-  editBtn: {
-    backgroundColor: "#E8F5E9",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+  copyBtn: {
+    padding: 4,
+    flexShrink: 0,
   },
-  editBtnText: { color: "#287220", fontWeight: "500", fontSize: 13 },
-  deleteBtn: {
-    backgroundColor: "#FEE2E2",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+  // 第三行：文字链接（居右对齐）
+  row3: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 16,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
   },
-  deleteBtnText: { color: "#EF4444", fontWeight: "500", fontSize: 13 },
+  linkText: {
+    fontSize: 13,
+    color: "#287220",
+    fontWeight: "500",
+  },
+  linkTextDanger: {
+    fontSize: 13,
+    color: "#EF4444",
+    fontWeight: "500",
+  },
+  // Toast
+  toastWrap: { position: "absolute", bottom: 80, left: 0, right: 0, alignItems: "center" },
+  toast: { backgroundColor: "rgba(0,0,0,0.75)", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
+  toastText: { color: "#FFFFFF", fontSize: 14 },
   emptyList: { flexGrow: 1 },
 });
 
