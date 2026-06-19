@@ -56,6 +56,11 @@ export default function AddressBookScreen() {
   const [formMemo, setFormMemo] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // 删除确认弹窗
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingContact, setDeletingContact] = useState<Contact | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   // 根据地址自动推导网络类型
   const detectedNetwork = useMemo(() => detectNetwork(formAddress), [formAddress]);
 
@@ -143,22 +148,8 @@ export default function AddressBookScreen() {
 
   /** 删除联系人 */
   const handleDelete = (contact: Contact) => {
-    Alert.alert("确认删除", `确定要删除联系人 "${contact.name}" 吗？`, [
-      { text: "取消", style: "cancel" },
-      {
-        text: "删除",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await contactService.deleteContact(contact.id);
-            showToast("联系人已删除");
-            loadContacts();
-          } catch (err: any) {
-            Alert.alert("错误", err.message || "删除失败");
-          }
-        },
-      },
-    ]);
+    setDeletingContact(contact);
+    setShowDeleteConfirm(true);
   };
 
   /** 复制地址到剪贴板 */
@@ -336,6 +327,59 @@ export default function AddressBookScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 删除确认弹窗 */}
+      <Modal
+        visible={showDeleteConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDeleteConfirm(false)}
+      >
+        <View style={modalStyles.overlay}>
+          <View style={modalStyles.card}>
+            <Text style={modalStyles.title}>确认删除</Text>
+            <Text style={modalStyles.desc}>
+              确定要删除联系人 "{deletingContact?.name}" 吗？
+            </Text>
+            <View style={modalStyles.buttonRow}>
+              <TouchableOpacity
+                style={modalStyles.cancelBtn}
+                onPress={() => { setShowDeleteConfirm(false); setDeletingContact(null); }}
+                activeOpacity={0.7}
+              >
+                <Text style={modalStyles.cancelBtnText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[modalStyles.submitBtn, { backgroundColor: "#EF4444" }, deleting && modalStyles.submitBtnDisabled]}
+                onPress={async () => {
+                  if (!deletingContact) return;
+                  setDeleting(true);
+                  try {
+                    await contactService.deleteContact(deletingContact.id);
+                    showToast("联系人已删除");
+                    setShowDeleteConfirm(false);
+                    setDeletingContact(null);
+                    loadContacts();
+                  } catch (err: any) {
+                    showToast("删除失败: " + (err.message || "未知错误"));
+                    setShowDeleteConfirm(false);
+                    setDeletingContact(null);
+                  }
+                  setDeleting(false);
+                }}
+                disabled={deleting}
+                activeOpacity={0.7}
+              >
+                {deleting ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={modalStyles.submitBtnText}>删除</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -467,6 +511,13 @@ const modalStyles = StyleSheet.create({
     fontWeight: "700",
     color: "#1F2937",
     marginBottom: 20,
+  },
+  desc: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    marginBottom: 20,
+    lineHeight: 22,
   },
   label: {
     fontSize: 14,
