@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { notificationService } from "../services/authService";
 import type { Notification } from "../types";
+import { NotificationSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 
 export default function NotificationScreen() {
@@ -17,6 +18,7 @@ export default function NotificationScreen() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const fetchNotifications = async (p: number = 1) => {
     try {
@@ -31,6 +33,8 @@ export default function NotificationScreen() {
       setPage(p);
     } catch (err: any) {
       // silent
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -111,6 +115,9 @@ export default function NotificationScreen() {
         </TouchableOpacity>
       )}
 
+      {loading ? (
+        <NotificationSkeleton count={4} />
+      ) : (
       <FlatList
         data={notifications}
         keyExtractor={(item) => item.id}
@@ -129,6 +136,7 @@ export default function NotificationScreen() {
         }}
         onEndReachedThreshold={0.5}
       />
+      )}
     </View>
   );
 }

@@ -6,6 +6,7 @@ import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import { useWalletStore } from "../stores/walletStore";
 import { useAlert } from "../hooks/useAlert";
+import { ReceiveSkeleton } from "../components/Skeleton";
 import { CopyIcon, ShareIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import type { RootStackParamList } from "../types/navigation";
 
@@ -26,6 +27,11 @@ export default function ReceiveScreen() {
   const address = activeAccount?.address ?? "";
   const network = activeAccount?.network ?? "";
   const qrWrapperRef = useRef<View>(null);
+
+  // Show skeleton while wallet/account data is loading
+  if (!address) {
+    return <ReceiveSkeleton />;
+  }
 
   const tokenSymbol = route.params?.tokenSymbol || "USDT";
   const tokenId = route.params?.tokenId;

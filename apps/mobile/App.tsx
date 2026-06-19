@@ -4,7 +4,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationContainer } from "@react-navigation/native";
 import { View, Text, StyleSheet, ScrollView, Platform } from "react-native";
 import { RootStack } from "./src/navigation/RootStack";
-import { uploadLog } from "./src/services/logService";
+import { uploadLog, saveLogToLocal, flushPendingLogs } from "./src/services/logService";
 import { AppAlertProvider } from "./src/components/AppAlert";
 
 // ─── Global error handlers: capture uncaught JS errors before they crash the app ───
@@ -20,8 +20,8 @@ if (Platform.OS !== "web") {
         message: error?.message || String(error),
         stack: error?.stack,
       };
-      // Upload crash log to server (fire-and-forget)
-      uploadLog("crash", `[${isFatal ? "FATAL" : "ERROR"}] ${error?.message || String(error)}\n${error?.stack || ""}`);
+      // Save crash log to local storage (app may crash, network request unreliable)
+      saveLogToLocal("crash", `[${isFatal ? "FATAL" : "ERROR"}] ${error?.message || String(error)}\n${error?.stack || ""}`);
       if (originalHandler) {
         originalHandler(error, isFatal);
       }
@@ -52,8 +52,8 @@ class AppErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // Upload crash log to server (fire-and-forget)
-    uploadLog("crash", `${error?.message || "Unknown error"}\n${error?.stack || ""}\n${info?.componentStack || ""}`);
+    // Save crash log to local storage (ErrorBoundary catch, app may be unstable)
+    saveLogToLocal("crash", `${error?.message || "Unknown error"}\n${error?.stack || ""}\n${info?.componentStack || ""}`);
   }
 
   handleRestart = () => {
@@ -132,6 +132,9 @@ const errorStyles = StyleSheet.create({
 
 export default function App() {
   useEffect(() => {
+    // Flush pending crash logs from previous session
+    flushPendingLogs();
+
     if (typeof document !== "undefined") {
       document.title = "AquaD";
       const style = document.createElement("style");

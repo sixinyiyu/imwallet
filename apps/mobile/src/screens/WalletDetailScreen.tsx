@@ -16,6 +16,7 @@ import EmptyState from "../components/EmptyState";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
+import { WalletDetailSkeleton } from "../components/Skeleton";
 import { useAlert } from "../hooks/useAlert";
 import { walletService } from "../services/walletService";
 import {
@@ -206,11 +207,7 @@ export default function WalletDetailScreen() {
   };
 
   if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator color="#3B82F6" size="large" />
-      </View>
-    );
+    return <WalletDetailSkeleton />;
   }
 
   if (!wallet) {

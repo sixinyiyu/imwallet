@@ -13,6 +13,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useWalletStore } from "../stores/walletStore";
+import { TransactionListSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import { transactionService, type TransactionFilter } from "../services/transactionService";
 import type { Transaction } from "../types";
@@ -220,9 +221,7 @@ export default function RecordsScreen() {
 
       {/* ── 交易列表 ── */}
       {loading ? (
-        <View style={styles.centerLoading}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-        </View>
+        <TransactionListSkeleton count={5} />
       ) : (
         <FlatList
           data={transactions}

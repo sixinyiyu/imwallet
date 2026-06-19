@@ -15,6 +15,7 @@ import type { Transaction } from "../types";
 import { transactionService } from "../services/transactionService";
 import { useWalletStore } from "../stores/walletStore";
 import { ShareIcon } from "../components/icons";
+import { TradeDetailSkeleton } from "../components/Skeleton";
 import { useAlert } from "../hooks/useAlert";
 import SuccessIcon from "../components/icons/SuccessIcon";
 import FailureIcon from "../components/icons/FailureIcon";
@@ -103,11 +104,7 @@ export default function TradeDetailScreen() {
   }, [tx, navigation]);
 
   if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-      </View>
-    );
+    return <TradeDetailSkeleton />;
   }
 
   if (error || !tx) {

@@ -367,6 +367,9 @@ export default function TransferScreen() {
                 {addingToContacts && (
                   <ActivityIndicator size="small" color="#287220" />
                 )}
+                {addressInContacts && (
+                  <Text style={z.addedToContactText}>✓ 已添加到地址本</Text>
+                )}
               </>
             )}
           </View>
@@ -624,6 +627,7 @@ const z = StyleSheet.create({
   statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6, marginLeft: 4 },
   statusText: { fontSize: 13 },
   addToContactLinkText: { fontSize: 13, color: "#287220", fontWeight: "500" },
+  addedToContactText: { fontSize: 13, color: "#10B981", fontWeight: "500" },
   // Token
   tokenCard: {
     backgroundColor: "#fff",

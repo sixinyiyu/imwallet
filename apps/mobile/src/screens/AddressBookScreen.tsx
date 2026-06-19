@@ -13,6 +13,8 @@ import { contactService } from "../services/contactService";
 import { useAlert } from "../hooks/useAlert";
 import { detectNetwork } from "../utils/address";
 import { TronIcon, EthIcon, BtcIcon, ContactIcon, CopyIcon } from "../components/icons";
+import { saveLogToLocal } from "../services/logService";
+import { AddressBookSkeleton } from "../components/Skeleton";
 import type { Contact } from "../types";
 import EmptyState from "../components/EmptyState";
 
@@ -73,7 +75,7 @@ export default function AddressBookScreen() {
       const data = await contactService.getContacts();
       setContacts(data);
     } catch (err) {
-      // silent
+      saveLogToLocal("crash", `[AddressBook] loadContacts failed: ${(err as Error)?.message || String(err)}`);
     }
     setLoading(false);
   };
@@ -159,11 +161,7 @@ export default function AddressBookScreen() {
   }, [showToast]);
 
   if (loading && contacts.length === 0) {
-    return (
-      <View style={styles.centerLoading}>
-        <ActivityIndicator size="large" color="#287220" />
-      </View>
-    );
+    return <AddressBookSkeleton count={4} />;
   }
 
   return (
