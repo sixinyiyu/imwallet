@@ -16,7 +16,16 @@ export interface Device {
   updated_at: string;
 }
 
-export interface Wallet {
+export interface Wallet extends SimpleWallet {
+  updatedAt?: string;
+  tokenBalances: WalletTokenBalance[];
+  totalBalanceCny: string;
+  memo?: string;
+  passwordHint?: string;
+}
+
+/** 简单钱包信息（不含代币余额，供钱包首页下拉列表使用） */
+export interface SimpleWallet {
   id: string;
   identifier: string;
   alias: string;
@@ -24,11 +33,18 @@ export interface Wallet {
   source: string;
   accountCount: number;
   createdAt: string;
-  updatedAt?: string;
-  tokenBalances: WalletTokenBalance[];
+}
+
+/** 聚合钱包信息（含网络列表，供钱包列表页使用） */
+export interface AggregateWallet extends SimpleWallet {
+  networks: string[];
+}
+
+/** 钱包余额详情（总余额+各代币余额，切换钱包时使用） */
+export interface WalletBalanceDetail {
+  totalBalanceUsd: string;
   totalBalanceCny: string;
-  memo?: string;
-  passwordHint?: string;
+  tokens: TokenBalance[];
 }
 
 export interface Account {

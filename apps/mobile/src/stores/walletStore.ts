@@ -6,7 +6,7 @@ import { generateMnemonic, cleanMnemonic } from "../utils/mnemonic";
 import { ensureDeviceKeys, ensureDeviceRegistered } from "../services/api";
 import { useAuthStore } from "./authStore";
 import { uploadLog, saveLogToLocal } from "../services/logService";
-import type { Wallet, Account, TokenBalance } from "../types";
+import type { Wallet, SimpleWallet, Account, TokenBalance } from "../types";
 
 const MNEMONIC_KEY_PREFIX = "aquad_mnemonic_";
 const BACKED_UP_KEY_PREFIX = "aquad_backed_up_";
@@ -27,8 +27,8 @@ interface WalletState {
   /** Set of wallet IDs that have been backed up */
   backedUpWallets: Set<string>;
   hasWallets: boolean;
-  wallets: Wallet[];
-  activeWallet: Wallet | null;
+  wallets: SimpleWallet[];
+  activeWallet: SimpleWallet | null;
   accounts: Account[];
   activeAccount: Account | null;
   totalBalanceUsd: string;
@@ -39,8 +39,9 @@ interface WalletState {
 
   loadLocalState: () => Promise<void>;
   fetchWallets: () => Promise<void>;
+  fetchWalletsAggregate: () => Promise<SimpleWallet[]>;
   fetchAccounts: (walletId: string) => Promise<void>;
-  setActiveWallet: (wallet: Wallet) => void;
+  setActiveWallet: (wallet: SimpleWallet) => void;
   setActiveAccount: (account: Account) => void;
   createWallet: (alias: string, password: string, passwordHint?: string) => Promise<string>;
   importWallet: (mnemonic: string, alias: string, password: string, passwordHint?: string) => Promise<string>;
@@ -168,6 +169,50 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     set({ loading: false });
   },
 
+  /** Fetch wallets aggregate data (with networks, for wallet list page) */
+  fetchWalletsAggregate: async () => {
+    set({ loading: true });
+    try {
+      const data = await walletService.getWalletsAggregate();
+      const wallets = data.wallets;
+
+      // Load per-wallet backup status
+      const backedUpSet = new Set<string>();
+      for (const w of wallets) {
+        const flag = await SecureStore.getItemAsync(backedUpKey(w.id));
+        if (flag === "true") {
+          backedUpSet.add(w.id);
+        }
+      }
+
+      set({
+        wallets,
+        hasWallets: wallets.length > 0,
+        hasFetched: true,
+        backedUpWallets: backedUpSet,
+      });
+
+      return wallets;
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const errorMsg = err?.response?.data?.error;
+      if (status === 401 || errorMsg === "Device not registered") {
+        set({
+          hasWallets: false,
+          wallets: [],
+          activeWallet: null,
+          backedUpWallets: new Set<string>(),
+          hasFetched: true,
+        });
+      } else {
+        set({ hasFetched: true });
+      }
+      return [];
+    } finally {
+      set({ loading: false });
+    }
+  },
+
   /** Fetch accounts for a specific wallet */
   fetchAccounts: async (walletId: string) => {
     try {
@@ -183,7 +228,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   /** Set active wallet */
-  setActiveWallet: (wallet: Wallet) => {
+  setActiveWallet: (wallet: SimpleWallet) => {
     set({ activeWallet: wallet });
     get().fetchAccounts(wallet.id);
   },
@@ -304,17 +349,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  /** Fetch balance for wallet */
+  /** Fetch balance for wallet (single API call: total balance + token list) */
   fetchBalance: async (walletId: string) => {
     try {
-      const { tokenService } = require("../services/tokenService");
-      const [balanceData, tokensData] = await Promise.all([
-        tokenService.getBalance(walletId),
-        tokenService.getTokenList(walletId),
-      ]);
+      const detail = await walletService.getWalletBalanceDetail(walletId);
       set({
-        totalBalanceUsd: balanceData.totalBalanceUsd || "0",
-        tokens: tokensData.tokens,
+        totalBalanceUsd: detail.totalBalanceUsd || "0",
+        tokens: detail.tokens,
       });
     } catch {
       // silent

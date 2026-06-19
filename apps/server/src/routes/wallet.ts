@@ -18,9 +18,15 @@ const asyncHandler =
 // 所有钱包操作需要设备签名验证
 router.use(deviceAuthMiddleware);
 
-// 获取当前设备的钱包列表
+// 获取当前设备的钱包列表（简化数据，不含代币余额）
 router.get("/", asyncHandler(async (req: Request, res: Response) => {
   const wallets = await walletService.getDeviceWallets(req.device!.deviceId);
+  res.json({ wallets });
+}));
+
+// 获取钱包列表聚合数据（含网络列表，供钱包列表页使用）
+router.get("/aggregate", asyncHandler(async (req: Request, res: Response) => {
+  const wallets = await walletService.getDeviceWalletsAggregate(req.device!.deviceId);
   res.json({ wallets });
 }));
 
@@ -105,6 +111,34 @@ router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
 
   const wallet = await walletService.getWalletDetail(walletId, req.device!.deviceId);
   res.json(wallet);
+}));
+
+// 获取钱包余额详情（总余额+各代币余额，切换钱包时使用）
+router.get("/:id/balance", asyncHandler(async (req: Request, res: Response) => {
+  const walletId = req.params.id as string;
+
+  // 验证设备与钱包关联
+  const device = await prisma.device.findUnique({
+    where: { device_id: req.device!.deviceId },
+  });
+  if (!device) {
+    res.status(404).json({ error: "Device not found" });
+    return;
+  }
+
+  const subscription = await prisma.walletSubscription.findFirst({
+    where: {
+      wallet_id: walletId,
+      device_id: device.id,
+    },
+  });
+  if (!subscription) {
+    res.status(403).json({ error: "You do not have permission to view this wallet" });
+    return;
+  }
+
+  const balanceDetail = await walletService.getWalletBalanceDetail(walletId);
+  res.json(balanceDetail);
 }));
 
 // 删除钱包（取消当前设备的订阅）

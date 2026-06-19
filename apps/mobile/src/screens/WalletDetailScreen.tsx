@@ -32,7 +32,7 @@ import {
   BtcIcon,
   CopyIcon,
 } from "../components/icons";
-import type { Wallet } from "../types";
+import type { Wallet, SimpleWallet } from "../types";
 
 /** 根据网络名获取对应图标组件（PascalCase） */
 function getNetworkIcon(network: string): React.FC<{ size?: number; color?: string }> | null {
@@ -60,7 +60,7 @@ export default function WalletDetailScreen() {
   const walletId = route.params?.walletId;
   const { wallets, accounts, fetchAccounts, deleteWallet, fetchWallets } = useWalletStore();
 
-  const [detail, setDetail] = useState<Wallet | null>(null);
+  const [detail, setDetail] = useState<SimpleWallet | null>(null);
   const [loading, setLoading] = useState(true);
   const [showHint, setShowHint] = useState(false);
 

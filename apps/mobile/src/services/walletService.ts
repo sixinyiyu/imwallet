@@ -1,10 +1,23 @@
 import api from "./api";
 import { encryptPassword } from "./rsaService";
-import type { Wallet } from "../types";
+import type { Wallet, SimpleWallet, AggregateWallet, WalletBalanceDetail } from "../types";
 
 export const walletService = {
-  async getWallets(): Promise<{ wallets: Wallet[] }> {
+  /** 获取简单钱包列表（不含代币余额） */
+  async getWallets(): Promise<{ wallets: SimpleWallet[] }> {
     const { data } = await api.get("/wallets");
+    return data;
+  },
+
+  /** 获取钱包列表聚合数据（含网络列表，供钱包列表页使用） */
+  async getWalletsAggregate(): Promise<{ wallets: AggregateWallet[] }> {
+    const { data } = await api.get("/wallets/aggregate");
+    return data;
+  },
+
+  /** 获取钱包余额详情（总余额+各代币余额，切换钱包时使用） */
+  async getWalletBalanceDetail(walletId: string): Promise<WalletBalanceDetail> {
+    const { data } = await api.get(`/wallets/${walletId}/balance`);
     return data;
   },
 

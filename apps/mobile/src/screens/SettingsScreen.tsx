@@ -64,18 +64,15 @@ export default function SettingsScreen() {
           </Text>
         </View>
         <TouchableOpacity
-          style={[
-            styles.uploadBtn,
-            (uploading || pendingCount === 0) && styles.uploadBtnDisabled,
-          ]}
           onPress={handleUploadLogs}
           disabled={uploading || pendingCount === 0}
           activeOpacity={0.7}
+          style={styles.uploadLink}
         >
           {uploading ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color="#287220" />
           ) : (
-            <Text style={[styles.uploadBtnText, pendingCount === 0 && styles.uploadBtnTextDisabled]}>
+            <Text style={[styles.uploadLinkText, pendingCount === 0 && styles.uploadLinkTextDisabled]}>
               上传
             </Text>
           )}
@@ -108,16 +105,13 @@ const styles = StyleSheet.create({
   menuLabel: { fontSize: 16, fontWeight: "500", color: "#1F2937" },
   menuValue: { fontSize: 14, color: "#6B7280" },
   menuHint: { fontSize: 12, color: "#9CA3AF", marginTop: 4 },
-  uploadBtn: {
-    backgroundColor: "#287220",
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  uploadLink: {
     marginLeft: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
   },
-  uploadBtnDisabled: { backgroundColor: "#D1D5DB" },
-  uploadBtnText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  uploadBtnTextDisabled: { color: "#9CA3AF" },
+  uploadLinkText: { color: "#287220", fontSize: 15, fontWeight: "500" },
+  uploadLinkTextDisabled: { color: "#D1D5DB" },
   resultRow: {
     backgroundColor: "#fff",
     paddingHorizontal: 16,

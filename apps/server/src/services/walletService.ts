@@ -32,6 +32,29 @@ export interface WalletTokenBalance {
   iconUrl?: string;
 }
 
+/** 简单钱包信息（不含代币余额，供钱包首页下拉列表使用） */
+export interface SimpleWallet {
+  id: string;
+  identifier: string;
+  alias: string;
+  address: string;
+  source: string;
+  accountCount: number;
+  createdAt: Date;
+}
+
+/** 聚合钱包信息（含网络列表，供钱包列表页使用） */
+export interface AggregateWallet extends SimpleWallet {
+  networks: string[];
+}
+
+/** 钱包余额详情（总余额+各代币余额，切换钱包时使用） */
+export interface WalletBalanceDetail {
+  totalBalanceUsd: string;
+  totalBalanceCny: string;
+  tokens: WalletTokenBalance[];
+}
+
 export interface WalletSummary {
   id: string;
   identifier: string;
@@ -321,8 +344,8 @@ export async function resetWalletPassword(
   };
 }
 
-/** 获取设备关联的所有钱包 */
-export async function getDeviceWallets(deviceId: string): Promise<WalletSummary[]> {
+/** 获取设备关联的所有钱包（简化数据，不含代币余额） */
+export async function getDeviceWallets(deviceId: string): Promise<SimpleWallet[]> {
   const device = await prisma.device.findUnique({
     where: { device_id: deviceId },
   });
@@ -342,26 +365,121 @@ export async function getDeviceWallets(deviceId: string): Promise<WalletSummary[
   });
   const walletMap = new Map<string, any>(wallets.map((w: any) => [w.id, w]));
 
-  const walletSummaries: WalletSummary[] = [];
+  // Batch count accounts for all wallets (single query)
+  const accountCounts = await prisma.account.groupBy({
+    by: ["walletId"],
+    where: { walletId: { in: walletIds } },
+    _count: { _all: true },
+  });
+  const accountCountMap = new Map<string, number>(
+    accountCounts.map((ac: any) => [ac.walletId, ac._count._all])
+  );
+
+  const simpleWallets: SimpleWallet[] = [];
   for (const sub of subscriptions) {
     const wallet = walletMap.get(sub.wallet_id);
     if (!wallet) continue;
-    const { tokenBalances, totalBalanceCny } = await computeTokenBalances(wallet.id);
-    const accountCount = await prisma.account.count({ where: { walletId: wallet.id } });
-    walletSummaries.push({
+    simpleWallets.push({
       id: wallet.id,
       identifier: wallet.identifier,
       alias: wallet.alias,
       address: wallet.address,
       source: wallet.source as string,
-      accountCount,
+      accountCount: accountCountMap.get(wallet.id) || 0,
       createdAt: wallet.createdAt,
-      tokenBalances,
-      totalBalanceCny,
     });
   }
 
-  return walletSummaries;
+  return simpleWallets;
+}
+
+/** 获取设备关联的所有钱包（聚合数据：含网络列表，不含代币余额） */
+export async function getDeviceWalletsAggregate(deviceId: string): Promise<AggregateWallet[]> {
+  const device = await prisma.device.findUnique({
+    where: { device_id: deviceId },
+  });
+  if (!device) {
+    throw createError(404, "Device not found", "DEVICE_NOT_FOUND");
+  }
+
+  // Fetch subscriptions and wallets separately (no relation include)
+  const subscriptions = await prisma.walletSubscription.findMany({
+    where: { device_id: device.id },
+    orderBy: { created_at: "desc" },
+  });
+
+  const walletIds = subscriptions.map((sub: any) => sub.wallet_id);
+  const wallets = await prisma.wallet.findMany({
+    where: { id: { in: walletIds } },
+  });
+  const walletMap = new Map<string, any>(wallets.map((w: any) => [w.id, w]));
+
+  // Batch count accounts for all wallets
+  const accountCounts = await prisma.account.groupBy({
+    by: ["walletId"],
+    where: { walletId: { in: walletIds } },
+    _count: { _all: true },
+  });
+  const accountCountMap = new Map<string, number>(
+    accountCounts.map((ac: any) => [ac.walletId, ac._count._all])
+  );
+
+  // Batch fetch all accounts for all wallets (single query)
+  const allAccounts = await prisma.account.findMany({
+    where: { walletId: { in: walletIds } },
+    select: { walletId: true, network: true },
+  });
+  // Group by walletId, deduplicate networks
+  const networksMap = new Map<string, Set<string>>();
+  for (const acc of allAccounts) {
+    const set = networksMap.get(acc.walletId) || new Set<string>();
+    set.add(acc.network);
+    networksMap.set(acc.walletId, set);
+  }
+
+  const aggregateWallets: AggregateWallet[] = [];
+  for (const sub of subscriptions) {
+    const wallet = walletMap.get(sub.wallet_id);
+    if (!wallet) continue;
+    aggregateWallets.push({
+      id: wallet.id,
+      identifier: wallet.identifier,
+      alias: wallet.alias,
+      address: wallet.address,
+      source: wallet.source as string,
+      accountCount: accountCountMap.get(wallet.id) || 0,
+      createdAt: wallet.createdAt,
+      networks: Array.from(networksMap.get(wallet.id) || new Set<string>()),
+    });
+  }
+
+  return aggregateWallets;
+}
+
+/** 获取钱包余额详情（总余额+各代币余额，合并原两个接口） */
+export async function getWalletBalanceDetail(walletId: string): Promise<WalletBalanceDetail> {
+  const wallet = await prisma.wallet.findUnique({
+    where: { id: walletId },
+  });
+  if (!wallet) {
+    throw createError(404, "Wallet not found");
+  }
+
+  const { tokenBalances, totalBalanceCny } = await computeTokenBalances(walletId);
+
+  // Compute total USD value
+  const usdtFiat = await prisma.fiatCurrency.findUnique({ where: { code: "USD" } });
+  const usdRate = usdtFiat ? parseFloat(usdtFiat.rate.toString()) : 1;
+  let totalUsd = 0;
+  for (const tb of tokenBalances) {
+    totalUsd += parseFloat(tb.balance) * usdRate;
+  }
+
+  return {
+    totalBalanceUsd: totalUsd.toFixed(2),
+    totalBalanceCny,
+    tokens: tokenBalances,
+  };
 }
 
 /** 获取钱包详情 */

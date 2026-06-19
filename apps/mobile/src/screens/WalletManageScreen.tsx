@@ -1,11 +1,10 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   FlatList,
   StyleSheet,
-  ActivityIndicator,
   Modal,
   Pressable,
   SafeAreaView,
@@ -15,9 +14,9 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
-import { accountService } from "../services/accountService";
 import { WalletIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import { ChevronRightIcon } from "../components/icons";
+import type { AggregateWallet } from "../types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -70,48 +69,14 @@ export default function WalletManageScreen() {
   const {
     wallets,
     hasFetched,
-    fetchWallets,
+    fetchWalletsAggregate,
     backedUpWallets,
   } = useWalletStore();
   const [showAddWalletDrawer, setShowAddWalletDrawer] = useState(false);
-  /** 每个钱包的网络列表映射 walletId -> string[]（去重） */
-  const [walletNetworksMap, setWalletNetworksMap] = useState<Record<string, string[]>>({});
-  /** 网络数据是否已加载完成 */
-  const [networksLoaded, setNetworksLoaded] = useState(false);
 
   useEffect(() => {
-    fetchWallets();
+    fetchWalletsAggregate();
   }, []);
-
-  /** 批量获取所有钱包的账户网络（去重） */
-  const fetchAllWalletNetworks = useCallback(async (walletIds: string[]) => {
-    if (walletIds.length === 0) {
-      setWalletNetworksMap({});
-      setNetworksLoaded(true);
-      return;
-    }
-    try {
-      const { wallets: batchData } = await accountService.getWalletsNetworksBatch(walletIds);
-      const map: Record<string, string[]> = {};
-      for (const w of batchData) {
-        map[w.walletId] = w.networks;
-      }
-      setWalletNetworksMap(map);
-    } catch {
-      // silent
-    }
-    setNetworksLoaded(true);
-  }, []);
-
-  /** 监听 wallets 变化，批量获取网络 */
-  useEffect(() => {
-    if (wallets.length > 0) {
-      setNetworksLoaded(false);
-      fetchAllWalletNetworks(wallets.map((w) => w.id));
-    } else {
-      setNetworksLoaded(true);
-    }
-  }, [wallets, fetchAllWalletNetworks]);
 
   /** Drawer 弹窗（创建/导入钱包） */
   const renderDrawer = () => (
@@ -214,10 +179,8 @@ export default function WalletManageScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         renderItem={({ item, index }) => {
-          const networks = walletNetworksMap[item.id] || [];
+          const networks = (item as AggregateWallet).networks || [];
           const hasAccounts = networks.length > 0;
-          // 网络数据未加载时，不显示账户区域内容（避免先显示"使用之前先添加账户"再切换）
-          const showNetworks = networksLoaded;
 
           return (
             <View style={styles.walletCard}>
@@ -252,16 +215,16 @@ export default function WalletManageScreen() {
               {/* Actions: 左侧提示/图标 + 右侧添加账户 */}
               <View style={styles.cardActions}>
                 <View style={styles.actionLeft}>
-                  {showNetworks && hasAccounts ? (
+                  {hasAccounts ? (
                     <View style={styles.iconRow}>
                       {networks.map((network, i) => {
                         const IconComp = getNetworkIcon(network);
                         return IconComp ? <IconComp key={i} size={20} /> : null;
                       })}
                     </View>
-                  ) : showNetworks && !hasAccounts ? (
+                  ) : (
                     <Text style={styles.noAccountHint}>使用之前，先添加账户</Text>
-                  ) : null}
+                  )}
                 </View>
                 <TouchableOpacity
                   onPress={() => navigation.navigate("WalletAddAccount", { walletId: item.id })}
