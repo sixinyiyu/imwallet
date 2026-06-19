@@ -39,7 +39,6 @@ export default function TransferScreen() {
   const route = useRoute<RouteType>();
   const { activeWallet, tokens } = useWalletStore();
   const [selectedToken, setSelectedToken] = useState<TokenBalance | null>(null);
-  const [showTokenPicker, setShowTokenPicker] = useState(false);
 
   // 初始化选中代币：优先匹配路由传入的 tokenSymbol
   useEffect(() => {
@@ -315,7 +314,7 @@ export default function TransferScreen() {
           <View style={z.addressInputWrap}>
             <TextInput
               style={[z.addressInput, addressValid && z.inputValid]}
-              placeholder="输入钱包地址"
+              placeholder="请输入链上地址"
               value={toAddress}
               onChangeText={setToAddress}
               autoCapitalize="characters"
@@ -363,9 +362,9 @@ export default function TransferScreen() {
         </View>
         <View style={z.tokenCard}>
           <View style={z.tokenHeader}>
-            <TouchableOpacity style={z.tokenBadge} onPress={() => setShowTokenPicker(true)}>
-              <Text style={z.tokenBadgeText}>{selectedToken?.symbol || "USDT"} ▼</Text>
-            </TouchableOpacity>
+            <View style={z.tokenBadge}>
+              <Text style={z.tokenBadgeText}>{selectedToken?.symbol || "USDT"}</Text>
+            </View>
             <View style={z.modeSwitch}>
               <TouchableOpacity
                 style={[z.modeBtn, mode === "amount" && z.modeBtnActive]}
@@ -502,42 +501,6 @@ export default function TransferScreen() {
         </View>
       </Modal>
 
-      {/* ── 代币选择 ── */}
-      <Modal visible={showTokenPicker} transparent animationType="fade">
-        <View style={z.modalOverlay}>
-          <View style={z.pickerCard}>
-            <Text style={z.pickerTitle}>选择代币</Text>
-            <FlatList
-              data={tokens}
-              keyExtractor={(item) => item.symbol}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[z.contactItem, item.symbol === selectedToken?.symbol && { backgroundColor: "#E8F5E9" }]}
-                  onPress={() => {
-                    setSelectedToken(item);
-                    setShowTokenPicker(false);
-                  }}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={z.contactName}>{item.symbol} - {item.name}</Text>
-                    <Text style={z.contactAddr}>余额: {item.balance}</Text>
-                  </View>
-                  {item.symbol === selectedToken?.symbol && (
-                    <Text style={{ color: "#287220", fontWeight: "600" }}>✓</Text>
-                  )}
-                </TouchableOpacity>
-              )}
-              style={{ maxHeight: 300 }}
-            />
-            <TouchableOpacity
-              style={z.pickerCancelBtn}
-              onPress={() => setShowTokenPicker(false)}
-            >
-              <Text style={z.modalCancelText}>取消</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* ── 确认弹窗 ── */}
       <Modal visible={showConfirm} transparent animationType="fade">
