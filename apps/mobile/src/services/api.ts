@@ -5,6 +5,7 @@ import Constants from "expo-constants";
 import "react-native-get-random-values";
 import * as ed25519 from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
+import { uploadLog } from "./logService";
 
 // ===== Configure SHA-512 for @noble/ed25519 v3 =====
 // v3 requires hashes.sha512 to be set before calling sync methods (getPublicKey, sign, etc.)
@@ -21,8 +22,6 @@ const BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ||
   Constants.expoConfig?.extra?.apiBaseUrl ||
   "https://imwallet.dpdns.org/api/v1";
-
-console.log("🔗 API_BASE_URL:", BASE_URL);
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -107,10 +106,9 @@ export async function ensureDeviceKeys(): Promise<{ publicKeyHex: string; privat
     const keys = await generateKeyPair();
     await SecureStore.setItemAsync(DEVICE_PRIV_JWK, keys.privateKeyHex);
     await SecureStore.setItemAsync(DEVICE_PUBLIC_KEY, keys.publicKeyHex);
-    console.log("🔑 设备密钥对已生成:", keys.publicKeyHex.slice(0, 8) + "...");
     return { publicKeyHex: keys.publicKeyHex, privateKeyHex: keys.privateKeyHex };
   } catch (err) {
-    console.error("❌ 生成设备密钥对失败:", err);
+    uploadLog("business", `[Device] generateKeyPair failed: ${(err as Error)?.message || String(err)}`);
     return null;
   }
 }
@@ -132,12 +130,11 @@ export async function ensureDeviceRegistered(publicKeyHex: string): Promise<void
       currency: "CNY",
     });
     await SecureStore.setItemAsync(DEVICE_REGISTERED, "true");
-    console.log("✅ 设备已注册:", publicKeyHex.slice(0, 8) + "...");
   } catch (err: any) {
     if (err.response?.status === 409) {
       await SecureStore.setItemAsync(DEVICE_REGISTERED, "true");
     } else {
-      console.error("❌ 设备注册失败:", err.message);
+      uploadLog("business", `[Device] register failed: ${err.message}, status=${err.response?.status}`);
     }
   }
 }

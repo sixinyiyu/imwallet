@@ -4,14 +4,13 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationContainer } from "@react-navigation/native";
 import { View, Text, StyleSheet, ScrollView, Platform } from "react-native";
 import { RootStack } from "./src/navigation/RootStack";
+import { uploadLog } from "./src/services/logService";
 
 // ─── Global error handlers: capture uncaught JS errors before they crash the app ───
 
-// Store the last error for display
 let lastGlobalError: { message: string; stack?: string } | null = null;
 
 if (Platform.OS !== "web") {
-  // Capture unhandled promise rejections
   const g = global as any;
   const originalHandler = g.ErrorUtils?.getGlobalHandler?.();
   if (g.ErrorUtils) {
@@ -20,8 +19,8 @@ if (Platform.OS !== "web") {
         message: error?.message || String(error),
         stack: error?.stack,
       };
-      console.error("🔴 [GlobalErrorHandler]", isFatal ? "FATAL" : "ERROR", error?.message, error?.stack);
-      // Call original handler to maintain default behavior
+      // Upload crash log to server (fire-and-forget)
+      uploadLog("crash", `[${isFatal ? "FATAL" : "ERROR"}] ${error?.message || String(error)}\n${error?.stack || ""}`);
       if (originalHandler) {
         originalHandler(error, isFatal);
       }
@@ -52,7 +51,8 @@ class AppErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error("🔴 [ErrorBoundary]", error?.message, error?.stack, info?.componentStack);
+    // Upload crash log to server (fire-and-forget)
+    uploadLog("crash", `${error?.message || "Unknown error"}\n${error?.stack || ""}\n${info?.componentStack || ""}`);
   }
 
   handleRestart = () => {
@@ -130,7 +130,6 @@ const errorStyles = StyleSheet.create({
 // ─── App Component ───
 
 export default function App() {
-  // Web端：禁止页面滚动和左右滑动
   useEffect(() => {
     if (typeof document !== "undefined") {
       document.title = "AquaD";

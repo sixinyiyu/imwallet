@@ -266,3 +266,22 @@ model NotificationRead {
   @@unique([notification_id, device_id])
   @@map("notification_reads")
 }
+
+/// App日志表：存储客户端崩溃日志和关键业务失败日志
+model AppLog {
+  id         Int      @id @default(autoincrement())
+  /// 设备标识（Ed25519公钥hex，崩溃时可能为空）
+  device_id  String?  @db.VarChar(64)
+  /// 平台：ios/android/web
+  platform   String?  @db.VarChar(16)
+  /// App版本号
+  version    String?  @db.VarChar(32)
+  /// 日志类型：crash=崩溃, business=关键业务失败
+  log_type   String   @db.VarChar(32)
+  /// 日志内容（错误消息、堆栈等）
+  content    String   @db.Text
+  /// 创建时间
+  created_at DateTime @default(now()) @map("created_at")
+
+  @@map("app_logs")
+}

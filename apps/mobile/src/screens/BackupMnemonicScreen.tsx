@@ -12,6 +12,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import * as SecureStore from "../utils/secureStorage";
 import { generateMnemonic } from "../utils/mnemonic";
+import { uploadLog } from "../services/logService";
 import { CameraIcon, NoScreenshotIcon } from "../components/icons";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "BackupMnemonic">;
@@ -58,7 +59,6 @@ export default function BackupMnemonicScreen() {
     try {
       const key = mnemonicKey(walletId);
       let stored = await SecureStore.getItemAsync(key);
-      console.log("🔑 [BackupMnemonic] SecureStore read", key, stored ? `length=${stored.length}` : "null");
 
       // Migration: check legacy key if per-wallet key not found
       if (!stored) {
@@ -77,25 +77,24 @@ export default function BackupMnemonicScreen() {
       // Validate word count
       if (stored) {
         const words = stored.trim().split(/\s+/);
-        console.log("🔑 [BackupMnemonic] word count", words.length);
         if (words.length !== 12) {
-          console.warn("⚠️ [BackupMnemonic] invalid word count", words.length, "expected 12");
+          uploadLog("business", `[BackupMnemonic] invalid mnemonic word count: ${words.length}, expected 12, walletId=${walletId}`);
           stored = null; // invalid, will regenerate below
         }
       }
 
       if (!stored) {
-        console.log("🔑 [BackupMnemonic] no stored mnemonic, generating new one");
         stored = await generateMnemonic();
-        console.log("🔑 [BackupMnemonic] generated mnemonic", stored ? `length=${stored.length} words=${stored.trim().split(/\s+/).length}` : "null");
+        if (!stored) {
+          uploadLog("business", `[BackupMnemonic] generateMnemonic returned null/empty, walletId=${walletId}`);
+        }
         await SecureStore.setItemAsync(key, stored);
       }
 
       const finalWords = stored.trim().split(/\s+/);
-      console.log("🔑 [BackupMnemonic] final words count", finalWords.length);
       setMnemonic(finalWords);
     } catch (err) {
-      console.error("❌ [BackupMnemonic] loadMnemonic failed", err);
+      uploadLog("business", `[BackupMnemonic] loadMnemonic failed: ${(err as Error)?.message || String(err)}, walletId=${walletId}`);
       setNoMnemonic(true);
     }
   };
@@ -127,7 +126,7 @@ export default function BackupMnemonicScreen() {
         <View style={styles.noMnemonicContent}>
           <Text style={styles.noMnemonicTitle}>暂无助记词</Text>
           <Text style={styles.noMnemonicDesc}>
-            该钱包通过密码方式创建，暂无本地助记词可备份。
+            "该钱包通过密码方式创建，暂无本地助记词可备份。"
           </Text>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
             <Text style={styles.backBtnText}>返回</Text>
@@ -141,6 +140,8 @@ export default function BackupMnemonicScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>备份助记词</Text>
       <Text style={styles.subtitle}>请按顺序抄写助记词，确保备份正确</Text>
+      {/* Debug: show word count for troubleshooting */}
+      {mnemonic.length === 0 && <Text style={{ color: "#EF4444", fontSize: 12, marginBottom: 8 }}>⚠️ 助记词为空，walletId={walletId}</Text>}
 
       {!showMnemonic ? (
         <View style={styles.hiddenSection}>

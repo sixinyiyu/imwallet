@@ -13,6 +13,7 @@ import rsaRoutes from "./routes/rsa";
 import configRoutes from "./routes/config";
 import accountRoutes from "./routes/account";
 import notificationRoutes from "./routes/notification";
+import logRoutes from "./routes/log";
 import { initRSAKeys } from "./services/rsaService";
 import { runMigrations } from "./services/migrator";
 import { runSeed } from "./services/seedService";
@@ -53,6 +54,7 @@ app.use("/api/v1/rsa", rsaRoutes);
 app.use("/api/v1/config", configRoutes);
 app.use("/api/v1/accounts", accountRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
+app.use("/api/v1/logs", logRoutes);
 
 // Error handler
 app.use(errorHandler);
