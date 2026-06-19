@@ -366,14 +366,9 @@ export default function TransferScreen() {
         </View>
         <View style={z.tokenCard}>
           <View style={z.tokenHeader}>
-            {detectedNetwork && (
-              <View style={z.tokenBadge}>
-                {detectedNetwork === "Tron" && <TronIcon size={14} />}
-                {detectedNetwork === "Ethereum" && <EthIcon size={14} />}
-                {detectedNetwork === "Bitcoin" && <BtcIcon size={14} />}
-                <Text style={z.tokenBadgeText}>{selectedToken?.symbol || "USDT"}</Text>
-              </View>
-            )}
+            {detectedNetwork === "Tron" && <View style={{ paddingLeft: 14 }}><TronIcon size={20} /></View>}
+            {detectedNetwork === "Ethereum" && <View style={{ paddingLeft: 14 }}><EthIcon size={20} /></View>}
+            {detectedNetwork === "Bitcoin" && <View style={{ paddingLeft: 14 }}><BtcIcon size={20} /></View>}
             <View style={z.modeSwitch}>
               <TouchableOpacity
                 style={[z.modeBtn, mode === "amount" && z.modeBtnActive]}
