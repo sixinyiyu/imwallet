@@ -23,7 +23,7 @@ import { transactionService } from "../services/transactionService";
 import { contactService } from "../services/contactService";
 import { configService } from "../services/configService";
 import type { FeeConfig } from "../services/configService";
-import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon } from "../components/icons";
+import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import type { Contact, TokenBalance } from "../types";
 import { detectNetwork, isValidAddressFormat } from "../utils/address";
 
@@ -368,7 +368,10 @@ export default function TransferScreen() {
           <View style={z.tokenHeader}>
             {detectedNetwork && (
               <View style={z.tokenBadge}>
-                <Text style={z.tokenBadgeText}>{selectedToken?.symbol || "USDT"} · {detectedNetwork}</Text>
+                {detectedNetwork === "Tron" && <TronIcon size={14} />}
+                {detectedNetwork === "Ethereum" && <EthIcon size={14} />}
+                {detectedNetwork === "Bitcoin" && <BtcIcon size={14} />}
+                <Text style={z.tokenBadgeText}>{selectedToken?.symbol || "USDT"}</Text>
               </View>
             )}
             <View style={z.modeSwitch}>
