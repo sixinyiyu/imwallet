@@ -370,10 +370,10 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   contactIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    flexDirection: "row",
     alignItems: "center",
+    gap: 4,
+    width: 36,
     justifyContent: "center",
     marginRight: 12,
   },
