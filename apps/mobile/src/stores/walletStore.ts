@@ -195,12 +195,14 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   /** Create wallet — generates mnemonic locally, creates on server */
   createWallet: async (alias: string, password: string, passwordHint?: string): Promise<string> => {
     const mnemonic = await generateMnemonic();
+    console.log("🔑 [createWallet] mnemonic generated, words:", mnemonic.trim().split(/\s+/).length);
 
     // Create wallet on server with mnemonic for deterministic derivation
     const wallet = await walletService.saveWallet("CREATE", alias, password, passwordHint, mnemonic);
 
     // Store mnemonic per walletId
     await SecureStore.setItemAsync(mnemonicKey(wallet.id), mnemonic);
+    console.log("🔑 [createWallet] mnemonic stored for wallet", wallet.id);
 
     set({
       mnemonic,

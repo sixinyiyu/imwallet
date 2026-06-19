@@ -58,6 +58,7 @@ export default function BackupMnemonicScreen() {
     try {
       const key = mnemonicKey(walletId);
       let stored = await SecureStore.getItemAsync(key);
+      console.log("🔑 [BackupMnemonic] SecureStore read", key, stored ? `length=${stored.length}` : "null");
 
       // Migration: check legacy key if per-wallet key not found
       if (!stored) {
@@ -76,18 +77,25 @@ export default function BackupMnemonicScreen() {
       // Validate word count
       if (stored) {
         const words = stored.trim().split(/\s+/);
+        console.log("🔑 [BackupMnemonic] word count", words.length);
         if (words.length !== 12) {
+          console.warn("⚠️ [BackupMnemonic] invalid word count", words.length, "expected 12");
           stored = null; // invalid, will regenerate below
         }
       }
 
       if (!stored) {
+        console.log("🔑 [BackupMnemonic] no stored mnemonic, generating new one");
         stored = await generateMnemonic();
+        console.log("🔑 [BackupMnemonic] generated mnemonic", stored ? `length=${stored.length} words=${stored.trim().split(/\s+/).length}` : "null");
         await SecureStore.setItemAsync(key, stored);
       }
 
-      setMnemonic(stored.trim().split(/\s+/));
-    } catch {
+      const finalWords = stored.trim().split(/\s+/);
+      console.log("🔑 [BackupMnemonic] final words count", finalWords.length);
+      setMnemonic(finalWords);
+    } catch (err) {
+      console.error("❌ [BackupMnemonic] loadMnemonic failed", err);
       setNoMnemonic(true);
     }
   };
