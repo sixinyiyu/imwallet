@@ -245,8 +245,10 @@ model Contact {
   device_id Int
   /// 联系人名称
   name      String   @db.VarChar(64)
-  /// 钱包地址
-  address   String   @db.VarChar(42)
+  /// 链上地址（Account.address，如 T.../0x.../1...）
+  address   String   @db.VarChar(64)
+  /// 链类型（TRON/EVM/BTC 等）
+  network   String   @db.VarChar(64)
   /// 备注
   memo      String   @default("") @db.VarChar(256)
   createdAt DateTime @default(now()) @map("created_at")

@@ -167,6 +167,7 @@ export default function TransferScreen() {
       await contactService.createContact({
         name: contactName,
         address: toAddress.trim(),
+        network: "TRON",
       });
       setAddressInContacts(true);
       const list = await contactService.getContacts();
@@ -295,37 +296,6 @@ export default function TransferScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Contact Picker Modal */}
-        <Modal visible={showContactPicker} transparent animationType="fade">
-          <View style={z.modalOverlay}>
-            <View style={z.modalCard}>
-              <Text style={z.modalTitle}>选择联系人</Text>
-              <FlatList
-                data={contacts}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <TouchableOpacity style={[z.contactItem, item.address.toLowerCase() === toAddress.trim().toLowerCase() && z.contactItemActive]} onPress={() => selectContact(item)}>
-                    <Text style={z.contactName}>{item.name}</Text>
-                    <Text style={z.contactAddr}>
-                      {item.address.slice(0, 12)}...{item.address.slice(-8)}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={
-                  <Text style={{ color: "#9CA3AF", textAlign: "center", padding: 20 }}>
-                    暂无联系人
-                  </Text>
-                }
-              />
-              <TouchableOpacity
-                style={z.modalCancelBtn}
-                onPress={() => setShowContactPicker(false)}
-              >
-                <Text style={z.modalCancelText}>取消</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
       </View>
     );
   }
@@ -503,7 +473,12 @@ export default function TransferScreen() {
                     <Text style={z.contactAvatarText}>👤</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={z.contactName}>{item.name}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={z.contactName}>{item.name}</Text>
+                      <View style={{ backgroundColor: "#DBEAFE", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
+                        <Text style={{ fontSize: 10, color: "#3B82F6", fontWeight: "500" }}>{item.network}</Text>
+                      </View>
+                    </View>
                     <Text style={z.contactAddr}>
                       {item.address.slice(0, 14)}...{item.address.slice(-8)}
                     </Text>

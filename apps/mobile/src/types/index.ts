@@ -114,6 +114,7 @@ export interface Contact {
   id: string;
   name: string;
   address: string;
+  network: string;
   memo: string | null;
 }
 

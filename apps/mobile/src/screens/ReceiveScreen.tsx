@@ -18,8 +18,10 @@ function renderTokenIcon(symbol: string, size: number) {
 
 export default function ReceiveScreen() {
   const route = useRoute<ReceiveRouteProp>();
-  const { activeWallet, tokens } = useWalletStore();
-  const address = activeWallet?.address ?? "";
+  const { activeWallet, activeAccount, tokens } = useWalletStore();
+  // 使用 Account.address（链上地址）而非 Wallet.address（内部标识）
+  const address = activeAccount?.address ?? "";
+  const network = activeAccount?.network ?? "";
   const qrWrapperRef = useRef<View>(null);
 
   const tokenSymbol = route.params?.tokenSymbol || "USDT";
@@ -36,14 +38,14 @@ export default function ReceiveScreen() {
 
   const qrValue = useMemo(() => {
     if (!address) return "";
-    return `aquad://transfer?address=${address}&token=${currentToken.symbol}`;
-  }, [address, currentToken.symbol]);
+    return `aquad://transfer?address=${address}&token=${currentToken.symbol}&network=${network}`;
+  }, [address, currentToken.symbol, network]);
 
   const handleCopy = () => {
     if (address) {
       const Clipboard = require("expo-clipboard");
       Clipboard.setStringAsync(address);
-      Alert.alert("已复制", "收款地址已复制到剪贴板");
+      Alert.alert("已复制", `${network} 收款地址已复制到剪贴板`);
     }
   };
 
@@ -63,7 +65,7 @@ export default function ReceiveScreen() {
         });
       } else {
         const { Share } = require("react-native");
-        await Share.share({ message: `${currentToken.symbol} 收款地址: ${address}` });
+        await Share.share({ message: `${currentToken.symbol} (${network}) 收款地址: ${address}` });
       }
     } catch (err: any) {
       Alert.alert("分享失败", err.message || "请尝试复制地址后手动分享");
@@ -72,12 +74,17 @@ export default function ReceiveScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 代币 icon + 名称 */}
+      {/* 代币 icon + 名称 + network */}
       <View style={styles.tokenHeader}>
         <View style={styles.tokenIconWrap}>
           {renderTokenIcon(currentToken.symbol, 36)}
         </View>
-        <Text style={styles.tokenName}>{currentToken.symbol}</Text>
+        <View style={styles.tokenNameRow}>
+          <Text style={styles.tokenName}>{currentToken.symbol}</Text>
+          <View style={styles.networkBadge}>
+            <Text style={styles.networkBadgeText}>{network}</Text>
+          </View>
+        </View>
       </View>
 
       {/* QR Code */}
@@ -90,7 +97,7 @@ export default function ReceiveScreen() {
               color="#1F2937"
               backgroundColor="#FFFFFF"
             />
-            <Text style={styles.qrAddressLabel}>钱包地址</Text>
+            <Text style={styles.qrAddressLabel}>{network} 收款地址</Text>
             <Text style={styles.qrAddress} selectable adjustsFontSizeToFit numberOfLines={1}>
               {address}
             </Text>
@@ -144,10 +151,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 10,
   },
+  tokenNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   tokenName: {
     fontSize: 20,
     fontWeight: "700",
     color: "#1F2937",
+  },
+  networkBadge: {
+    backgroundColor: "#DBEAFE",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  networkBadgeText: {
+    fontSize: 11,
+    color: "#3B82F6",
+    fontWeight: "500",
   },
   qrContainer: { alignItems: "center" },
   qrWrapper: {

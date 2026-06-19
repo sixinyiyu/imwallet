@@ -17,6 +17,14 @@ import EmptyState from "../components/EmptyState";
 /** 联系人表单模式：新增 / 编辑 */
 type FormMode = "add" | "edit";
 
+/** 支持的链类型 */
+const NETWORK_OPTIONS = ["TRON", "EVM", "BTC"];
+const NETWORK_LABELS: Record<string, string> = {
+  TRON: "TRON",
+  EVM: "EVM (Ethereum)",
+  BTC: "Bitcoin",
+};
+
 export default function AddressBookScreen() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(false);
@@ -27,6 +35,7 @@ export default function AddressBookScreen() {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [formName, setFormName] = useState("");
   const [formAddress, setFormAddress] = useState("");
+  const [formNetwork, setFormNetwork] = useState("TRON");
   const [formMemo, setFormMemo] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -51,6 +60,7 @@ export default function AddressBookScreen() {
     setEditingContact(null);
     setFormName("");
     setFormAddress("");
+    setFormNetwork("TRON");
     setFormMemo("");
     setFormVisible(true);
   };
@@ -61,6 +71,7 @@ export default function AddressBookScreen() {
     setEditingContact(contact);
     setFormName(contact.name);
     setFormAddress(contact.address);
+    setFormNetwork(contact.network || "TRON");
     setFormMemo(contact.memo || "");
     setFormVisible(true);
   };
@@ -70,6 +81,7 @@ export default function AddressBookScreen() {
     setFormVisible(false);
     setFormName("");
     setFormAddress("");
+    setFormNetwork("TRON");
     setFormMemo("");
     setEditingContact(null);
   };
@@ -86,6 +98,7 @@ export default function AddressBookScreen() {
         await contactService.createContact({
           name: formName.trim(),
           address: formAddress.trim(),
+          network: formNetwork,
           memo: formMemo.trim() || undefined,
         });
         Alert.alert("成功", "联系人已添加");
@@ -93,6 +106,7 @@ export default function AddressBookScreen() {
         await contactService.updateContact(editingContact.id, {
           name: formName.trim(),
           address: formAddress.trim(),
+          network: formNetwork,
           memo: formMemo.trim() || undefined,
         });
         Alert.alert("成功", "联系人已更新");
@@ -152,7 +166,12 @@ export default function AddressBookScreen() {
               <Text style={styles.contactIcon}>👤</Text>
             </View>
             <View style={styles.contactInfo}>
-              <Text style={styles.contactName}>{item.name}</Text>
+              <View style={styles.contactNameRow}>
+                <Text style={styles.contactName}>{item.name}</Text>
+                <View style={styles.networkBadge}>
+                  <Text style={styles.networkBadgeText}>{item.network}</Text>
+                </View>
+              </View>
               <Text style={styles.contactAddress}>
                 {item.address.length > 22
                   ? `${item.address.slice(0, 14)}...${item.address.slice(-8)}`
@@ -193,55 +212,78 @@ export default function AddressBookScreen() {
         transparent={true}
         onRequestClose={closeForm}
       >
-        <View style={modal.overlay}>
-          <View style={modal.card}>
-            <Text style={modal.title}>
+        <View style={modalStyles.overlay}>
+          <View style={modalStyles.card}>
+            <Text style={modalStyles.title}>
               {formMode === "add" ? "添加联系人" : "编辑联系人"}
             </Text>
 
-            <Text style={modal.label}>联系人名称</Text>
+            <Text style={modalStyles.label}>联系人名称</Text>
             <TextInput
-              style={modal.input}
+              style={modalStyles.input}
               placeholder="请输入名称"
               value={formName}
               onChangeText={setFormName}
             />
 
-            <Text style={modal.label}>钱包地址</Text>
+            <Text style={modalStyles.label}>链类型</Text>
+            <View style={modalStyles.networkRow}>
+              {NETWORK_OPTIONS.map((net) => (
+                <TouchableOpacity
+                  key={net}
+                  style={[
+                    modalStyles.networkOption,
+                    formNetwork === net && modalStyles.networkOptionActive,
+                  ]}
+                  onPress={() => setFormNetwork(net)}
+                >
+                  <Text
+                    style={[
+                      modalStyles.networkOptionText,
+                      formNetwork === net && modalStyles.networkOptionTextActive,
+                    ]}
+                  >
+                    {NETWORK_LABELS[net]}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={modalStyles.label}>链上地址</Text>
             <TextInput
-              style={modal.input}
-              placeholder="请输入钱包地址"
+              style={modalStyles.input}
+              placeholder="请输入链上地址 (如 T.../0x.../1...)"
               value={formAddress}
               onChangeText={setFormAddress}
               autoCapitalize="none"
               autoCorrect={false}
             />
 
-            <Text style={modal.label}>备注 (可选)</Text>
+            <Text style={modalStyles.label}>备注 (可选)</Text>
             <TextInput
-              style={modal.input}
+              style={modalStyles.input}
               placeholder="备注信息"
               value={formMemo}
               onChangeText={setFormMemo}
             />
 
-            <View style={modal.buttonRow}>
+            <View style={modalStyles.buttonRow}>
               <TouchableOpacity
-                style={modal.cancelBtn}
+                style={modalStyles.cancelBtn}
                 onPress={closeForm}
                 disabled={submitting}
               >
-                <Text style={modal.cancelBtnText}>取消</Text>
+                <Text style={modalStyles.cancelBtnText}>取消</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[modal.submitBtn, submitting && modal.submitBtnDisabled]}
+                style={[modalStyles.submitBtn, submitting && modalStyles.submitBtnDisabled]}
                 onPress={handleSubmit}
                 disabled={submitting}
               >
                 {submitting ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <Text style={modal.submitBtnText}>
+                  <Text style={modalStyles.submitBtnText}>
                     {formMode === "add" ? "添加" : "保存"}
                   </Text>
                 )}
@@ -290,7 +332,23 @@ const styles = StyleSheet.create({
   },
   contactIcon: { fontSize: 18 },
   contactInfo: { flex: 1 },
+  contactNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   contactName: { fontSize: 16, fontWeight: "600", color: "#1F2937" },
+  networkBadge: {
+    backgroundColor: "#DBEAFE",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  networkBadgeText: {
+    fontSize: 11,
+    color: "#3B82F6",
+    fontWeight: "500",
+  },
   contactAddress: {
     fontSize: 12,
     color: "#6B7280",
@@ -313,24 +371,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   deleteBtnText: { color: "#EF4444", fontWeight: "500", fontSize: 13 },
-  centerEmpty: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 80,
-  },
   emptyList: { flexGrow: 1 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
-  emptyText: { fontSize: 15, color: "#9CA3AF", textAlign: "center" },
-  emptyHint: {
-    fontSize: 13,
-    color: "#D1D5DB",
-    textAlign: "center",
-    marginTop: 8,
-  },
 });
 
-const modal = StyleSheet.create({
+const modalStyles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -364,6 +408,32 @@ const modal = StyleSheet.create({
     fontSize: 15,
     marginBottom: 16,
     color: "#1F2937",
+  },
+  networkRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+  networkOption: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    padding: 10,
+    alignItems: "center",
+  },
+  networkOptionActive: {
+    borderColor: "#287220",
+    backgroundColor: "#E8F5E9",
+  },
+  networkOptionText: {
+    fontSize: 13,
+    color: "#6B7280",
+    fontWeight: "500",
+  },
+  networkOptionTextActive: {
+    color: "#287220",
+    fontWeight: "600",
   },
   buttonRow: {
     flexDirection: "row",

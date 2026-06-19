@@ -5,6 +5,7 @@ import { logger } from "../utils/logger";
 export interface ContactInput {
   name: string;
   address: string;
+  network: string;
   memo?: string;
 }
 
@@ -12,6 +13,7 @@ export interface ContactResult {
   id: string;
   name: string;
   address: string;
+  network: string;
   memo: string;
   createdAt: Date;
   updatedAt: Date;
@@ -28,6 +30,7 @@ export async function getDeviceContacts(deviceDbId: number): Promise<ContactResu
     id: c.id,
     name: c.name,
     address: c.address,
+    network: c.network,
     memo: c.memo,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
@@ -36,13 +39,14 @@ export async function getDeviceContacts(deviceDbId: number): Promise<ContactResu
 
 /** 创建联系人 */
 export async function createContact(deviceDbId: number, input: ContactInput): Promise<ContactResult> {
-  logger.info("CONTACT", `创建联系人: device_id=${deviceDbId}, name=${input.name}`);
+  logger.info("CONTACT", `创建联系人: device_id=${deviceDbId}, name=${input.name}, network=${input.network}`);
 
   const contact = await prisma.contact.create({
     data: {
       device_id: deviceDbId,
       name: input.name,
       address: input.address,
+      network: input.network,
       memo: input.memo || "",
     },
   });
@@ -51,6 +55,7 @@ export async function createContact(deviceDbId: number, input: ContactInput): Pr
     id: contact.id,
     name: contact.name,
     address: contact.address,
+    network: contact.network,
     memo: contact.memo,
     createdAt: contact.createdAt,
     updatedAt: contact.updatedAt,
@@ -76,6 +81,7 @@ export async function updateContact(
     data: {
       name: input.name,
       address: input.address,
+      network: input.network,
       memo: input.memo,
     },
   });
@@ -84,6 +90,7 @@ export async function updateContact(
     id: updated.id,
     name: updated.name,
     address: updated.address,
+    network: updated.network,
     memo: updated.memo,
     createdAt: updated.createdAt,
     updatedAt: updated.updatedAt,

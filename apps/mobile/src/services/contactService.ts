@@ -18,6 +18,7 @@ export const contactService = {
   async createContact(contact: {
     name: string;
     address: string;
+    network: string;
     memo?: string;
   }): Promise<Contact> {
     const { data } = await api.post("/contacts", contact);
@@ -26,7 +27,7 @@ export const contactService = {
 
   async updateContact(
     id: string,
-    contact: { name?: string; address?: string; memo?: string }
+    contact: { name?: string; address?: string; network?: string; memo?: string }
   ): Promise<Contact> {
     const { data } = await api.put(`/contacts/${id}`, contact);
     return data;
