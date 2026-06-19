@@ -77,12 +77,14 @@ export default function ReceiveScreen() {
     <View style={styles.container}>
       {/* 代币 icon + 名称 + network */}
       <View style={styles.tokenHeader}>
-        <View style={styles.tokenIconWrap}>
-          {renderNetworkIcon(network, 36) || <View style={styles.tokenIconPlaceholder} />}
-        </View>
+        {renderNetworkIcon(network, 36) && (
+          <View style={styles.tokenIconWrap}>
+            {renderNetworkIcon(network, 36)}
+          </View>
+        )}
         <View style={styles.tokenNameRow}>
           <Text style={styles.tokenName}>{currentToken.symbol}</Text>
-          {network && renderNetworkIcon(network, 0) !== null && (
+          {renderNetworkIcon(network, 0) && (
             <View style={styles.networkBadge}>
               <Text style={styles.networkBadgeText}>{network}</Text>
             </View>
@@ -154,12 +156,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 10,
   },
-  tokenIconPlaceholder: {
-    width: 36,
-    height: 36,
-  },
   tokenNameRow: {
-    flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
