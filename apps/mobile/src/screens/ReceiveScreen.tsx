@@ -1,11 +1,10 @@
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useState, useCallback } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import QRCode from "react-native-qrcode-svg";
 import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import { useWalletStore } from "../stores/walletStore";
-import { useAlert } from "../hooks/useAlert";
 import { ReceiveSkeleton } from "../components/Skeleton";
 import { saveLogToLocal } from "../services/logService";
 import { CopyIcon, ShareIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
@@ -21,13 +20,21 @@ function renderNetworkIcon(network: string, size: number) {
 }
 
 export default function ReceiveScreen() {
-  const alert = useAlert();
   const route = useRoute<ReceiveRouteProp>();
   const { activeWallet, activeAccount, tokens } = useWalletStore();
   // 使用 Account.address（链上地址）而非 Wallet.address（内部标识）
   const address = activeAccount?.address ?? "";
   const network = activeAccount?.network ?? "";
   const qrWrapperRef = useRef<View>(null);
+
+  // Toast state
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMsg, setToastMsg] = useState("");
+  const showToast = useCallback((msg: string) => {
+    setToastMsg(msg);
+    setToastVisible(true);
+    setTimeout(() => setToastVisible(false), 2000);
+  }, []);
 
   // Show skeleton while wallet/account data is loading
   if (!address) {
@@ -56,10 +63,10 @@ export default function ReceiveScreen() {
       try {
         const Clipboard = require("expo-clipboard");
         Clipboard.setStringAsync(address);
-        alert("已复制", `${network} 收款地址已复制到剪贴板`);
+        showToast("地址已复制");
       } catch (err: any) {
         saveLogToLocal("crash", `[Receive] handleCopy failed: ${err?.message || String(err)}`);
-        alert("复制失败", "请手动复制地址");
+        showToast("复制失败");
       }
     }
   };
@@ -83,8 +90,7 @@ export default function ReceiveScreen() {
         await Share.share({ message: `${currentToken.symbol} (${network}) 收款地址: ${address}` });
       }
     } catch (err: any) {
-      alert("分享失败", err.message || "请尝试复制地址后手动分享");
-    }
+        showToast("分享失败: " + (err.message || "请稍后重试"));    }
   };
 
   return (
@@ -150,6 +156,15 @@ export default function ReceiveScreen() {
           仅支持当前网络地址，请确认对方网络一致，否则资产可能丢失
         </Text>
       </View>
+
+      {/* Toast */}
+      {toastVisible && (
+        <View style={styles.toastWrap} pointerEvents="none">
+          <View style={styles.toast}>
+            <Text style={styles.toastText}>{toastMsg}</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -243,4 +258,7 @@ const styles = StyleSheet.create({
   },
   warningIcon: { fontSize: 18, marginRight: 10, marginTop: 1 },
   warningText: { flex: 1, fontSize: 13, color: "#92400E", lineHeight: 20 },
+  toastWrap: { position: "absolute", bottom: 80, left: 0, right: 0, alignItems: "center" },
+  toast: { backgroundColor: "rgba(0,0,0,0.75)", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
+  toastText: { color: "#FFFFFF", fontSize: 14 },
 });
