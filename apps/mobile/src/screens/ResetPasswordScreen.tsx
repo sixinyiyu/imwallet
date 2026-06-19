@@ -18,7 +18,6 @@ import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { validateMnemonic, cleanMnemonic, validateMnemonicWords, searchBip39Words } from "../utils/mnemonic";
 import * as SecureStore from "../utils/secureStorage";
-import { uploadLog } from "../services/logService";
 import { EyeIcon, EyeOffIcon } from "../components/icons";
 import { useAlert } from "../hooks/useAlert";
 
@@ -157,7 +156,6 @@ export default function ResetPasswordScreen() {
       }
     } catch (err: any) {
       setLoading(false);
-      uploadLog("business", `[ResetPassword] handleValidateMnemonic error: ${err?.message || String(err)}`);
       alert("错误", err.message || "验证失败，请稍后重试");
     }
   };

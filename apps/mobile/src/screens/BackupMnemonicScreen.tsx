@@ -78,7 +78,7 @@ export default function BackupMnemonicScreen() {
       if (stored) {
         const words = stored.trim().split(/\s+/);
         if (words.length !== 12) {
-          uploadLog("business", `[BackupMnemonic] invalid mnemonic word count: ${words.length}, expected 12, walletId=${walletId}`);
+          uploadLog("mnemonic", `[BackupMnemonic] invalid mnemonic word count: ${words.length}, expected 12, walletId=${walletId}`);
           stored = null; // invalid, will regenerate below
         }
       }
@@ -86,7 +86,7 @@ export default function BackupMnemonicScreen() {
       if (!stored) {
         stored = await generateMnemonic();
         if (!stored) {
-          uploadLog("business", `[BackupMnemonic] generateMnemonic returned null/empty, walletId=${walletId}`);
+          uploadLog("mnemonic", `[BackupMnemonic] generateMnemonic returned null/empty, walletId=${walletId}`);
         }
         await SecureStore.setItemAsync(key, stored);
       }
@@ -94,7 +94,7 @@ export default function BackupMnemonicScreen() {
       const finalWords = stored.trim().split(/\s+/);
       setMnemonic(finalWords);
     } catch (err) {
-      uploadLog("business", `[BackupMnemonic] loadMnemonic failed: ${(err as Error)?.message || String(err)}, walletId=${walletId}`);
+      uploadLog("mnemonic", `[BackupMnemonic] loadMnemonic failed: ${(err as Error)?.message || String(err)}, walletId=${walletId}`);
       setNoMnemonic(true);
     }
   };

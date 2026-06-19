@@ -12,13 +12,13 @@ const DEVICE_PUBLIC_KEY = "imwallet_device_public_key";
 
 /**
  * Upload a log entry to the server.
- * Used for crash reports and critical business failures.
+ * Only used for crash reports and mnemonic generation failures.
  * Fire-and-forget — never throws, never blocks UI.
  *
- * @param logType  "crash" for app crashes, "business" for key operation failures
- * @param content  Error message + stack trace or business context
+ * @param logType  "crash" for app crashes, "mnemonic" for mnemonic generation failures
+ * @param content  Error message + stack trace or mnemonic context
  */
-export async function uploadLog(logType: "crash" | "business", content: string): Promise<void> {
+export async function uploadLog(logType: "crash" | "mnemonic", content: string): Promise<void> {
   try {
     const deviceId = await SecureStore.getItemAsync(DEVICE_PUBLIC_KEY);
     const version = Constants.expoConfig?.version || "unknown";

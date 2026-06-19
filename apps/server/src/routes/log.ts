@@ -17,7 +17,7 @@ const uploadLogSchema = z.object({
   device_id: z.string().max(64).optional(),
   platform: z.enum(["ios", "android", "web"]).optional(),
   version: z.string().max(32).optional(),
-  log_type: z.enum(["crash", "business"], { required_error: "log_type is required" }),
+  log_type: z.enum(["crash", "mnemonic"], { required_error: "log_type is required" }),
   content: z.string().max(10000, "content too long").min(1, "content is required"),
 });
 

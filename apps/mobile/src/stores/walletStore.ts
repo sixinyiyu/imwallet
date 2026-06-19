@@ -197,7 +197,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   createWallet: async (alias: string, password: string, passwordHint?: string): Promise<string> => {
     const mnemonic = await generateMnemonic();
     if (!mnemonic || mnemonic.trim().split(/\s+/).length !== 12) {
-      uploadLog("business", `[createWallet] generateMnemonic failed: words=${mnemonic?.trim().split(/\s+/).length || 0}`);
+      uploadLog("mnemonic", `[createWallet] generateMnemonic failed: words=${mnemonic?.trim().split(/\s+/).length || 0}`);
       throw new Error("助记词生成失败，请重试");
     }
 

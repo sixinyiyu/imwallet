@@ -13,7 +13,6 @@ import { contactService } from "../services/contactService";
 import { useAlert } from "../hooks/useAlert";
 import { detectNetwork } from "../utils/address";
 import { TronIcon, EthIcon, BtcIcon, ContactIcon, CopyIcon } from "../components/icons";
-import { uploadLog } from "../services/logService";
 import type { Contact } from "../types";
 import EmptyState from "../components/EmptyState";
 

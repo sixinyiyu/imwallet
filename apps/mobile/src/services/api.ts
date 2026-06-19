@@ -5,7 +5,6 @@ import Constants from "expo-constants";
 import "react-native-get-random-values";
 import * as ed25519 from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
-import { uploadLog } from "./logService";
 
 // ===== Configure SHA-512 for @noble/ed25519 v3 =====
 // v3 requires hashes.sha512 to be set before calling sync methods (getPublicKey, sign, etc.)
@@ -108,7 +107,6 @@ export async function ensureDeviceKeys(): Promise<{ publicKeyHex: string; privat
     await SecureStore.setItemAsync(DEVICE_PUBLIC_KEY, keys.publicKeyHex);
     return { publicKeyHex: keys.publicKeyHex, privateKeyHex: keys.privateKeyHex };
   } catch (err) {
-    uploadLog("business", `[Device] generateKeyPair failed: ${(err as Error)?.message || String(err)}`);
     return null;
   }
 }
@@ -133,8 +131,6 @@ export async function ensureDeviceRegistered(publicKeyHex: string): Promise<void
   } catch (err: any) {
     if (err.response?.status === 409) {
       await SecureStore.setItemAsync(DEVICE_REGISTERED, "true");
-    } else {
-      uploadLog("business", `[Device] register failed: ${err.message}, status=${err.response?.status}`);
     }
   }
 }
