@@ -5,19 +5,18 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   ScrollView,
   Modal,
   Pressable,
   Keyboard,
-  Clipboard,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import EmptyState from "../components/EmptyState";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
+import { useAlert } from "../hooks/useAlert";
 import { walletService } from "../services/walletService";
 import {
   WalletIcon,
@@ -53,6 +52,7 @@ function formatDate(dateStr: string): string {
 }
 
 export default function WalletDetailScreen() {
+  const alert = useAlert();
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const walletId = route.params?.walletId;
@@ -171,7 +171,7 @@ export default function WalletDetailScreen() {
       setShowEditModal(false);
     } catch (err: any) {
       const msg = err?.response?.data?.error || err.message || "修改失败";
-      Alert.alert("提示", msg);
+      alert("提示", msg);
     }
     setSavingAlias(false);
   };
@@ -356,8 +356,9 @@ export default function WalletDetailScreen() {
                     {acc.address}
                   </Text>
                   <TouchableOpacity
-                    onPress={() => {
-                      Clipboard.setString(acc.address);
+                    onPress={async () => {
+                      const Clipboard = require("expo-clipboard");
+                      await Clipboard.setStringAsync(acc.address);
                       showToast("地址已复制");
                     }}
                     activeOpacity={0.6}

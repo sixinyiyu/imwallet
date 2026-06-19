@@ -1,10 +1,11 @@
 import React, { useMemo, useRef } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import QRCode from "react-native-qrcode-svg";
 import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import { useWalletStore } from "../stores/walletStore";
+import { useAlert } from "../hooks/useAlert";
 import { CopyIcon, ShareIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import type { RootStackParamList } from "../types/navigation";
 
@@ -18,6 +19,7 @@ function renderNetworkIcon(network: string, size: number) {
 }
 
 export default function ReceiveScreen() {
+  const alert = useAlert();
   const route = useRoute<ReceiveRouteProp>();
   const { activeWallet, activeAccount, tokens } = useWalletStore();
   // 使用 Account.address（链上地址）而非 Wallet.address（内部标识）
@@ -46,7 +48,7 @@ export default function ReceiveScreen() {
     if (address) {
       const Clipboard = require("expo-clipboard");
       Clipboard.setStringAsync(address);
-      Alert.alert("已复制", `${network} 收款地址已复制到剪贴板`);
+      alert("已复制", `${network} 收款地址已复制到剪贴板`);
     }
   };
 
@@ -69,7 +71,7 @@ export default function ReceiveScreen() {
         await Share.share({ message: `${currentToken.symbol} (${network}) 收款地址: ${address}` });
       }
     } catch (err: any) {
-      Alert.alert("分享失败", err.message || "请尝试复制地址后手动分享");
+      alert("分享失败", err.message || "请尝试复制地址后手动分享");
     }
   };
 

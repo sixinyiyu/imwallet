@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
   TouchableOpacity,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -11,10 +10,12 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { detectNetwork } from "../utils/address";
 import type { RootStackParamList } from "../types/navigation";
+import { useAlert } from "../hooks/useAlert";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Scan">;
 
 export default function ScanScreen() {
+  const alert = useAlert();
   const navigation = useNavigation<Nav>();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
@@ -63,7 +64,7 @@ export default function ScanScreen() {
       }
 
       // Unknown format — ask user
-      Alert.alert("扫描结果", data, [
+      alert("扫描结果", data, [
         {
           text: "作为地址填入转账",
           onPress: () => navigation.replace("Transfer", { toAddress: data }),
@@ -71,7 +72,7 @@ export default function ScanScreen() {
         { text: "取消", onPress: () => setScanned(false) },
       ]);
     } catch {
-      Alert.alert("无法识别", "请扫描有效的钱包地址 QR 码");
+      alert("无法识别", "请扫描有效的钱包地址 QR 码");
       setScanned(false);
     }
   };

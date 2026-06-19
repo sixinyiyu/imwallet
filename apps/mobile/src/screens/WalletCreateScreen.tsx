@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -18,6 +17,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { EyeIcon, EyeOffIcon } from "../components/icons";
+import { useAlert } from "../hooks/useAlert";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -106,6 +106,7 @@ const overlayStyles = StyleSheet.create({
 });
 
 export default function WalletCreateScreen() {
+  const alert = useAlert();
   const navigation = useNavigation<Nav>();
   const { createWallet } = useWalletStore();
 
@@ -125,8 +126,8 @@ export default function WalletCreateScreen() {
 
   const handleCreate = async () => {
     if (!alias.trim()) return;
-    if (password.length < 8) { Alert.alert("提示", "密码至少需要8个字符"); return; }
-    if (password !== confirmPassword) { Alert.alert("提示", "两次输入的密码不一致"); return; }
+    if (password.length < 8) { alert("提示", "密码至少需要8个字符"); return; }
+    if (password !== confirmPassword) { alert("提示", "两次输入的密码不一致"); return; }
 
     setLoading(true);
     try {
@@ -134,7 +135,7 @@ export default function WalletCreateScreen() {
       navigation.replace("WalletAddAccount", { walletId: id });
     } catch (err: any) {
       const msg = err?.response?.data?.error || err?.response?.data?.details?.[0]?.message || err.message || "请稍后重试";
-      Alert.alert("创建失败", msg);
+      alert("创建失败", msg);
     } finally {
       setLoading(false);
     }

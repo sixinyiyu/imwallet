@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -16,6 +15,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { validateMnemonic, cleanMnemonic, validateMnemonicWords } from "../utils/mnemonic";
+import { useAlert } from "../hooks/useAlert";
 import { EyeIcon, EyeOffIcon } from "../components/icons";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "WalletImport">;
@@ -37,6 +37,7 @@ function getPasswordStrength(pwd: string): { level: number; label: string; color
 }
 
 export default function WalletImportScreen() {
+  const alert = useAlert();
   const navigation = useNavigation<Nav>();
   const { importWallet } = useWalletStore();
 
@@ -79,7 +80,7 @@ export default function WalletImportScreen() {
   const handleValidateMnemonic = async () => {
     const cleaned = cleanMnemonic(mnemonic);
     if (!cleaned) {
-      Alert.alert("提示", "请输入助记词");
+      alert("提示", "请输入助记词");
       return;
     }
 
@@ -87,7 +88,7 @@ export default function WalletImportScreen() {
 
     const wordCheck = validateMnemonicWords(cleaned);
     if (wordCheck.wordCount !== 12 && wordCheck.wordCount !== 24) {
-      Alert.alert("提示", `助记词需要12或24个单词，当前输入了${wordCheck.wordCount}个单词`);
+      alert("提示", `助记词需要12或24个单词，当前输入了${wordCheck.wordCount}个单词`);
       setValidating(false);
       return;
     }
@@ -95,13 +96,13 @@ export default function WalletImportScreen() {
       const displayWords = wordCheck.invalidWords.length > 3
         ? wordCheck.invalidWords.slice(0, 3).join("、") + "..."
         : wordCheck.invalidWords.join("、");
-      Alert.alert("提示", `以下单词不在助记词词表中：${displayWords}，请检查拼写`);
+      alert("提示", `以下单词不在助记词词表中：${displayWords}，请检查拼写`);
       setValidating(false);
       return;
     }
 
     if (!(await validateMnemonic(cleaned))) {
-      Alert.alert("提示", "助记词校验失败，请确认助记词顺序和内容是否正确");
+      alert("提示", "助记词校验失败，请确认助记词顺序和内容是否正确");
       setValidating(false);
       return;
     }
@@ -114,15 +115,15 @@ export default function WalletImportScreen() {
   /** Step 2: Import wallet with validated mnemonic */
   const handleImportWallet = async () => {
     if (!alias.trim()) {
-      Alert.alert("提示", "请输入钱包别名");
+      alert("提示", "请输入钱包别名");
       return;
     }
     if (password.length < 8) {
-      Alert.alert("提示", "密码至少需要8个字符");
+      alert("提示", "密码至少需要8个字符");
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert("提示", "两次输入的密码不一致");
+      alert("提示", "两次输入的密码不一致");
       return;
     }
 
@@ -131,7 +132,7 @@ export default function WalletImportScreen() {
       const walletId = await importWallet(validatedMnemonic, alias.trim(), password, passwordHint.trim() || undefined);
       navigation.replace("WalletAddAccount", { walletId });
     } catch (err: any) {
-      Alert.alert("导入失败", err.message || "请稍后重试");
+      alert("导入失败", err.message || "请稍后重试");
     } finally {
       setLoading(false);
     }

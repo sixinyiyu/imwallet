@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -21,6 +20,7 @@ import { validateMnemonic, cleanMnemonic, validateMnemonicWords, searchBip39Word
 import * as SecureStore from "../utils/secureStorage";
 import { uploadLog } from "../services/logService";
 import { EyeIcon, EyeOffIcon } from "../components/icons";
+import { useAlert } from "../hooks/useAlert";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "ResetPassword">;
 type RouteType = RouteProp<RootStackParamList, "ResetPassword">;
@@ -49,6 +49,7 @@ function getPasswordStrength(pwd: string): { level: number; label: string; color
 const LEARN_CONTENT = "助记词是明文私钥的另一种表现形式，最早是由 BIP39 提案提出，其目的是为了帮助用户记忆复杂的私钥。助记词一般由 12、15、18、21 个单词构成，这些单词都取自一个固定词库，其生成顺序也是按照一定算法而来，所以用户没必要担心随便输入 12 个单词就会生成一个地址。\n\n拥有助记词等于拥有钱包代币的控制权，如果你移除了钱包或者更换了手机设备，可以通过将助记词「导入钱包」的方式恢复钱包。\n\n\n如何导入钱包？\n请根据你当前的使用情况，选择对应的操作步骤：\n\n一、新下载安装 App\n1. 打开 App，点击「导入钱包」\n2. 在导入方式中选择「助记词」\n3. 依次输入单词并确保每个单词之间用空格隔开\n   💡如果导入时提示错误无法导入，请检查助记词是否正确\n4. 设置钱包名称、密码、密码提示等信息\n5. 添加账户：勾选你要添加的公链和网络，完成账户导入\n\n二、App 内已有钱包，想导入其它钱包：\n1. 打开 App，依次点击「我」 - 「钱包管理」\n2. 点击下方的「+ 添加钱包」 - 「导入钱包」 - 「助记词」\n3. 依次输入单词并确保每个单词之间用空格隔开\n4. 后续步骤与上述一致\n\n\n注意事项：\n• 如果导入恢复的地址与原钱包地址不一致，说明导入的助记词是错误的，请重新导入正确的助记词。\n• 助记词泄漏会导致代币被盗，请务必妥善保管你的助记词。\n";
 
 export default function ResetPasswordScreen() {
+  const alert = useAlert();
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const walletId = route.params?.walletId;
@@ -109,31 +110,31 @@ export default function ResetPasswordScreen() {
     try {
       const cleaned = cleanMnemonic(mnemonicInput);
       if (!cleaned) {
-        Alert.alert("提示", "请输入助记词");
+        alert("提示", "请输入助记词");
         return;
       }
 
       const wordCheck = validateMnemonicWords(cleaned);
       if (wordCheck.wordCount !== 12 && wordCheck.wordCount !== 24) {
-        Alert.alert("提示", `助记词需要12或24个单词，当前输入了${wordCheck.wordCount}个单词`);
+        alert("提示", `助记词需要12或24个单词，当前输入了${wordCheck.wordCount}个单词`);
         return;
       }
       if (wordCheck.invalidWords.length > 0) {
         const displayWords = wordCheck.invalidWords.length > 3
           ? wordCheck.invalidWords.slice(0, 3).join("、") + "..."
           : wordCheck.invalidWords.join("、");
-        Alert.alert("提示", `以下单词不在助记词词表中：${displayWords}，请检查拼写`);
+        alert("提示", `以下单词不在助记词词表中：${displayWords}，请检查拼写`);
         return;
       }
 
       const isValid = await validateMnemonic(cleaned);
       if (!isValid) {
-        Alert.alert("提示", "助记词校验失败，请确认助记词顺序和内容是否正确");
+        alert("提示", "助记词校验失败，请确认助记词顺序和内容是否正确");
         return;
       }
 
       if (!walletId) {
-        Alert.alert("提示", "钱包信息缺失");
+        alert("提示", "钱包信息缺失");
         return;
       }
 
@@ -141,7 +142,7 @@ export default function ResetPasswordScreen() {
       const stored = await SecureStore.getItemAsync(mnemonicKey(walletId));
       if (!stored) {
         setLoading(false);
-        Alert.alert("无法验证", "该钱包未在本地存储助记词，无法通过助记词验证重置密码。仅支持通过助记词创建或导入的钱包。", [
+        alert("无法验证", "该钱包未在本地存储助记词，无法通过助记词验证重置密码。仅支持通过助记词创建或导入的钱包。", [
           { text: "知道了" },
         ]);
         return;
@@ -152,23 +153,23 @@ export default function ResetPasswordScreen() {
         setStep(2);
       } else {
         setLoading(false);
-        Alert.alert("验证失败", "助记词与当前钱包不匹配，请检查后重试");
+        alert("验证失败", "助记词与当前钱包不匹配，请检查后重试");
       }
     } catch (err: any) {
       setLoading(false);
       uploadLog("business", `[ResetPassword] handleValidateMnemonic error: ${err?.message || String(err)}`);
-      Alert.alert("错误", err.message || "验证失败，请稍后重试");
+      alert("错误", err.message || "验证失败，请稍后重试");
     }
   };
 
   const handleSubmitNewPassword = async () => {
     if (!walletId) return;
     if (newPassword.length < 8) {
-      Alert.alert("提示", "密码至少需要8个字符");
+      alert("提示", "密码至少需要8个字符");
       return;
     }
     if (newPassword !== confirmPassword) {
-      Alert.alert("提示", "两次输入的密码不一致");
+      alert("提示", "两次输入的密码不一致");
       return;
     }
 
@@ -182,7 +183,7 @@ export default function ResetPasswordScreen() {
       );
       navigation.pop(2);
     } catch (err: any) {
-      Alert.alert("重置失败", err.message || "请稍后重试");
+      alert("重置失败", err.message || "请稍后重试");
     } finally {
       setSubmitting(false);
     }

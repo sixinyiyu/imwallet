@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   Image,
   Dimensions,
@@ -19,6 +18,7 @@ import { accountService } from "../services/accountService";
 import { LinearGradient } from "expo-linear-gradient";
 import { TronIcon, USDTIcon } from "../components/icons";
 import type { TokenInfo } from "../types";
+import { useAlert } from "../hooks/useAlert";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "WalletAddAccount">;
 type RouteType = RouteProp<RootStackParamList, "WalletAddAccount">;
@@ -33,6 +33,7 @@ const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
 };
 
 export default function WalletAddAccountScreen() {
+  const alert = useAlert();
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const walletId = route.params?.walletId;
@@ -98,7 +99,7 @@ export default function WalletAddAccountScreen() {
   const handleConfirm = async () => {
     if (selectedNetworks.size === 0) return;
     if (!walletId) {
-      Alert.alert("错误", "钱包ID缺失");
+      alert("错误", "钱包ID缺失");
       return;
     }
     setCreating(true);

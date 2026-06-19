@@ -6,12 +6,11 @@ import {
   TouchableOpacity,
   FlatList,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   Modal,
-  Clipboard,
 } from "react-native";
 import { contactService } from "../services/contactService";
+import { useAlert } from "../hooks/useAlert";
 import { detectNetwork } from "../utils/address";
 import { TronIcon, EthIcon, BtcIcon, ContactIcon, CopyIcon } from "../components/icons";
 import { uploadLog } from "../services/logService";
@@ -33,6 +32,7 @@ function NetworkIcon({ network, size = 20 }: { network: string; size?: number })
 }
 
 export default function AddressBookScreen() {
+  const alert = useAlert();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -111,11 +111,11 @@ export default function AddressBookScreen() {
   /** 提交表单（新增或编辑） */
   const handleSubmit = async () => {
     if (!formName.trim() || !formAddress.trim()) {
-      Alert.alert("提示", "请填写名称和地址");
+      alert("提示", "请填写名称和地址");
       return;
     }
     if (!detectedNetwork) {
-      Alert.alert("提示", "无法识别地址格式，请输入有效的链上地址 (T.../0x.../1...)");
+      alert("提示", "无法识别地址格式，请输入有效的链上地址 (T.../0x.../1...)");
       return;
     }
     setSubmitting(true);
@@ -140,7 +140,7 @@ export default function AddressBookScreen() {
       closeForm();
       loadContacts();
     } catch (err: any) {
-      Alert.alert("错误", err.message || "操作失败");
+      alert("错误", err.message || "操作失败");
     } finally {
       setSubmitting(false);
     }
@@ -153,8 +153,9 @@ export default function AddressBookScreen() {
   };
 
   /** 复制地址到剪贴板 */
-  const handleCopyAddress = useCallback((address: string) => {
-    Clipboard.setString(address);
+  const handleCopyAddress = useCallback(async (address: string) => {
+    const Clipboard = require("expo-clipboard");
+    await Clipboard.setStringAsync(address);
     showToast("地址已复制");
   }, [showToast]);
 

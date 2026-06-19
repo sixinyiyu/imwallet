@@ -4,16 +4,17 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
+import { useAlert } from "../hooks/useAlert";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "BackupConfirm">;
 
 export default function BackupConfirmScreen() {
+  const alert = useAlert();
   const navigation = useNavigation<Nav>();
   const route = useRoute();
   const walletId = (route.params as any)?.walletId as string;
@@ -22,7 +23,7 @@ export default function BackupConfirmScreen() {
   const handleConfirm = async () => {
     try {
       await backupWallet(walletId);
-      Alert.alert("备份成功", "您的钱包已标记为已备份，现在可以进行转账操作", [
+      alert("备份成功", "您的钱包已标记为已备份，现在可以进行转账操作", [
         {
           text: "进入钱包",
           onPress: () => {
@@ -31,7 +32,7 @@ export default function BackupConfirmScreen() {
         },
       ]);
     } catch (err: any) {
-      Alert.alert("备份失败", err.message || "请稍后重试");
+      alert("备份失败", err.message || "请稍后重试");
     }
   };
 

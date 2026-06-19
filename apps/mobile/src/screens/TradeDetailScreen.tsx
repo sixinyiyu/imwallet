@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-  Alert,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
@@ -16,6 +15,7 @@ import type { Transaction } from "../types";
 import { transactionService } from "../services/transactionService";
 import { useWalletStore } from "../stores/walletStore";
 import { ShareIcon } from "../components/icons";
+import { useAlert } from "../hooks/useAlert";
 import SuccessIcon from "../components/icons/SuccessIcon";
 import FailureIcon from "../components/icons/FailureIcon";
 import PendingIcon from "../components/icons/PendingIcon";
@@ -45,6 +45,7 @@ function shortenAddress(addr: string): string {
 }
 
 export default function TradeDetailScreen() {
+  const alert = useAlert();
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
   const { activeWallet } = useWalletStore();
@@ -81,7 +82,7 @@ export default function TradeDetailScreen() {
         await Share.share({ message: `AquaD 交易详情\n金额: ${tx?.amount} USDT\n状态: ${tx?.status}` });
       }
     } catch (err: any) {
-      Alert.alert("分享失败", err.message || "请尝试截图后手动分享");
+      alert("分享失败", err.message || "请尝试截图后手动分享");
     }
   };
 

@@ -4,17 +4,18 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
+import { useAlert } from "../hooks/useAlert";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "ConfirmMnemonic">;
 type RouteType = RouteProp<RootStackParamList, "ConfirmMnemonic">;
 
 export default function ConfirmMnemonicScreen() {
+  const alert = useAlert();
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const walletId = route.params?.walletId;
@@ -105,7 +106,7 @@ export default function ConfirmMnemonicScreen() {
         ],
       });
     } catch (err: any) {
-      Alert.alert("备份失败", err.message || "请稍后重试");
+      alert("备份失败", err.message || "请稍后重试");
     }
   };
 

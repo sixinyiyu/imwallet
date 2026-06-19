@@ -11,7 +11,6 @@ import {
   ScrollView,
   Modal,
   FlatList,
-  Alert,
 } from "react-native";
 import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
@@ -26,6 +25,7 @@ import type { FeeConfig } from "../services/configService";
 import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import type { Contact, TokenBalance } from "../types";
 import { detectNetwork, isValidAddressFormat } from "../utils/address";
+import { useAlert } from "../hooks/useAlert";
 
 /** 根据错误信息给出针对性建议 */
 function getSuggestion(error?: string): string {
@@ -51,6 +51,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList, "Transfer">;
 type RouteType = RouteProp<RootStackParamList, "Transfer">;
 
 export default function TransferScreen() {
+  const alert = useAlert();
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const { activeWallet, tokens } = useWalletStore();
@@ -190,7 +191,7 @@ export default function TransferScreen() {
       setContacts(list);
       showToast("已添加到地址本");
     } catch (err: any) {
-      Alert.alert("提示", "添加到地址本失败: " + (err.message || "未知错误"));
+      alert("提示", "添加到地址本失败: " + (err.message || "未知错误"));
     } finally {
       setAddingToContacts(false);
     }
@@ -245,7 +246,7 @@ export default function TransferScreen() {
         await Share.share({ message: `AquaD 转账 ${amount} USDT` });
       }
     } catch (err: any) {
-      Alert.alert("分享失败", err.message || "请尝试截图后手动分享");
+      alert("分享失败", err.message || "请尝试截图后手动分享");
     }
   };
 

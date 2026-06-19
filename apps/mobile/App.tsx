@@ -5,6 +5,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { View, Text, StyleSheet, ScrollView, Platform } from "react-native";
 import { RootStack } from "./src/navigation/RootStack";
 import { uploadLog } from "./src/services/logService";
+import { AppAlertProvider } from "./src/components/AppAlert";
 
 // ─── Global error handlers: capture uncaught JS errors before they crash the app ───
 
@@ -149,12 +150,14 @@ export default function App() {
 
   return (
     <AppErrorBoundary>
+      <AppAlertProvider>
       <SafeAreaProvider>
         <NavigationContainer>
           <StatusBar style="auto" />
           <RootStack />
         </NavigationContainer>
       </SafeAreaProvider>
+      </AppAlertProvider>
     </AppErrorBoundary>
   );
 }
