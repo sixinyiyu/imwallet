@@ -226,8 +226,9 @@ const styles = StyleSheet.create({
   },
   mnemonicGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   wordCell: {
-    width: "31%", borderRadius: 8, paddingVertical: 10, paddingHorizontal: 8,
+    borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10,
     flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "#F3F4F6",
   },
   wordIndex: { fontSize: 12, color: "#9CA3AF", fontWeight: "500" },
   wordText: { fontSize: 14, color: "#1F2937", fontWeight: "600", flex: 1 },
