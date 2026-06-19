@@ -117,7 +117,7 @@ export async function updateDevice(deviceId: string, input: UpdateDeviceInput): 
   });
 
   if (!device) {
-    throw createError(404, "Device not found", "DEVICE_NOT_FOUND");
+    throw createError(404, "设备未注册，请重新登录", "DEVICE_NOT_FOUND");
   }
 
   const updateData: any = {};
@@ -209,7 +209,7 @@ export async function subscribeWallet(
     where: { id: walletId },
   });
   if (!wallet) {
-    throw createError(404, "Wallet not found", "WALLET_NOT_FOUND");
+    throw createError(404, "钱包不存在", "WALLET_NOT_FOUND");
   }
 
   // 检查是否已订阅
@@ -223,7 +223,7 @@ export async function subscribeWallet(
   });
 
   if (existing) {
-    throw createError(409, "Already subscribed", "ALREADY_SUBSCRIBED");
+    throw createError(409, "已订阅该钱包", "ALREADY_SUBSCRIBED");
   }
 
   const subscription = await prisma.walletSubscription.create({
@@ -265,7 +265,7 @@ export async function unsubscribeWallet(deviceId: string, walletId: string): Pro
   });
 
   if (!subscription) {
-    throw createError(404, "Subscription not found", "SUBSCRIPTION_NOT_FOUND");
+    throw createError(404, "订阅关系不存在", "SUBSCRIPTION_NOT_FOUND");
   }
 
   await prisma.walletSubscription.delete({

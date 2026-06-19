@@ -62,13 +62,13 @@ export async function createAccount(
   });
 
   if (existing) {
-    throw createError(409, "Account already exists for this network in this wallet", "ACCOUNT_EXISTS");
+    throw createError(409, "该钱包下此网络已有账户", "ACCOUNT_EXISTS");
   }
 
   // Get wallet info to determine source
   const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
   if (!wallet) {
-    throw createError(404, "Wallet not found", "WALLET_NOT_FOUND");
+    throw createError(404, "钱包不存在", "WALLET_NOT_FOUND");
   }
 
   // Generate address based on mnemonic availability and network
@@ -191,7 +191,7 @@ export async function getAccountDetail(accountId: string): Promise<AccountDetail
   });
 
   if (!account) {
-    throw createError(404, "Account not found", "ACCOUNT_NOT_FOUND");
+    throw createError(404, "账户不存在", "ACCOUNT_NOT_FOUND");
   }
 
   const tokenBalances = await getAccountTokenBalances(account.walletId, account.network);

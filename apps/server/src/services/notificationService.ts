@@ -67,7 +67,7 @@ export async function markAsRead(notificationId: string, deviceDbId: number): Pr
   });
 
   if (!notification) {
-    throw createError(404, "Notification not found");
+    throw createError(404, "通知不存在");
   }
 
   const subscription = await prisma.walletSubscription.findFirst({
@@ -78,7 +78,7 @@ export async function markAsRead(notificationId: string, deviceDbId: number): Pr
   });
 
   if (!subscription) {
-    throw createError(403, "You do not have permission to access this notification");
+    throw createError(403, "无权访问该通知");
   }
 
   // 创建或更新阅读状态

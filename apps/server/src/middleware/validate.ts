@@ -27,7 +27,7 @@ export function validate(schema: ZodSchema) {
         );
 
         res.status(400).json({
-          error: "Validation failed",
+          error: "请求参数校验失败",
           details,
         });
         return;

@@ -43,7 +43,7 @@ export async function getTokenBalances(
   });
 
   if (!wallet) {
-    throw createError(404, "Wallet not found");
+    throw createError(404, "钱包不存在");
   }
 
   // Fetch WalletTokens and Tokens separately (no relation include)

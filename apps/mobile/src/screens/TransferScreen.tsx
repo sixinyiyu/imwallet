@@ -27,6 +27,26 @@ import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, CopyIcon } 
 import type { Contact, TokenBalance } from "../types";
 import { detectNetwork, isValidAddressFormat } from "../utils/address";
 
+/** 根据错误信息给出针对性建议 */
+function getSuggestion(error?: string): string {
+  if (!error) return "请稍后重试或联系客服";
+  if (error.includes("余额不足") || error.includes("无该代币余额"))
+    return "1. 先充值该代币后再转账\n2. 减少转账金额（含手续费）";
+  if (error.includes("不能向自己转账"))
+    return "请更换收款地址，不能使用自己的地址";
+  if (error.includes("钱包不属于") || error.includes("设备未注册"))
+    return "请退出重新登录，确保钱包与设备关联正常";
+  if (error.includes("代币") || error.includes("Token"))
+    return "请返回钱包首页刷新代币列表后重试";
+  if (error.includes("校验失败") || error.includes("参数"))
+    return "请检查收款地址和转账金额是否填写正确";
+  if (error.includes("过期") || error.includes("重复请求"))
+    return "请稍后重试";
+  if (error.includes("服务器") || error.includes("内部错误"))
+    return "服务暂时不可用，请稍后重试";
+  return "1. 检查收款地址和网络是否正确\n2. 确认余额充足后重试";
+}
+
 type Nav = NativeStackNavigationProp<RootStackParamList, "Transfer">;
 type RouteType = RouteProp<RootStackParamList, "Transfer">;
 
@@ -192,7 +212,7 @@ export default function TransferScreen() {
       });
     } catch (err: any) {
       const serverError = err.response?.data?.error || err.response?.data?.details?.[0]?.message || err.message;
-      setResult({ success: false, error: serverError || "转账失败" });
+      setResult({ success: false, error: serverError || "转账失败，请稍后重试" });
     } finally {
       setSubmitting(false);
     }
@@ -260,7 +280,7 @@ export default function TransferScreen() {
               <Text style={z.resultError}>{result.error || "未知错误"}</Text>
               <View style={z.resultDivider} />
               <Text style={z.resultLabel}>建议</Text>
-              <Text style={z.suggestion}>1. 减少转账金额或降低转账数量</Text>
+              <Text style={z.suggestion}>{getSuggestion(result.error)}</Text>
             </>
           )}
         </View>

@@ -51,7 +51,7 @@ export async function transfer(
     where: { device_id: deviceId },
   });
   if (!device) {
-    throw createError(404, "Device not found", "DEVICE_NOT_FOUND");
+    throw createError(404, "设备未注册，请重新登录", "DEVICE_NOT_FOUND");
   }
 
   const subscription = await prisma.walletSubscription.findFirst({
@@ -59,7 +59,7 @@ export async function transfer(
   });
   if (!subscription) {
     logger.warn("TRANSFER", `转账失败: 钱包不属于当前设备 - fromWalletId=${input.fromWalletId}, deviceId=${deviceId.slice(0, 8)}...`);
-    throw createError(403, "Wallet does not belong to this device");
+    throw createError(403, "该钱包不属于当前设备，无法操作");
   }
 
   // Validate token exists
@@ -69,7 +69,7 @@ export async function transfer(
 
   if (!token) {
     logger.warn("TRANSFER", `转账失败: 代币不存在 - tokenId=${input.tokenId}`);
-    throw createError(404, "Token not found");
+    throw createError(404, "代币类型不存在，请刷新后重试");
   }
 
   // 收款地址查找：先查 wallets 表（EVM 地址 0x...），再查 accounts 表（TRX 地址 T... 等）
@@ -108,12 +108,12 @@ export async function transfer(
 
   if (!fromWallet) {
     logger.warn("TRANSFER", `转账失败: 发送钱包不存在 - fromWalletId=${input.fromWalletId}`);
-    throw createError(404, "Sender wallet not found");
+    throw createError(404, "发送钱包不存在，请刷新后重试");
   }
 
   if (fromWallet.id === toWalletId) {
     logger.warn("TRANSFER", `转账失败: 不能向自己转账 - walletId=${fromWallet.id}`);
-    throw createError(400, "Cannot transfer to the same wallet");
+    throw createError(400, "不能向自己转账");
   }
 
   // Get sender's WalletToken balance for this token
@@ -125,7 +125,7 @@ export async function transfer(
 
   if (!senderWalletToken) {
     logger.warn("TRANSFER", `转账失败: 发送方无该代币余额 - fromWalletId=${input.fromWalletId}, tokenId=${input.tokenId}`);
-    throw createError(400, "No balance found for this token in sender wallet");
+    throw createError(400, "当前钱包无该代币余额，请先充值");
   }
 
   const amountNum = parseFloat(amount);
@@ -149,7 +149,7 @@ export async function transfer(
   const currentBalance = parseFloat(senderWalletToken.balance.toString());
   if (currentBalance < requiredBalance) {
     logger.warn("TRANSFER", `转账失败: 余额不足 - 当前余额=${currentBalance}, 需要=${requiredBalance}, fromWalletId=${input.fromWalletId}`);
-    throw createError(400, "Insufficient balance");
+    throw createError(400, "余额不足，请减少转账金额或先充值");
   }
 
   // Ensure recipient has a WalletToken entry for this token (only for in-system recipients)
@@ -414,7 +414,7 @@ export async function getTransactionDetail(
   });
 
   if (!tx) {
-    throw createError(404, "Transaction not found");
+    throw createError(404, "交易记录不存在");
   }
 
   // Manually fetch related wallets and token

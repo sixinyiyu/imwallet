@@ -15,7 +15,7 @@ export function errorHandler(
 ): void {
   const statusCode = err.statusCode || 500;
   const message =
-    statusCode === 500 ? "Internal server error" : err.message;
+    statusCode === 500 ? "服务器内部错误，请稍后重试" : err.message;
 
   // Log all errors (not just 500)
   if (statusCode === 500) {

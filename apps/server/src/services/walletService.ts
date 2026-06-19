@@ -130,7 +130,7 @@ export async function createOrImportWallet(
     where: { device_id: deviceId },
   });
   if (!device) {
-    throw createError(404, "Device not found", "DEVICE_NOT_FOUND");
+    throw createError(404, "设备未注册，请重新登录", "DEVICE_NOT_FOUND");
   }
 
   // 解密 RSA 加密的密码
@@ -138,10 +138,10 @@ export async function createOrImportWallet(
   try {
     rawPassword = rsaDecryptPassword(encryptedPassword);
   } catch {
-    throw createError(400, "Password decryption failed", "PASSWORD_DECRYPT_FAILED");
+    throw createError(400, "密码解密失败，请重试", "PASSWORD_DECRYPT_FAILED");
   }
   if (rawPassword.length < 8) {
-    throw createError(400, "Password must be at least 8 characters", "PASSWORD_TOO_SHORT");
+    throw createError(400, "密码至少需要8个字符", "PASSWORD_TOO_SHORT");
   }
 
   // bcrypt 哈希
@@ -271,7 +271,7 @@ export async function resetWalletPassword(
     where: { id: walletId },
   });
   if (!wallet) {
-    throw createError(404, "Wallet not found");
+    throw createError(404, "钱包不存在");
   }
 
   // Verify mnemonic matches the wallet address
@@ -439,7 +439,7 @@ export async function deleteWallet(
   });
 
   if (!subscription) {
-    throw createError(404, "Wallet subscription not found for this device");
+    throw createError(404, "该设备未订阅此钱包");
   }
 
   logger.info("WALLET", `删除钱包订阅: walletId=${walletId}, deviceId=${deviceId.slice(0, 8)}...`);

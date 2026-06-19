@@ -84,7 +84,7 @@ export async function updateContact(
   });
 
   if (!contact || contact.device_id !== deviceDbId) {
-    throw createError(404, "Contact not found");
+    throw createError(404, "联系人不存在");
   }
 
   const network = input.network || detectNetworkFromAddress(input.address || contact.address);

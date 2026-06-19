@@ -78,35 +78,35 @@ export async function deviceAuthMiddleware(
   // 1. 检查必要 headers
   if (!deviceId || !signature || !timestampStr || !nonce) {
     logger.warn("DEVICE_AUTH", `签名验证失败: 缺少必要 headers - ${req.method} ${req.originalUrl}`);
-    res.status(401).json({ error: "Missing required auth headers (x-device-id, x-signature, x-timestamp, x-nonce)" });
+    res.status(401).json({ error: "缺少认证信息，请重新登录" });
     return;
   }
 
   // 2. 验证 device_id 格式（64字符 hex）
   if (!/^[0-9a-fA-F]{64}$/.test(deviceId)) {
     logger.warn("DEVICE_AUTH", `签名验证失败: device_id 格式无效 - ${deviceId.slice(0, 8)}...`);
-    res.status(401).json({ error: "Invalid device_id format" });
+    res.status(401).json({ error: "设备标识格式无效" });
     return;
   }
 
   // 3. 验证 timestamp 在 ±5 分钟内
   const timestamp = parseInt(timestampStr, 10);
   if (isNaN(timestamp)) {
-    res.status(401).json({ error: "Invalid timestamp" });
+    res.status(401).json({ error: "请求时间戳无效" });
     return;
   }
   const now = Date.now();
   const diff = Math.abs(now - timestamp * 1000);
   if (diff > TIMESTAMP_WINDOW_MS) {
     logger.warn("DEVICE_AUTH", `签名验证失败: timestamp 过期 - diff=${diff}ms`);
-    res.status(401).json({ error: "Request timestamp expired" });
+    res.status(401).json({ error: "请求已过期，请重试" });
     return;
   }
 
   // 4. 防重放：检查 nonce
   if (nonceCache.has(nonce)) {
     logger.warn("DEVICE_AUTH", `签名验证失败: nonce 重放 - nonce=${nonce.slice(0, 8)}...`);
-    res.status(401).json({ error: "Replay detected" });
+    res.status(401).json({ error: "重复请求，请稍后重试" });
     return;
   }
   nonceCache.set(nonce, Date.now());
@@ -131,12 +131,12 @@ export async function deviceAuthMiddleware(
 
     if (!valid) {
       logger.warn("DEVICE_AUTH", `签名验证失败: 签名不匹配 - device_id=${deviceId.slice(0, 8)}...`);
-      res.status(401).json({ error: "Invalid signature" });
+      res.status(401).json({ error: "签名验证失败" });
       return;
     }
   } catch (err: any) {
     logger.warn("DEVICE_AUTH", `签名验证异常: ${err.message}`);
-    res.status(401).json({ error: "Signature verification failed" });
+    res.status(401).json({ error: "签名验证异常" });
     return;
   }
 
