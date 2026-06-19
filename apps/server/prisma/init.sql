@@ -217,6 +217,19 @@ CREATE TABLE IF NOT EXISTS "notification_reads" (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "notification_reads_notification_id_device_id_idx" ON "notification_reads"("notification_id", "device_id");
 
+-- App日志表（客户端崩溃日志和关键业务失败日志）
+CREATE TABLE IF NOT EXISTS "app_logs" (
+    "id"         SERIAL      NOT NULL,
+    "device_id"  VARCHAR(64),
+    "platform"   VARCHAR(16),
+    "version"    VARCHAR(32),
+    "log_type"   VARCHAR(32) NOT NULL,
+    "content"    TEXT        NOT NULL,
+    "created_at" TIMESTAMP   NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT "app_logs_pkey" PRIMARY KEY ("id")
+);
+
 -- ─── Foreign Keys ────────────────────────────────────────────────────────────
 -- 不建立数据库外键约束，数据完整性和级联删除由业务代码保证
 
