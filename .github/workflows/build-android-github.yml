@@ -1,0 +1,204 @@
+name: Build Android (GitHub Actions)
+
+on:
+  push:
+    tags:
+      - "android-github-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64-v8a
+          # 取消注释以启用更多架构:
+          # - abi: armeabi-v7a
+          # - abi: x86
+          # - abi: x86_64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+          cache: "gradle"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # ============================================================
+      # Expo prebuild: 从 app.json + plugins 生成原生 Android 项目
+      # withAbiFilter 插件会在此时读取 BUILD_ABI / API_BASE_URL
+      # 环境变量并注入到 gradle.properties 和 build.gradle 中
+      # ============================================================
+      - name: Expo prebuild (generate native Android project)
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform android --clean
+        env:
+          BUILD_ABI: ${{ matrix.abi }}
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+
+      - name: Verify prebuild output
+        working-directory: apps/mobile
+        run: |
+          echo "📋 Checking generated Android project..."
+          if [ -d "android" ]; then
+            echo "✅ android directory exists"
+            ls -la android/
+            echo "📋 gradle.properties:"
+            cat android/gradle.properties
+            echo ""
+            echo "📋 app/build.gradle (signingConfigs section):"
+            grep -A 20 "signingConfigs" android/app/build.gradle || echo "No signingConfigs found"
+          else
+            echo "❌ android directory NOT found - prebuild failed!"
+            exit 1
+          fi
+
+      # ============================================================
+      # 签名配置: 解码 keystore + 注入 release signing config
+      # ============================================================
+      - name: Setup Android signing
+        working-directory: apps/mobile/android
+        run: |
+          # 1. Decode keystore from GitHub Secrets (Base64 encoded)
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > app/release.keystore
+          echo "✅ Keystore decoded: $(ls -la app/release.keystore)"
+
+          # 2. Create keystore.properties in android root
+          cat > keystore.properties << PROPSEOF
+          storeFile=release.keystore
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          PROPSEOF
+          echo "✅ keystore.properties created"
+
+          # 3. Inject signing config into app/build.gradle using Python
+          python3 << 'PYEOF'
+          import re
+
+          with open('app/build.gradle', 'r') as f:
+              gradle = f.read()
+
+          # Add keystore properties loader at the top of the file
+          props_header = """def keystoreProperties = new Properties()
+          keystoreProperties.load(new FileInputStream(rootProject.file("keystore.properties")))
+
+          """
+          gradle = props_header + gradle
+
+          # Add release signing config inside signingConfigs block
+          # Expo prebuild generates a debug signing config, we add release after it
+          release_config = """        release {
+              storeFile file(keystoreProperties['storeFile'])
+              storePassword keystoreProperties['storePassword']
+              keyAlias keystoreProperties['keyAlias']
+              keyPassword keystoreProperties['keyPassword']
+          }"""
+
+          # Find the debug signing config closing brace and insert release config after it
+          # Pattern: "keyPassword 'android'" followed by whitespace and closing brace
+          gradle = re.sub(
+              r"(keyPassword\s+'android'\s*\n(\s*)\})",
+              r"\1\n" + release_config,
+              gradle
+          )
+
+          # Change ONLY the release buildType's signingConfig from debug to release
+          # Must NOT change the debug buildType's signingConfig
+          # Strategy: find the second occurrence (release block) and replace only that one
+          target = "signingConfig signingConfigs.debug"
+          first_idx = gradle.find(target)
+          second_idx = gradle.find(target, first_idx + len(target))
+          if second_idx != -1:
+              gradle = gradle[:second_idx] + "signingConfig signingConfigs.release" + gradle[second_idx + len(target):]
+              print("✅ release buildType signingConfig updated")
+          else:
+              # If only one occurrence exists, it's in the release block (no debug block)
+              gradle = gradle.replace(target, "signingConfig signingConfigs.release")
+              print("✅ single signingConfig occurrence updated")
+
+          with open('app/build.gradle', 'w') as f:
+              f.write(gradle)
+
+          print("✅ Signing config injected into build.gradle")
+          PYEOF
+
+          # 4. Verify the modifications
+          echo "📋 Verifying signing config in build.gradle:"
+          grep -A 6 "signingConfigs" android/app/build.gradle || echo "⚠️ No signingConfigs found"
+          echo ""
+          grep "signingConfig signingConfigs" android/app/build.gradle || echo "⚠️ No signingConfig reference found"
+
+      # ============================================================
+      # Gradle 构建: assembleRelease 生成 APK
+      # ============================================================
+      - name: Build APK with Gradle
+        working-directory: apps/mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+        env:
+          BUILD_ABI: ${{ matrix.abi }}
+
+      - name: Prepare APK for release
+        working-directory: apps/mobile
+        run: |
+          VERSION="${GITHUB_REF_NAME#android-github-v}"
+          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
+
+          if [ -z "$APK_PATH" ]; then
+            echo "❌ APK not found!"
+            echo "📋 Listing all build outputs:"
+            find android/app/build/outputs -type f
+            exit 1
+          fi
+
+          mkdir -p dist
+          cp "$APK_PATH" "dist/imwallet-${VERSION}-${{ matrix.abi }}.apk"
+          echo "✅ APK prepared: imwallet-${VERSION}-${{ matrix.abi }}.apk"
+          ls -la dist/
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ matrix.abi }}
+          path: apps/mobile/dist/*.apk
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all APK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          pattern: android-*
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: IMWallet ${{ github.ref_name }}
+          files: release-artifacts/**/*.apk
+          generate_release_notes: true
