@@ -12,7 +12,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import * as SecureStore from "../utils/secureStorage";
 import { generateMnemonic } from "../utils/mnemonic";
-import { uploadLog } from "../services/logService";
+import { uploadLog, saveLogToLocal } from "../services/logService";
 import { CameraIcon, NoScreenshotIcon } from "../components/icons";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "BackupMnemonic">;
@@ -53,16 +53,19 @@ export default function BackupMnemonicScreen() {
 
   const loadMnemonic = async () => {
     if (!walletId) {
+      saveLogToLocal("mnemonic", `[BackupMnemonic] walletId is null/undefined, cannot load mnemonic`);
       setNoMnemonic(true);
       return;
     }
     try {
       const key = mnemonicKey(walletId);
       let stored = await SecureStore.getItemAsync(key);
+      saveLogToLocal("mnemonic", `[BackupMnemonic] step1 read perWallet key=${key}, result=${stored ? `len=${stored.length},prefix=${stored.slice(0, 8)}` : "null"}`);
 
       // Migration: check legacy key if per-wallet key not found
       if (!stored) {
         const legacy = await SecureStore.getItemAsync("aquad_mnemonic");
+        saveLogToLocal("mnemonic", `[BackupMnemonic] step2 read legacy key, result=${legacy ? `len=${legacy.length},prefix=${legacy.slice(0, 8)}` : "null"}`);
         if (legacy) {
           const words = legacy.trim().split(/\s+/);
           if (words.length === 12) {
@@ -78,23 +81,32 @@ export default function BackupMnemonicScreen() {
       if (stored) {
         const words = stored.trim().split(/\s+/);
         if (words.length !== 12) {
-          uploadLog("mnemonic", `[BackupMnemonic] invalid mnemonic word count: ${words.length}, expected 12, walletId=${walletId}`);
+          saveLogToLocal("mnemonic", `[BackupMnemonic] invalid word count: ${words.length}, expected 12, walletId=${walletId}, prefix=${stored.slice(0, 20)}`);
           stored = null; // invalid, will regenerate below
         }
       }
 
       if (!stored) {
+        saveLogToLocal("mnemonic", `[BackupMnemonic] step3 no stored mnemonic, calling generateMnemonic, walletId=${walletId}`);
         stored = await generateMnemonic();
-        if (!stored) {
-          uploadLog("mnemonic", `[BackupMnemonic] generateMnemonic returned null/empty, walletId=${walletId}`);
+        if (!stored || stored.trim().split(/\s+/).length !== 12) {
+          saveLogToLocal("mnemonic", `[BackupMnemonic] generateMnemonic FAILED: result=${stored ? `len=${stored.length},words=${stored.trim().split(/\s+/).length},prefix=${stored.slice(0, 20)}` : "null/empty"}, walletId=${walletId}`);
+        } else {
+          saveLogToLocal("mnemonic", `[BackupMnemonic] generateMnemonic OK: words=12, prefix=${stored.slice(0, 20)}, walletId=${walletId}`);
         }
         await SecureStore.setItemAsync(key, stored);
+        // Verify write succeeded by reading back
+        const readBack = await SecureStore.getItemAsync(key);
+        if (!readBack || readBack !== stored) {
+          saveLogToLocal("mnemonic", `[BackupMnemonic] SecureStore write FAILED: readBack=${readBack ? `len=${readBack.length}` : "null"}, expected len=${stored.length}, walletId=${walletId}`);
+        }
       }
 
       const finalWords = stored.trim().split(/\s+/);
       setMnemonic(finalWords);
+      saveLogToLocal("mnemonic", `[BackupMnemonic] final: wordCount=${finalWords.length}, walletId=${walletId}`);
     } catch (err) {
-      uploadLog("mnemonic", `[BackupMnemonic] loadMnemonic failed: ${(err as Error)?.message || String(err)}, walletId=${walletId}`);
+      saveLogToLocal("mnemonic", `[BackupMnemonic] loadMnemonic FAILED: ${(err as Error)?.message || String(err)}, stack=${(err as Error)?.stack?.slice(0, 200) || "none"}, walletId=${walletId}`);
       setNoMnemonic(true);
     }
   };

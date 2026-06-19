@@ -7,6 +7,7 @@ import * as Sharing from "expo-sharing";
 import { useWalletStore } from "../stores/walletStore";
 import { useAlert } from "../hooks/useAlert";
 import { ReceiveSkeleton } from "../components/Skeleton";
+import { saveLogToLocal } from "../services/logService";
 import { CopyIcon, ShareIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import type { RootStackParamList } from "../types/navigation";
 
@@ -52,9 +53,14 @@ export default function ReceiveScreen() {
 
   const handleCopy = () => {
     if (address) {
-      const Clipboard = require("expo-clipboard");
-      Clipboard.setStringAsync(address);
-      alert("已复制", `${network} 收款地址已复制到剪贴板`);
+      try {
+        const Clipboard = require("expo-clipboard");
+        Clipboard.setStringAsync(address);
+        alert("已复制", `${network} 收款地址已复制到剪贴板`);
+      } catch (err: any) {
+        saveLogToLocal("crash", `[Receive] handleCopy failed: ${err?.message || String(err)}`);
+        alert("复制失败", "请手动复制地址");
+      }
     }
   };
 

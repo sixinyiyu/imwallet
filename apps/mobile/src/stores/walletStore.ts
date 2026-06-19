@@ -5,7 +5,7 @@ import { accountService } from "../services/accountService";
 import { generateMnemonic, cleanMnemonic } from "../utils/mnemonic";
 import { ensureDeviceKeys, ensureDeviceRegistered } from "../services/api";
 import { useAuthStore } from "./authStore";
-import { uploadLog } from "../services/logService";
+import { uploadLog, saveLogToLocal } from "../services/logService";
 import type { Wallet, Account, TokenBalance } from "../types";
 
 const MNEMONIC_KEY_PREFIX = "aquad_mnemonic_";
@@ -195,11 +195,18 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   /** Create wallet — generates mnemonic locally, creates on server */
   createWallet: async (alias: string, password: string, passwordHint?: string): Promise<string> => {
-    const mnemonic = await generateMnemonic();
-    if (!mnemonic || mnemonic.trim().split(/\s+/).length !== 12) {
-      uploadLog("mnemonic", `[createWallet] generateMnemonic failed: words=${mnemonic?.trim().split(/\s+/).length || 0}`);
+    let mnemonic: string;
+    try {
+      mnemonic = await generateMnemonic();
+    } catch (err: any) {
+      saveLogToLocal("mnemonic", `[createWallet] generateMnemonic threw: ${err?.message || String(err)}, stack=${err?.stack?.slice(0, 200) || "none"}`);
       throw new Error("助记词生成失败，请重试");
     }
+    if (!mnemonic || mnemonic.trim().split(/\s+/).length !== 12) {
+      saveLogToLocal("mnemonic", `[createWallet] generateMnemonic invalid: words=${mnemonic?.trim().split(/\s+/).length || 0}, prefix=${mnemonic?.slice(0, 20) || "null"}`);
+      throw new Error("助记词生成失败，请重试");
+    }
+    saveLogToLocal("mnemonic", `[createWallet] generateMnemonic OK: words=12, prefix=${mnemonic.slice(0, 20)}`);
 
     // Create wallet on server with mnemonic for deterministic derivation
     const wallet = await walletService.saveWallet("CREATE", alias, password, passwordHint, mnemonic);

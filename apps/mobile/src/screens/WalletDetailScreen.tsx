@@ -17,6 +17,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { WalletDetailSkeleton } from "../components/Skeleton";
+import { saveLogToLocal } from "../services/logService";
 import { useAlert } from "../hooks/useAlert";
 import { walletService } from "../services/walletService";
 import {
@@ -152,7 +153,8 @@ export default function WalletDetailScreen() {
       const Clipboard = require("expo-clipboard");
       await Clipboard.setStringAsync(wallet.address);
       showToast("复制成功");
-    } catch {
+    } catch (err: any) {
+      saveLogToLocal("crash", `[WalletDetail] handleCopyAddress failed: ${err?.message || String(err)}`);
       showToast("复制失败");
     }
   };
@@ -354,9 +356,14 @@ export default function WalletDetailScreen() {
                   </Text>
                   <TouchableOpacity
                     onPress={async () => {
-                      const Clipboard = require("expo-clipboard");
-                      await Clipboard.setStringAsync(acc.address);
-                      showToast("地址已复制");
+                      try {
+                        const Clipboard = require("expo-clipboard");
+                        await Clipboard.setStringAsync(acc.address);
+                        showToast("地址已复制");
+                      } catch (err: any) {
+                        saveLogToLocal("crash", `[WalletDetail] account copy failed: ${err?.message || String(err)}`);
+                        showToast("复制失败");
+                      }
                     }}
                     activeOpacity={0.6}
                     style={styles.accountCopyBtn}

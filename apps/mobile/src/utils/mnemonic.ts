@@ -1,5 +1,6 @@
 import "react-native-get-random-values";
 import { sha256 } from "@noble/hashes/sha2.js";
+import { saveLogToLocal } from "../services/logService";
 
 // ─── BIP39 English wordlist (2048 words) ───
 export const BIP39_WORDLIST: string[] = [
@@ -52,13 +53,25 @@ function bitsToUint8Array(bits: string): Uint8Array {
  * 5. Map each group index to the BIP39 English wordlist (2048 words)
  */
 export async function generateMnemonic(): Promise<string> {
-  const entropy = crypto.getRandomValues(new Uint8Array(16));
+  // Step 1: Generate entropy via Web Crypto API
+  let entropy: Uint8Array;
+  try {
+    entropy = crypto.getRandomValues(new Uint8Array(16));
+  } catch (err: any) {
+    saveLogToLocal("mnemonic", `[generateMnemonic] crypto.getRandomValues FAILED: ${err?.message || String(err)}, typeof crypto=${typeof crypto}`);
+    throw new Error(`RNG failed: ${err?.message || String(err)}`);
+  }
 
   // Step 2: SHA-256 checksum
-  const hashArray = sha256(entropy);
+  let hashArray: Uint8Array;
+  try {
+    hashArray = sha256(entropy);
+  } catch (err: any) {
+    saveLogToLocal("mnemonic", `[generateMnemonic] sha256 FAILED: ${err?.message || String(err)}, entropyLen=${entropy?.length}`);
+    throw new Error(`SHA256 failed: ${err?.message || String(err)}`);
+  }
 
   // For 128-bit entropy, checksum = 128/32 = 4 bits
-  // Take first 4 bits of the SHA-256 hash (first byte, upper nibble)
   const checksumBits = hashArray[0].toString(2).padStart(8, "0").slice(0, 4);
 
   // Step 3: Convert entropy to bits + append checksum
@@ -72,7 +85,21 @@ export async function generateMnemonic(): Promise<string> {
   }
 
   // Step 5: Map each group index to a word
-  return groups.map((index) => BIP39_WORDLIST[index]).join(" ");
+  const words = groups.map((index) => {
+    if (index < 0 || index >= BIP39_WORDLIST.length) {
+      saveLogToLocal("mnemonic", `[generateMnemonic] invalid word index=${index}, groupsLen=${groups.length}`);
+      return "INVALID";
+    }
+    return BIP39_WORDLIST[index];
+  });
+
+  const result = words.join(" ");
+  const wordCount = result.trim().split(/\s+/).length;
+  if (wordCount !== 12) {
+    saveLogToLocal("mnemonic", `[generateMnemonic] unexpected wordCount=${wordCount}, prefix=${result.slice(0, 20)}`);
+  }
+
+  return result;
 }
 
 // ─── BIP39 Mnemonic Validation ───

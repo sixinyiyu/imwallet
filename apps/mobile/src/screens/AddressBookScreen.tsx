@@ -155,9 +155,14 @@ export default function AddressBookScreen() {
 
   /** 复制地址到剪贴板 */
   const handleCopyAddress = useCallback(async (address: string) => {
-    const Clipboard = require("expo-clipboard");
-    await Clipboard.setStringAsync(address);
-    showToast("地址已复制");
+    try {
+      const Clipboard = require("expo-clipboard");
+      await Clipboard.setStringAsync(address);
+      showToast("地址已复制");
+    } catch (err: any) {
+      saveLogToLocal("crash", `[AddressBook] handleCopyAddress failed: ${err?.message || String(err)}`);
+      showToast("复制失败");
+    }
   }, [showToast]);
 
   if (loading && contacts.length === 0) {
