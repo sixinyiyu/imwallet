@@ -57,8 +57,9 @@ export default function RecordsScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RecordsRoute>();
   const { activeWallet } = useWalletStore();
-  // 支持路由传入 walletId（管理员查看其他用户交易记录时使用）
+  // 支持路由传入 walletId（管理员查看其他用户交易记录时使用）和 tokenSymbol（从代币详情页进入时过滤当前代币）
   const currentWalletId = route.params?.walletId || activeWallet?.id;
+  const currentTokenSymbol = route.params?.tokenSymbol;
   const currentWalletAddress = activeWallet?.address || "";
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,6 +99,7 @@ export default function RecordsScreen() {
           type: typeFilter,
           timeRange: timeFilter || undefined,
           search: searchText.trim() || undefined,
+          tokenSymbol: currentTokenSymbol || undefined,
         };
         const data = await transactionService.getTransactions(filter);
         setTransactions((prev) => (append ? [...prev, ...data.transactions] : data.transactions));
@@ -107,7 +109,7 @@ export default function RecordsScreen() {
         // silent
       }
     },
-    [activeWallet, typeFilter, timeFilter, searchText]
+    [activeWallet, typeFilter, timeFilter, searchText, currentTokenSymbol]
   );
 
   // 筛选条件变化时重新加载
@@ -115,7 +117,7 @@ export default function RecordsScreen() {
     if (!currentWalletId) return;
     setLoading(true);
     loadTransactions(1).finally(() => setLoading(false));
-  }, [typeFilter, timeFilter, searchText, currentWalletId]);
+  }, [typeFilter, timeFilter, searchText, currentWalletId, currentTokenSymbol]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -265,7 +267,7 @@ export function TransactionCard({
   currentAddress: string;
   onPress?: (tx: Transaction) => void;
 }) {
-  const isReceive = transaction.toWallet.address === currentAddress;
+  const isReceive = transaction.toAddress === currentAddress;
   const label = isReceive ? "收到" : "发送";
   const prefix = isReceive ? "+" : "-";
   const amountColor = isReceive ? "#10B981" : "#EF4444";

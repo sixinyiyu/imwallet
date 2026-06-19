@@ -11,7 +11,7 @@ export type RootStackParamList = {
   TokenDetail: { tokenSymbol: string };
   Transfer: { walletId?: string; tokenSymbol?: string; tokenId?: string; toAddress?: string };
   Receive: { walletId?: string; tokenSymbol?: string; tokenId?: string };
-  Records: { walletId?: string };
+  Records: { walletId?: string; tokenSymbol?: string };
   WalletManage: undefined;
   WalletDetail: { walletId: string };
   AccountManage: { walletId: string };

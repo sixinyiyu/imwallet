@@ -25,12 +25,14 @@ export const tokenService = {
   async getTransactions(
     walletId: string,
     page = 1,
-    limit = 5
+    limit = 5,
+    tokenSymbol?: string
   ): Promise<{ transactions: any[]; total: number }> {
     return transactionService.getTransactions({
       walletId,
       page,
       limit,
+      tokenSymbol,
     });
   },
 };

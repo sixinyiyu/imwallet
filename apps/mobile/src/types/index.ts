@@ -93,8 +93,11 @@ export interface Transaction {
   id: string;
   txHash: string;
   fromWalletId: string;
+  fromAddress: string;  // 付款链地址（如 T.../0x...）
   toWalletId: string;  // 默认空字符串，系统内用户时关联钱包ID
-  tokenId: string;
+  toAddress: string;   // 收款链地址（始终记录）
+  tokenSymbol: string; // 代币符号（如 USDT、TRX）
+  tokenName: string;   // 代币名称
   amount: string;
   fee: string;
   receivedAmount: string;
@@ -106,8 +109,6 @@ export interface Transaction {
   toWallet: { alias: string; address: string };
   fromContactName: string;
   toContactName: string;
-  tokenSymbol: string;
-  tokenName: string;
 }
 
 export interface Contact {

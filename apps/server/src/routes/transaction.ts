@@ -57,6 +57,7 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
   const type = req.query.type as string | undefined;
   const timeRange = req.query.timeRange as string | undefined;
   const search = req.query.search as string | undefined;
+  const tokenSymbol = req.query.tokenSymbol as string | undefined;
 
   const result = await transactionService.getTransactions({
     walletId,
@@ -65,6 +66,7 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
     type: (type === "send" || type === "receive") ? type : undefined,
     timeRange: (["today", "7d", "30d", "90d"].includes(timeRange || "")) ? timeRange as any : undefined,
     search: search || undefined,
+    tokenSymbol: tokenSymbol || undefined,
   });
   res.json(result);
 }));

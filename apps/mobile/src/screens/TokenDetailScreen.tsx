@@ -45,7 +45,7 @@ export default function TokenDetailScreen() {
   const loadTransactions = async () => {
     setLoading(true);
     try {
-      const data = await tokenService.getTransactions(activeWallet!.id, 1, 5);
+      const data = await tokenService.getTransactions(activeWallet!.id, 1, 5, tokenSymbol);
       setTransactions(data.transactions);
     } catch {
       // silent
@@ -83,7 +83,7 @@ export default function TokenDetailScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionBtn}
-          onPress={() => navigation.navigate("Records", {})}
+          onPress={() => navigation.navigate("Records", { tokenSymbol })}
         >
           <RecordsIcon size={24} color="#F59E0B" />
           <Text style={styles.actionLabel}>记录</Text>
@@ -118,7 +118,7 @@ export default function TokenDetailScreen() {
           ))}
           <TouchableOpacity
             style={styles.viewAll}
-            onPress={() => navigation.navigate("Records", {})}
+            onPress={() => navigation.navigate("Records", { tokenSymbol })}
           >
             <Text style={styles.viewAllText}>查看全部交易记录 ›</Text>
           </TouchableOpacity>

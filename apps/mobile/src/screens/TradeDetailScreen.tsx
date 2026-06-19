@@ -126,8 +126,8 @@ export default function TradeDetailScreen() {
 
   // 判断当前用户是否是发送方或接收方
   const currentAddress = activeWallet?.address || "";
-  const isSender = tx.fromWallet.address === currentAddress;
-  const isReceiver = tx.toWallet.address === currentAddress;
+  const isSender = tx.fromAddress === currentAddress;
+  const isReceiver = tx.toAddress === currentAddress;
 
   // 根据 FEE_MODE 计算实际到账和总计
   const isFeeDeducted = tx.feeMode === "DEDUCTED";
@@ -157,7 +157,7 @@ export default function TradeDetailScreen() {
           </View>
           <View style={styles.partyTextWrap}>
             <Text style={styles.partyName}>{fromName}</Text>
-            <Text style={styles.partyAddr}>{shortenAddress(tx.fromWallet.address)}</Text>
+            <Text style={styles.partyAddr}>{shortenAddress(tx.fromAddress)}</Text>
           </View>
         </View>
 
@@ -166,7 +166,7 @@ export default function TradeDetailScreen() {
         {/* 金额行 */}
         <View style={styles.flowAmountRow}>
           <Text style={styles.flowLabel}>发送</Text>
-          <Text style={styles.flowAmount}>{tx.amount} USDT</Text>
+          <Text style={styles.flowAmount}>{tx.amount} {tx.tokenSymbol}</Text>
         </View>
 
         <View style={styles.divider} />
@@ -178,7 +178,7 @@ export default function TradeDetailScreen() {
           </View>
           <View style={styles.partyTextWrap}>
             <Text style={styles.partyName}>{toName}</Text>
-            <Text style={styles.partyAddr}>{shortenAddress(tx.toWallet.address)}</Text>
+            <Text style={styles.partyAddr}>{shortenAddress(tx.toAddress)}</Text>
           </View>
         </View>
       </View>
@@ -187,18 +187,18 @@ export default function TradeDetailScreen() {
       <Text style={styles.sectionTitle}>代币转移</Text>
       <View style={styles.card}>
         <TokenTransferRow
-          address={tx.fromWallet.address}
+          address={tx.fromAddress}
           alias={tx.fromWallet.alias}
-          token="USDT"
+          token={tx.tokenSymbol}
           amount={`-${tx.amount}`}
           isOut
           isCurrentUser={isSender}
         />
         <View style={styles.divider} />
         <TokenTransferRow
-          address={tx.toWallet.address}
+          address={tx.toAddress}
           alias={toName}
-          token="USDT"
+          token={tx.tokenSymbol}
           amount={`+${receivedAmount.toFixed(6)}`}
           isOut={false}
           isCurrentUser={isReceiver}
@@ -210,19 +210,19 @@ export default function TradeDetailScreen() {
       <View style={styles.card}>
         <InfoRow label="网络" value="Private Chain" />
         <View style={styles.divider} />
-        <InfoRow label="转账金额" value={`${tx.amount} USDT`} />
+        <InfoRow label="转账金额" value={`${tx.amount} ${tx.tokenSymbol}`} />
         <View style={styles.divider} />
-        <InfoRow label="手续费" value={`${tx.fee} USDT`} />
+        <InfoRow label="手续费" value={`${tx.fee} ${tx.tokenSymbol}`} />
         {isFeeDeducted ? (
           <>
             <View style={styles.divider} />
-            <InfoRow label="实际到账" value={`${receivedAmount.toFixed(6)} USDT`} />
+            <InfoRow label="实际到账" value={`${receivedAmount.toFixed(6)} ${tx.tokenSymbol}`} />
           </>
         ) : null}
         <View style={styles.cardDivider} />
         <InfoRow
           label={isFeeDeducted ? "发送方支付" : "总计（含手续费）"}
-          value={`${senderTotal.toFixed(6)} USDT`}
+          value={`${senderTotal.toFixed(6)} ${tx.tokenSymbol}`}
           bold
         />
         {tx.memo ? (

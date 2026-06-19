@@ -195,12 +195,14 @@ model Transaction {
   txHash       String   @unique @map("tx_hash") @db.VarChar(66)
   /// 付款钱包 ID
   fromWalletId String   @map("from_wallet_id") @db.VarChar(36)
+  /// 付款链地址（Account.address，如 T.../0x...）
+  fromAddress  String   @map("from_address") @db.VarChar(64)
   /// 收款钱包 ID（系统内用户时关联，外部地址时为空字符串）
   toWalletId   String   @default("") @map("to_wallet_id") @db.VarChar(36)
-  /// 收款地址（链上地址，始终记录）
+  /// 收款链地址（始终记录，如 T.../0x...）
   toAddress    String   @map("to_address") @db.VarChar(128)
-  /// 代币 ID
-  tokenId      String   @map("token_id") @db.VarChar(36)
+  /// 代币符号（如 USDT、TRX），直接存储便于过滤和展示
+  tokenSymbol  String   @map("token_symbol") @db.VarChar(16)
   /// 交易金额
   amount       Decimal  @db.Decimal(30, 8)
   /// 手续费

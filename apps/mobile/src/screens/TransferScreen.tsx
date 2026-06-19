@@ -201,7 +201,7 @@ export default function TransferScreen() {
         fromWalletId: activeWallet.id,
         toAddress: toAddress.trim(),
         amount,
-        tokenId: selectedToken?.tokenId || "",
+        tokenSymbol: selectedToken?.symbol || "USDT",
         memo: memo.trim() || "",
       });
       setResult({

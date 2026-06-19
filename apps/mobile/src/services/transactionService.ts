@@ -8,6 +8,7 @@ export interface TransactionFilter {
   type?: "all" | "send" | "receive";
   timeRange?: "today" | "7d" | "30d" | "90d";
   search?: string;
+  tokenSymbol?: string;
 }
 
 export const transactionService = {
@@ -15,7 +16,7 @@ export const transactionService = {
     fromWalletId: string;
     toAddress: string;
     amount: string;
-    tokenId: string;
+    tokenSymbol: string;
     memo?: string;
   }): Promise<Transaction> {
     const { data } = await api.post("/transactions/transfer", input);
@@ -33,6 +34,7 @@ export const transactionService = {
     if (filter.type && filter.type !== "all") params.type = filter.type;
     if (filter.timeRange) params.timeRange = filter.timeRange;
     if (filter.search) params.search = filter.search;
+    if (filter.tokenSymbol) params.tokenSymbol = filter.tokenSymbol;
 
     const { data } = await api.get("/transactions", { params });
     return data;
