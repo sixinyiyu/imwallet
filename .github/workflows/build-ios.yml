@@ -60,29 +60,36 @@ jobs:
           mkdir -p dist
           VERSION="${GITHUB_REF_NAME#ios-v}"
 
-          # Retry logic: EAS API may have delay after build completes
-          MAX_RETRIES=5
+          MAX_RETRIES=6
           BUILD_URL=""
 
           for i in $(seq 1 $MAX_RETRIES); do
             echo "🔄 Attempt $i/$MAX_RETRIES: querying EAS build list..."
             BUILD_INFO=$(eas build:list --platform ios --limit 20 --json 2>/dev/null)
 
-            # Debug: print raw output
-            echo "📋 Raw build list (first 2000 chars):"
-            echo "$BUILD_INFO" | head -c 2000
+            # Debug: print raw JSON structure
+            echo "📋 Raw EAS build list JSON:"
+            echo "$BUILD_INFO" | node -e "
+              const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+              // Print summary of each build for debugging
+              data.forEach((b, idx) => {
+                console.log(\`  [\${idx}] id=\${b.id}, status=\${b.status}, platform=\${b.platform}, profile=\${b.buildProfile || b.build_profile || 'N/A'}, hasUrl=\${!!(b.artifacts?.buildUrl || b.artifacts?.build_url)}\`);
+              });
+            " 2>/dev/null || echo "  (failed to parse JSON, raw output:)" && echo "$BUILD_INFO" | head -c 3000
+
             echo ""
 
+            # Flexible matching: find first finished iOS build with a download URL
+            # Don't strictly filter by buildProfile — field name may vary across EAS versions
             BUILD_URL=$(echo "$BUILD_INFO" | node -e "
               const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-              // Find the most recent finished iOS build
-              const build = data.find(b =>
-                (b.buildProfile === 'production') &&
-                (b.status === 'finished' || b.status === 'FINISHED') &&
-                (b.platform === 'ios' || b.platform === 'IOS' || b.platform === 'iOS')
-              );
-              const url = build?.artifacts?.buildUrl || '';
-              console.log(url);
+              const build = data.find(b => {
+                const status = (b.status || '').toLowerCase();
+                const platform = (b.platform || '').toLowerCase();
+                const url = b.artifacts?.buildUrl || b.artifacts?.build_url || '';
+                return status === 'finished' && platform === 'ios' && url.length > 0;
+              });
+              console.log(build?.artifacts?.buildUrl || build?.artifacts?.build_url || '');
             " 2>/dev/null)
 
             if [ -n "$BUILD_URL" ]; then
@@ -90,14 +97,14 @@ jobs:
               break
             fi
 
-            echo "⚠️ No finished build found yet, retrying in 30s..."
+            echo "⚠️ No finished build with URL found yet, retrying in 30s..."
             sleep 30
           done
 
           if [ -z "$BUILD_URL" ]; then
             echo "❌ Could not find IPA download URL after $MAX_RETRIES attempts"
-            echo "📋 Full build list for debugging:"
-            eas build:list --platform ios --limit 20 --json
+            echo "📋 Full raw build list for debugging:"
+            eas build:list --platform ios --limit 20 --json 2>&1
             exit 1
           fi
 

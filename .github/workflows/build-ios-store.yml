@@ -59,49 +59,77 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       # ============================================================
-      # Step 2: 等待构建完成，获取 Build ID
+      # Step 2: 等待构建完成，获取 Build ID 和下载 URL
       # ============================================================
-      - name: Wait for build to finish and get Build ID
+      - name: Wait for build to finish and get Build URL
         id: build-info
         run: |
           echo "⏳ Waiting for EAS build to complete..."
           BUILD_ID=""
           BUILD_URL=""
+
           for i in $(seq 1 120); do
-            BUILD_INFO=$(eas build:list --platform ios --limit 5 --json)
-            # Find the latest finished build with app-store profile
+            BUILD_INFO=$(eas build:list --platform ios --limit 10 --json 2>/dev/null)
+
+            # Debug: print build summary every 10 iterations
+            if [ $((i % 10)) -eq 1 ]; then
+              echo "📋 Build list summary (iteration $i):"
+              echo "$BUILD_INFO" | node -e "
+                const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+                data.forEach((b, idx) => {
+                  console.log(\`  [\${idx}] id=\${b.id}, status=\${b.status}, platform=\${b.platform}, profile=\${b.buildProfile || b.build_profile || 'N/A'}, hasUrl=\${!!(b.artifacts?.buildUrl || b.artifacts?.build_url)}\`);
+                });
+              " 2>/dev/null || echo "  (parse failed)"
+            fi
+
+            # Flexible matching: find first finished iOS build with a download URL
             MATCH=$(echo "$BUILD_INFO" | node -e "
               const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-              const build = data.find(b => b.buildProfile === 'app-store' && b.status === 'finished' && b.platform === 'ios');
+              const build = data.find(b => {
+                const status = (b.status || '').toLowerCase();
+                const platform = (b.platform || '').toLowerCase();
+                const url = b.artifacts?.buildUrl || b.artifacts?.build_url || '';
+                return status === 'finished' && platform === 'ios' && url.length > 0;
+              });
               if (build) {
-                console.log(build.id + '|' + (build.artifacts?.buildUrl || ''));
+                const url = build.artifacts?.buildUrl || build.artifacts?.build_url || '';
+                console.log(build.id + '|' + url);
               }
             " 2>/dev/null)
+
             if [ -n "$MATCH" ]; then
               BUILD_ID=$(echo "$MATCH" | cut -d'|' -f1)
               BUILD_URL=$(echo "$MATCH" | cut -d'|' -f2)
               break
             fi
+
             # Check for failed build
             FAILED=$(echo "$BUILD_INFO" | node -e "
               const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-              const build = data.find(b => b.buildProfile === 'app-store' && b.status === 'errored' && b.platform === 'ios');
+              const build = data.find(b => {
+                const status = (b.status || '').toLowerCase();
+                const platform = (b.platform || '').toLowerCase();
+                return status === 'errored' && platform === 'ios';
+              });
               if (build) console.log('yes');
             " 2>/dev/null)
             if [ "$FAILED" = "yes" ]; then
               echo "❌ EAS build failed!"
               exit 1
             fi
+
             echo "  ...still building ($i/120)"
             sleep 30
           done
 
           if [ -z "$BUILD_ID" ]; then
             echo "❌ Timed out waiting for build"
+            echo "📋 Full raw build list:"
+            eas build:list --platform ios --limit 10 --json 2>&1
             exit 1
           fi
 
-          echo "✅ Build finished: ID=$BUILD_ID"
+          echo "✅ Build finished: ID=$BUILD_ID, URL=$BUILD_URL"
           echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
           echo "build_url=$BUILD_URL" >> $GITHUB_OUTPUT
         working-directory: apps/mobile
@@ -116,15 +144,22 @@ jobs:
           mkdir -p dist
           VERSION="${GITHUB_REF_NAME#ios-store-v}"
           BUILD_URL="${{ steps.build-info.outputs.build_url }}"
+
           if [ -z "$BUILD_URL" ]; then
-            echo "⚠️ No build URL, trying to fetch from EAS..."
-            BUILD_INFO=$(eas build:list --platform ios --limit 5 --json)
+            echo "⚠️ No build URL from previous step, querying EAS directly..."
+            BUILD_INFO=$(eas build:list --platform ios --limit 10 --json 2>/dev/null)
             BUILD_URL=$(echo "$BUILD_INFO" | node -e "
               const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-              const build = data.find(b => b.buildProfile === 'app-store' && b.status === 'finished' && b.platform === 'ios');
-              console.log(build?.artifacts?.buildUrl || '');
-            ")
+              const build = data.find(b => {
+                const status = (b.status || '').toLowerCase();
+                const platform = (b.platform || '').toLowerCase();
+                const url = b.artifacts?.buildUrl || b.artifacts?.build_url || '';
+                return status === 'finished' && platform === 'ios' && url.length > 0;
+              });
+              console.log(build?.artifacts?.buildUrl || build?.artifacts?.build_url || '');
+            " 2>/dev/null)
           fi
+
           if [ -n "$BUILD_URL" ]; then
             curl -L -o "dist/imwallet-${VERSION}.ipa" "$BUILD_URL"
             echo "✅ IPA downloaded: imwallet-${VERSION}.ipa"
