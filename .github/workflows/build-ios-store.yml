@@ -1,0 +1,192 @@
+name: Build iOS & Submit to App Store
+
+on:
+  push:
+    tags:
+      - "ios-store-v*"
+    paths:
+      - "apps/mobile/**"
+      - ".github/workflows/build-ios-store.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-submit:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup EAS
+        run: npm install -g eas-cli
+
+      - name: Initialize EAS project
+        run: eas init --id ${{ secrets.EAS_PROJECT_ID }} --force
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      # ============================================================
+      # Step 1: EAS Build — 构建 App Store 分发的 IPA
+      # ============================================================
+      - name: Build iOS for App Store (EAS)
+        run: |
+          eas build \
+            --platform ios \
+            --profile app-store \
+            --non-interactive \
+            --no-wait
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_BUILD_NO_EXPO_GO_WARNING: true
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      # ============================================================
+      # Step 2: 等待构建完成，获取 Build ID
+      # ============================================================
+      - name: Wait for build to finish and get Build ID
+        id: build-info
+        run: |
+          echo "⏳ Waiting for EAS build to complete..."
+          BUILD_ID=""
+          BUILD_URL=""
+          for i in $(seq 1 120); do
+            BUILD_INFO=$(eas build:list --platform ios --limit 5 --json)
+            # Find the latest finished build with app-store profile
+            MATCH=$(echo "$BUILD_INFO" | node -e "
+              const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+              const build = data.find(b => b.buildProfile === 'app-store' && b.status === 'finished' && b.platform === 'ios');
+              if (build) {
+                console.log(build.id + '|' + (build.artifacts?.buildUrl || ''));
+              }
+            " 2>/dev/null)
+            if [ -n "$MATCH" ]; then
+              BUILD_ID=$(echo "$MATCH" | cut -d'|' -f1)
+              BUILD_URL=$(echo "$MATCH" | cut -d'|' -f2)
+              break
+            fi
+            # Check for failed build
+            FAILED=$(echo "$BUILD_INFO" | node -e "
+              const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+              const build = data.find(b => b.buildProfile === 'app-store' && b.status === 'errored' && b.platform === 'ios');
+              if (build) console.log('yes');
+            " 2>/dev/null)
+            if [ "$FAILED" = "yes" ]; then
+              echo "❌ EAS build failed!"
+              exit 1
+            fi
+            echo "  ...still building ($i/120)"
+            sleep 30
+          done
+
+          if [ -z "$BUILD_ID" ]; then
+            echo "❌ Timed out waiting for build"
+            exit 1
+          fi
+
+          echo "✅ Build finished: ID=$BUILD_ID"
+          echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
+          echo "build_url=$BUILD_URL" >> $GITHUB_OUTPUT
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      # ============================================================
+      # Step 3: 下载 IPA 制品
+      # ============================================================
+      - name: Download IPA
+        run: |
+          mkdir -p dist
+          VERSION="${GITHUB_REF_NAME#ios-store-v}"
+          BUILD_URL="${{ steps.build-info.outputs.build_url }}"
+          if [ -z "$BUILD_URL" ]; then
+            echo "⚠️ No build URL, trying to fetch from EAS..."
+            BUILD_INFO=$(eas build:list --platform ios --limit 5 --json)
+            BUILD_URL=$(echo "$BUILD_INFO" | node -e "
+              const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+              const build = data.find(b => b.buildProfile === 'app-store' && b.status === 'finished' && b.platform === 'ios');
+              console.log(build?.artifacts?.buildUrl || '');
+            ")
+          fi
+          if [ -n "$BUILD_URL" ]; then
+            curl -L -o "dist/imwallet-${VERSION}.ipa" "$BUILD_URL"
+            echo "✅ IPA downloaded: imwallet-${VERSION}.ipa"
+            ls -la dist/
+          else
+            echo "❌ Could not find IPA download URL"
+            exit 1
+          fi
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      # ============================================================
+      # Step 4: 提交到 App Store Connect
+      # ============================================================
+      - name: Submit to App Store Connect
+        run: |
+          eas submit \
+            --platform ios \
+            --profile app-store \
+            --latest \
+            --non-interactive
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      # ============================================================
+      # Step 5: 上传 IPA 到 GitHub Artifact
+      # ============================================================
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-store-production
+          path: apps/mobile/dist/*.ipa
+
+  release:
+    needs: build-and-submit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download IPA artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-store-production
+          path: release-artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: IMWallet (App Store) ${{ github.ref_name }}
+          files: release-artifacts/**/*.ipa
+          generate_release_notes: true
+          body: |
+            ## App Store Build
+
+            This build has been automatically submitted to App Store Connect.
+
+            **Next steps:**
+            1. Log in to [App Store Connect](https://appstoreconnect.apple.com)
+            2. Select the build under your app
+            3. Add screenshots, description, and review information
+            4. Submit for Apple review

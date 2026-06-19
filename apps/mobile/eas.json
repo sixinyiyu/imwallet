@@ -34,6 +34,14 @@
         "API_BASE_URL": "https://imwallet.dpdns.org/api/v1"
       }
     },
+    "app-store": {
+      "autoIncrement": true,
+      "environment": "production",
+      "distribution": "store",
+      "env": {
+        "API_BASE_URL": "https://imwallet.dpdns.org/api/v1"
+      }
+    },
     "production-arm64": {
       "android": {
         "buildType": "apk"
