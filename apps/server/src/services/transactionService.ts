@@ -387,8 +387,8 @@ export async function getTransactions(
     prisma.wallet.findMany({ where: { id: { in: toWalletIds } }, select: { id: true, alias: true, address: true } }),
   ]);
 
-  const fromWalletMap = new Map(fromWallets.map((w: any) => [w.id, w]));
-  const toWalletMap = new Map(toWallets.map((w: any) => [w.id, w]));
+  const fromWalletMap = new Map<string, any>(fromWallets.map((w: any) => [w.id, w]));
+  const toWalletMap = new Map<string, any>(toWallets.map((w: any) => [w.id, w]));
 
   // Collect chain addresses for contact lookup（直接使用交易表中的 fromAddress / toAddress）
   const addresses = new Set<string>();
@@ -410,7 +410,7 @@ export async function getTransactions(
     where: { symbol: { in: tokenSymbols } },
     select: { symbol: true, name: true },
   });
-  const tokenNameMap = new Map(tokenRecords.map((t: any) => [t.symbol, t.name]));
+  const tokenNameMap = new Map<string, string>(tokenRecords.map((t: any) => [t.symbol, t.name]));
 
   return {
     transactions: transactions.map((tx: any) => formatTransaction(tx, fromWalletMap, toWalletMap, contactMap, tokenNameMap)),

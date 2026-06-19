@@ -294,12 +294,12 @@ export async function getDeviceWallets(deviceId: string): Promise<any[]> {
 
   // Fetch wallets, walletTokens, tokens, and accounts separately
   const wallets = await prisma.wallet.findMany({ where: { id: { in: walletIds } } });
-  const walletMap = new Map(wallets.map((w: any) => [w.id, w]));
+  const walletMap = new Map<string, any>(wallets.map((w: any) => [w.id, w]));
 
   const walletTokens = await prisma.walletToken.findMany({ where: { walletId: { in: walletIds } } });
   const tokenIds = [...new Set(walletTokens.map((wt: any) => wt.tokenId))];
   const tokens = await prisma.token.findMany({ where: { id: { in: tokenIds } } });
-  const tokenMap = new Map(tokens.map((t: any) => [t.id, t]));
+  const tokenMap = new Map<string, any>(tokens.map((t: any) => [t.id, t]));
 
   // Group walletTokens by walletId
   const walletTokensByWallet = new Map<string, any[]>();

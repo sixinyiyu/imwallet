@@ -55,7 +55,7 @@ export async function getTokenBalances(
   const tokens = await prisma.token.findMany({
     where: { id: { in: tokenIds } },
   });
-  const tokenMap = new Map(tokens.map((t: any) => [t.id, t]));
+  const tokenMap = new Map<string, any>(tokens.map((t: any) => [t.id, t]));
 
   // Get fiat rates for USD and CNY
   const [usdtFiat, cnyFiat] = await Promise.all([

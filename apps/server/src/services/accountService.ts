@@ -133,7 +133,7 @@ async function getAccountTokenBalances(
     where: { network },
   });
   const networkTokenIds = networkTokens.map((t: any) => t.id);
-  const tokenMap = new Map(networkTokens.map((t: any) => [t.id, t]));
+  const tokenMap = new Map<string, any>(networkTokens.map((t: any) => [t.id, t]));
 
   const walletTokens = await prisma.walletToken.findMany({
     where: {

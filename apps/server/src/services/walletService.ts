@@ -75,7 +75,7 @@ async function computeTokenBalances(walletId: string): Promise<{
   const tokens = await prisma.token.findMany({
     where: { id: { in: tokenIds } },
   });
-  const tokenMap = new Map(tokens.map((t: any) => [t.id, t]));
+  const tokenMap = new Map<string, any>(tokens.map((t: any) => [t.id, t]));
 
   const [usdtFiat, cnyFiat] = await Promise.all([
     prisma.fiatCurrency.findUnique({ where: { code: "USD" } }),
@@ -340,7 +340,7 @@ export async function getDeviceWallets(deviceId: string): Promise<WalletSummary[
   const wallets = await prisma.wallet.findMany({
     where: { id: { in: walletIds } },
   });
-  const walletMap = new Map(wallets.map((w: any) => [w.id, w]));
+  const walletMap = new Map<string, any>(wallets.map((w: any) => [w.id, w]));
 
   const walletSummaries: WalletSummary[] = [];
   for (const sub of subscriptions) {
