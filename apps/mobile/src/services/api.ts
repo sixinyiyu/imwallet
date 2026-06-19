@@ -1,4 +1,5 @@
 import axios from "axios";
+import { Platform } from "react-native";
 import * as SecureStore from "../utils/secureStorage";
 import Constants from "expo-constants";
 import "react-native-get-random-values";
@@ -118,13 +119,15 @@ export async function ensureDeviceRegistered(publicKeyHex: string): Promise<void
   const registered = await SecureStore.getItemAsync(DEVICE_REGISTERED);
   if (registered === "true") return;
 
+  const platform = Platform.OS === "ios" ? "ios" : Platform.OS === "android" ? "android" : "web";
+
   try {
     await axios.post(`${BASE_URL}/devices`, {
       device_id: publicKeyHex,
-      platform: "web",
-      os: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 32) : "unknown",
-      model: "Web Browser",
-      locale: typeof navigator !== "undefined" ? navigator.language : "en",
+      platform,
+      os: Platform.OS,
+      model: "Mobile Device",
+      locale: "zh",
       version: "1.0.0",
       currency: "CNY",
     });
