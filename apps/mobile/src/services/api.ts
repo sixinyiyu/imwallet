@@ -200,10 +200,5 @@ export async function isDeviceRegistered(): Promise<boolean> {
   return (await SecureStore.getItemAsync(DEVICE_REGISTERED)) === "true";
 }
 
-export async function clearDeviceKeys(): Promise<void> {
-  await SecureStore.deleteItemAsync(DEVICE_PRIV_JWK);
-  await SecureStore.deleteItemAsync(DEVICE_PUBLIC_KEY);
-  await SecureStore.deleteItemAsync(DEVICE_REGISTERED);
-}
 
 export default api;

@@ -44,7 +44,6 @@ interface WalletState {
   addAccount: (walletId: string, tokenId: string, name?: string) => Promise<void>;
   deleteAccount: (accountId: string) => Promise<void>;
   fetchBalance: (walletId: string) => Promise<void>;
-  logout: () => Promise<void>;
 }
 
 export const useWalletStore = create<WalletState>((set, get) => ({
@@ -282,32 +281,4 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  /** Logout - clear local state */
-  logout: async () => {
-    // Delete all per-wallet mnemonics
-    const { wallets } = get();
-    for (const w of wallets) {
-      await SecureStore.deleteItemAsync(mnemonicKey(w.id));
-    }
-    // Also try to delete legacy key
-    await SecureStore.deleteItemAsync("aquad_mnemonic");
-
-    await SecureStore.deleteItemAsync(IS_BACKED_UP_KEY);
-    await SecureStore.deleteItemAsync(HAS_WALLETS_KEY);
-    await SecureStore.deleteItemAsync(ACTIVE_WALLET_KEY);
-    set({
-      mnemonic: null,
-      isBackedUp: false,
-      hasWallets: false,
-      wallets: [],
-      activeWallet: null,
-      accounts: [],
-      activeAccount: null,
-      totalBalanceUsd: "0",
-      tokens: [],
-      loading: false,
-      hasFetched: false,
-      accountCount: 0,
-    });
-  },
 }));

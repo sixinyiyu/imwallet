@@ -42,10 +42,3 @@ export async function encryptPassword(password: string): Promise<string> {
   // 转为 base64
   return forge.util.encode64(encrypted);
 }
-
-/**
- * Clear the cached public key (e.g., on logout or key rotation).
- */
-export function clearPublicKeyCache(): void {
-  cachedPublicKey = null;
-}

@@ -3,7 +3,6 @@ export { default as ReceiveIcon } from "./ReceiveIcon";
 export { default as RecordsIcon } from "./RecordsIcon";
 export { default as WalletIcon } from "./WalletIcon";
 export { default as AboutIcon } from "./AboutIcon";
-export { default as LogoutIcon } from "./LogoutIcon";
 export { default as USDTIcon } from "./USDTIcon";
 export { default as ScanIcon } from "./ScanIcon";
 export { default as ProfileIcon } from "./ProfileIcon";
