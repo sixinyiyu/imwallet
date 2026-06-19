@@ -29,32 +29,44 @@ import type { Contact, TokenBalance } from "../types";
 type Nav = NativeStackNavigationProp<RootStackParamList, "Transfer">;
 type RouteType = RouteProp<RootStackParamList, "Transfer">;
 
+/** 根据链上地址格式推断网络类型 */
+function detectNetwork(addr: string): string | null {
+  const a = addr.trim();
+  if (/^T[A-Za-z0-9]{33}$/.test(a)) return "TRON";      // TRON: T + 33位
+  if (/^0x[a-zA-Z0-9]{40}$/.test(a)) return "EVM";       // EVM: 0x + 40位
+  if (/^[13][a-zA-Z0-9]{25,34}$/.test(a)) return "BTC";  // BTC: 1/3 + 25-34位
+  if (/^bc1[a-zA-Z0-9]{39,59}$/.test(a)) return "BTC";   // BTC: bc1 + 39-59位
+  return null;
+}
+
 function isValidAddressFormat(addr: string): boolean {
-  // 放宽格式校验：0x + 40位字母数字（系统地址可能含非hex字符如 DAMOTOU）
-  return /^0x[a-zA-Z0-9]{40}$/.test(addr.trim());
+  return detectNetwork(addr) !== null;
 }
 
 export default function TransferScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const { activeWallet, tokens } = useWalletStore();
+  const [toAddress, setToAddress] = useState("");
   const [selectedToken, setSelectedToken] = useState<TokenBalance | null>(null);
 
-  // 初始化选中代币：优先匹配路由传入的 tokenSymbol
+  // 根据链上地址自动推断网络类型并切换代币
+  const detectedNetwork = useMemo(() => detectNetwork(toAddress), [toAddress]);
+
   useEffect(() => {
-    if (tokens.length > 0 && !selectedToken) {
-      const paramSymbol = route.params?.tokenSymbol;
-      const matched = paramSymbol
-        ? tokens.find((t) => t.symbol === paramSymbol)
-        : null;
-      setSelectedToken(matched || tokens[0]);
+    if (!detectedNetwork || tokens.length === 0) return;
+    // 根据网络类型匹配代币：TRON→TRX/USDT, EVM→ETH/USDT, BTC→BTC
+    const matched = tokens.find((t) => t.network === detectedNetwork);
+    if (matched && matched.symbol !== selectedToken?.symbol) {
+      setSelectedToken(matched);
     }
-  }, [tokens]);
+  }, [detectedNetwork, tokens]);
+
+
 
   const selectedBalance = selectedToken ? selectedToken.balance : "0";
   const balance = parseFloat(selectedBalance) || 0;
 
-  const [toAddress, setToAddress] = useState("");
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
   const [mode, setMode] = useState<"amount" | "value">("amount");
@@ -363,7 +375,7 @@ export default function TransferScreen() {
         <View style={z.tokenCard}>
           <View style={z.tokenHeader}>
             <View style={z.tokenBadge}>
-              <Text style={z.tokenBadgeText}>{selectedToken?.symbol || "USDT"}</Text>
+              <Text style={z.tokenBadgeText}>{detectedNetwork ? `${selectedToken?.symbol || "USDT"} · ${detectedNetwork}` : "待识别"}</Text>
             </View>
             <View style={z.modeSwitch}>
               <TouchableOpacity
