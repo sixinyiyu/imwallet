@@ -23,7 +23,7 @@ import { transactionService } from "../services/transactionService";
 import { contactService } from "../services/contactService";
 import { configService } from "../services/configService";
 import type { FeeConfig } from "../services/configService";
-import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, CopyIcon } from "../components/icons";
+import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon } from "../components/icons";
 import type { Contact, TokenBalance } from "../types";
 import { detectNetwork, isValidAddressFormat } from "../utils/address";
 
@@ -772,8 +772,6 @@ const z = StyleSheet.create({
     borderColor: "#E5E7EB",
   },
   resultLabel: { fontSize: 13, color: "#6B7280", marginBottom: 4 },
-  resultHash: { fontSize: 12, color: "#1F2937", fontFamily: "monospace", marginBottom: 8 },
-  copyLink: { fontSize: 13, color: "#287220", fontWeight: "500", marginBottom: 8 },
   resultDivider: { height: 1, backgroundColor: "#E5E7EB", marginVertical: 12 },
   resultError: { fontSize: 15, color: "#EF4444", fontWeight: "500", marginBottom: 8 },
   suggestion: { fontSize: 13, color: "#6B7280", marginTop: 4 },

@@ -5,7 +5,6 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import EmptyState from "../components/EmptyState";
@@ -189,6 +188,4 @@ const styles = StyleSheet.create({
   txSection: { marginHorizontal: 16 },
   viewAll: { padding: 14, alignItems: "center" },
   viewAllText: { fontSize: 14, color: "#3B82F6", fontWeight: "500" },
-  emptyTxWrap: { marginHorizontal: 16, backgroundColor: "#fff", borderRadius: 12, padding: 32 },
-  emptyTx: { textAlign: "center", color: "#9CA3AF" },
 });

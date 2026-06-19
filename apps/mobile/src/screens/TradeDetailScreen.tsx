@@ -119,7 +119,6 @@ export default function TradeDetailScreen() {
 
   const feeNum = parseFloat(tx.fee) || 0;
   const amountNum = parseFloat(tx.amount) || 0;
-  const total = amountNum + feeNum;
   // 优先级：联系人名 > 钱包别名
   const fromName = tx.fromContactName || tx.fromWallet.alias;
   const toName = tx.toContactName || tx.toWallet.alias;
@@ -280,37 +279,22 @@ function TokenTransferRow({
 function InfoRow({
   label,
   value,
-  monospace,
   bold,
-  copyable,
 }: {
   label: string;
   value: string;
-  monospace?: boolean;
   bold?: boolean;
-  copyable?: boolean;
 }) {
-  const nav = useNavigation<Nav>();
   return (
     <View style={ir.row}>
       <Text style={ir.label}>{label}</Text>
       <View style={ir.valueWrap}>
         <Text
-          style={[ir.value, monospace && ir.mono, bold && ir.bold]}
+          style={[ir.value, bold && ir.bold]}
           numberOfLines={2}
         >
           {value}
         </Text>
-        {copyable && (
-          <TouchableOpacity
-            onPress={() => {
-              const C = require("expo-clipboard");
-              C.setStringAsync(value);
-            }}
-          >
-            <Text style={ir.copyBtn}>复制</Text>
-          </TouchableOpacity>
-        )}
       </View>
     </View>
   );
@@ -384,7 +368,5 @@ const ir = StyleSheet.create({
   label: { fontSize: 14, color: "#6B7280", marginRight: 12 },
   valueWrap: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end" },
   value: { fontSize: 14, color: "#1F2937", fontWeight: "500", textAlign: "right" },
-  mono: { fontFamily: "monospace", fontSize: 11 },
   bold: { fontSize: 16, fontWeight: "700" },
-  copyBtn: { fontSize: 12, color: "#3B82F6", fontWeight: "500", marginLeft: 8 },
 });
