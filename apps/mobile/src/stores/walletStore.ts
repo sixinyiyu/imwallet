@@ -8,18 +8,23 @@ import { useAuthStore } from "./authStore";
 import type { Wallet, Account, TokenBalance } from "../types";
 
 const MNEMONIC_KEY_PREFIX = "aquad_mnemonic_";
-const IS_BACKED_UP_KEY = "aquad_is_backed_up";
+const BACKED_UP_KEY_PREFIX = "aquad_backed_up_";
 const ACTIVE_WALLET_KEY = "aquad_active_wallet";
-const HAS_WALLETS_KEY = "aquad_has_wallets";
 
 /** Build per-wallet SecureStore key for mnemonic */
 function mnemonicKey(walletId: string): string {
   return `${MNEMONIC_KEY_PREFIX}${walletId}`;
 }
 
+/** Build per-wallet SecureStore key for backup status */
+function backedUpKey(walletId: string): string {
+  return `${BACKED_UP_KEY_PREFIX}${walletId}`;
+}
+
 interface WalletState {
   mnemonic: string | null;
-  isBackedUp: boolean;
+  /** Set of wallet IDs that have been backed up */
+  backedUpWallets: Set<string>;
   hasWallets: boolean;
   wallets: Wallet[];
   activeWallet: Wallet | null;
@@ -41,6 +46,8 @@ interface WalletState {
   resetPassword: (walletId: string, mnemonic: string, password: string, passwordHint?: string) => Promise<void>;
   deleteWallet: (walletId: string) => Promise<void>;
   backupWallet: (walletId: string) => Promise<void>;
+  /** Check if a specific wallet has been backed up */
+  isWalletBackedUp: (walletId: string) => boolean;
   addAccount: (walletId: string, tokenId: string, name?: string) => Promise<void>;
   deleteAccount: (accountId: string) => Promise<void>;
   fetchBalance: (walletId: string) => Promise<void>;
@@ -48,7 +55,7 @@ interface WalletState {
 
 export const useWalletStore = create<WalletState>((set, get) => ({
   mnemonic: null,
-  isBackedUp: false,
+  backedUpWallets: new Set<string>(),
   hasWallets: false,
   wallets: [],
   activeWallet: null,
@@ -59,6 +66,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   loading: false,
   hasFetched: false,
   accountCount: 0,
+
+  /** Check if a specific wallet has been backed up */
+  isWalletBackedUp: (walletId: string): boolean => {
+    return get().backedUpWallets.has(walletId);
+  },
 
   /** Load local state: initialize device identity then fetch wallets from server */
   loadLocalState: async () => {
@@ -71,8 +83,18 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         await useAuthStore.getState().initDevice();
       }
 
-      // 2. Fetch wallet state from server (sets hasFetched + hasWallets)
-      // 不再依赖本地 SecureStore 标记预判，避免过期标记导致 Navigator 先挂载到 Main
+      // 2. Load per-wallet backup status from SecureStore
+      const backedUpSet = new Set<string>();
+      const wallets = await walletService.getWallets();
+      for (const w of wallets.wallets) {
+        const flag = await SecureStore.getItemAsync(backedUpKey(w.id));
+        if (flag === "true") {
+          backedUpSet.add(w.id);
+        }
+      }
+      set({ backedUpWallets: backedUpSet });
+
+      // 3. Fetch wallet state from server (sets hasFetched + hasWallets)
       await get().fetchWallets();
     } catch {
       set({ hasFetched: true, hasWallets: false });
@@ -97,6 +119,15 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         }
       }
 
+      // Load per-wallet backup status
+      const backedUpSet = new Set<string>();
+      for (const w of wallets) {
+        const flag = await SecureStore.getItemAsync(backedUpKey(w.id));
+        if (flag === "true") {
+          backedUpSet.add(w.id);
+        }
+      }
+
       set({
         wallets,
         activeWallet: active,
@@ -105,14 +136,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         accountCount: accounts.length,
         hasWallets: wallets.length > 0,
         hasFetched: true,
+        backedUpWallets: backedUpSet,
       });
 
-      // If server returns empty wallet list, clear local flags
-      // so the app redirects to Start (wallet creation guide) page
-      if (wallets.length === 0) {
-        await SecureStore.deleteItemAsync(HAS_WALLETS_KEY);
-        await SecureStore.deleteItemAsync(IS_BACKED_UP_KEY);
-      }
+      // If server returns empty wallet list, backedUpWallets is already empty
+      // hasWallets is already false from the set() above
     } catch (err: any) {
       // If device not registered (401) or server unreachable, reset local state
       // so the app redirects to Start (wallet creation guide) page
@@ -120,15 +148,15 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const errorMsg = err?.response?.data?.error;
       if (status === 401 || errorMsg === "Device not registered") {
         // Device was cleared on server side — reset local wallet state
-        await SecureStore.deleteItemAsync(HAS_WALLETS_KEY);
-        await SecureStore.deleteItemAsync(IS_BACKED_UP_KEY);
+        // backedUpWallets Set is reset below, per-wallet keys remain in SecureStore
+        // but are harmless since they won't match any wallet ID
         set({
           hasWallets: false,
           wallets: [],
           activeWallet: null,
           accounts: [],
           activeAccount: null,
-          isBackedUp: false,
+          backedUpWallets: new Set<string>(),
           hasFetched: true,
         });
       } else {
@@ -179,7 +207,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       hasWallets: true,
     });
 
-    await SecureStore.setItemAsync(HAS_WALLETS_KEY, "true");
     await get().fetchWallets();
     return wallet.id;
   },
@@ -192,8 +219,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     // Store cleaned mnemonic per walletId
     await SecureStore.setItemAsync(mnemonicKey(wallet.id), cleaned);
-
-    await SecureStore.setItemAsync(HAS_WALLETS_KEY, "true");
 
     set({
       mnemonic: mnemonicInput,
@@ -218,8 +243,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   /** Delete wallet */
   deleteWallet: async (walletId: string) => {
     try {
-      // Delete local mnemonic for this wallet
+      // Delete local mnemonic and backup flag for this wallet
       await SecureStore.deleteItemAsync(mnemonicKey(walletId));
+      await SecureStore.deleteItemAsync(backedUpKey(walletId));
       await walletService.deleteWallet(walletId);
       await get().fetchWallets();
     } catch {
@@ -227,10 +253,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  /** Mark wallet as backed up (纯客户端操作，不调用服务端) */
+  /** Mark wallet as backed up (per-wallet, stored in SecureStore) */
   backupWallet: async (walletId: string) => {
-    await SecureStore.setItemAsync(IS_BACKED_UP_KEY, "true");
-    set({ isBackedUp: true });
+    await SecureStore.setItemAsync(backedUpKey(walletId), "true");
+    const backedUpSet = new Set(get().backedUpWallets);
+    backedUpSet.add(walletId);
+    set({ backedUpWallets: backedUpSet });
   },
 
   /** Add account to wallet */

@@ -35,8 +35,8 @@ export default function WalletManageScreen() {
     wallets,
     hasFetched,
     fetchWallets,
+    backedUpWallets,
   } = useWalletStore();
-  const isBackedUp = useWalletStore((s) => s.isBackedUp);
   const [showAddWalletDrawer, setShowAddWalletDrawer] = useState(false);
   /** 每个钱包的账户列表映射 walletId -> Account[] */
   const [walletAccountsMap, setWalletAccountsMap] = useState<Record<string, Account[]>>({});
@@ -196,7 +196,7 @@ export default function WalletManageScreen() {
                   {item.accountCount}个账户
                 </Text>
                 <Text style={styles.walletBackupStatus}>
-                  {isBackedUp ? "✅ 已备份" : "⚠️ 未备份"}
+                  {backedUpWallets.has(item.id) ? "✅ 已备份" : "⚠️ 未备份"}
                 </Text>
               </View>
 

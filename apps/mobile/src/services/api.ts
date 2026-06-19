@@ -6,13 +6,11 @@ import "react-native-get-random-values";
 import * as ed25519 from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
-// Configure sha512 for @noble/ed25519
-// v2: etc.sha512Sync for sync methods; v3: hashes.sha512
-// hashes is not in v2's type exports but exists at runtime
-(ed25519.etc as any).sha512Sync = (...m: Uint8Array[]) => sha512(m[0]);
-(ed25519 as any).hashes.sha512 = sha512;
-
-
+// ===== Configure SHA-512 for @noble/ed25519 v3 =====
+// v3 requires hashes.sha512 to be set before calling sync methods (getPublicKey, sign, etc.)
+// v3's `etc` is Object.freeze() — CANNOT modify it (would crash with TypeError in strict mode)
+// v3's `hashes` is a plain object — CAN be modified
+ed25519.hashes.sha512 = sha512;
 
 const DEVICE_PRIV_JWK = "imwallet_device_priv_jwk";
 const DEVICE_PUB_JWK = "imwallet_device_pub_jwk";
@@ -72,24 +70,26 @@ function generateNonce(): string {
   return bytesToHex(arr);
 }
 
-// ===== Ed25519 密钥操作（@noble/ed25519，纯 JS，跨平台兼容） =====
+// ===== Ed25519 密钥操作（@noble/ed25519 v3，纯 JS，跨平台兼容） =====
 
 async function generateKeyPair(): Promise<{
   publicKeyHex: string;
   privateKeyHex: string;
 }> {
-  const privateKey = crypto.getRandomValues(new Uint8Array(32));
-  const publicKey = await ed25519.getPublicKey(privateKey);
+  // v3: use keygen() which generates a random secret key + derives public key
+  // keygen() requires hashes.sha512 to be configured (done above)
+  const { secretKey, publicKey } = ed25519.keygen();
   return {
     publicKeyHex: bytesToHex(publicKey),
-    privateKeyHex: bytesToHex(privateKey),
+    privateKeyHex: bytesToHex(secretKey),
   };
 }
 
 async function signMessage(message: string, privateKeyHex: string): Promise<string> {
   const msgBytes = new TextEncoder().encode(message);
   const privateKey = hexToBytes(privateKeyHex);
-  const signature = await ed25519.sign(msgBytes, privateKey);
+  // v3: sign() is sync, requires hashes.sha512 configured
+  const signature = ed25519.sign(msgBytes, privateKey);
   return bytesToHex(signature);
 }
 
@@ -177,8 +177,8 @@ api.interceptors.response.use(
       const errorMsg = error.response?.data?.error;
       if (errorMsg === "Device not registered") {
         SecureStore.deleteItemAsync(DEVICE_REGISTERED);
-        SecureStore.deleteItemAsync("aquad_has_wallets");
-        SecureStore.deleteItemAsync("aquad_is_backed_up");
+        // Note: per-wallet backup flags (aquad_backed_up_{walletId}) are cleared
+        // when walletStore resets its backedUpWallets Set on 401
       }
     }
     return Promise.reject(error);

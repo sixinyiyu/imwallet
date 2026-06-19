@@ -68,6 +68,7 @@ export default function WalletDetailScreen() {
   // Remove wallet: Step 1 = confirm drawer, Step 2 = password drawer
   const [showConfirmDrawer, setShowConfirmDrawer] = useState(false);
   const [showRemoveDrawer, setShowRemoveDrawer] = useState(false);
+  const [showNotBackedUpDrawer, setShowNotBackedUpDrawer] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [removePassword, setRemovePassword] = useState("");
   const [showRemovePassword, setShowRemovePassword] = useState(false);
@@ -89,7 +90,9 @@ export default function WalletDetailScreen() {
 
   const walletFromStore = wallets.find((w) => w.id === walletId);
   const wallet = detail || walletFromStore;
-  const isBackedUp = useWalletStore((s) => s.isBackedUp);
+  const isWalletBackedUp = useWalletStore((s) => s.isWalletBackedUp);
+  const backedUpWallets = useWalletStore((s) => s.backedUpWallets);
+  const walletIsBackedUp = walletId ? backedUpWallets.has(walletId) : false;
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -102,7 +105,14 @@ export default function WalletDetailScreen() {
     navigation.setOptions({
       headerRight: () => (
         <TouchableOpacity
-          onPress={() => setShowConfirmDrawer(true)}
+          onPress={() => {
+            // 未备份钱包：提示先备份
+            if (!walletIsBackedUp) {
+              setShowNotBackedUpDrawer(true);
+            } else {
+              setShowConfirmDrawer(true);
+            }
+          }}
           style={{ marginRight: 16 }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
@@ -110,7 +120,7 @@ export default function WalletDetailScreen() {
         </TouchableOpacity>
       ),
     });
-  }, [navigation]);
+  }, [navigation, walletIsBackedUp]);
 
   useEffect(() => {
     loadDetail();
@@ -261,7 +271,7 @@ export default function WalletDetailScreen() {
           {/* 备份状态 */}
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>备份状态</Text>
-            {isBackedUp ? (
+            {walletIsBackedUp ? (
               <Text style={styles.backedUpText}>已备份</Text>
             ) : (
               <TouchableOpacity
@@ -354,6 +364,47 @@ export default function WalletDetailScreen() {
           </View>
         </View>
       )}
+
+      {/* ── Not backed up warning drawer ── */}
+      <Modal
+        visible={showNotBackedUpDrawer}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowNotBackedUpDrawer(false)}
+      >
+        <Pressable style={styles.drawerOverlay} onPress={() => setShowNotBackedUpDrawer(false)}>
+          <Pressable style={styles.drawerContent} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.confirmIconWrap}>
+              <WarningIcon size={48} color="#F59E0B" />
+            </View>
+            <Text style={styles.confirmTitle}>钱包未备份</Text>
+            <Text style={styles.confirmDesc}>
+              该钱包尚未备份助记词，移除后将无法恢复，可能导致资产永久丢失。请先完成备份后再移除钱包。
+            </Text>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => setShowNotBackedUpDrawer(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.confirmCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, { backgroundColor: "#287220" }]}
+                onPress={() => {
+                  setShowNotBackedUpDrawer(false);
+                  setBackupPassword("");
+                  setPasswordError("");
+                  setShowPasswordModal(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalConfirmText}>去备份</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* ── Step 1: Confirm drawer ── */}
       <Modal
@@ -979,7 +1030,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 14,
     borderRadius: 10,
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#287220",
     alignItems: "center",
   },
   modalConfirmText: {
@@ -996,6 +1047,6 @@ const styles = StyleSheet.create({
     borderColor: "#EF4444",
   },
   modalConfirmBtnDisabled: {
-    backgroundColor: "#93C5FD",
+    backgroundColor: "#A5D6A7",
   },
 });
