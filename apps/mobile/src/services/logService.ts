@@ -12,6 +12,30 @@ const DEVICE_PUBLIC_KEY = "imwallet_device_public_key";
 
 // ─── AsyncStorage keys ───
 const CRASH_LOGS_KEY = "aquad_pending_crash_logs";
+const LOG_UPLOAD_ENABLED_KEY = "aquad_log_upload_enabled";
+
+/**
+ * 读取日志上报开关状态（默认关闭）
+ */
+export async function getLogUploadEnabled(): Promise<boolean> {
+  try {
+    const val = await SecureStore.getItemAsync(LOG_UPLOAD_ENABLED_KEY);
+    return val === "true";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 设置日志上报开关状态
+ */
+export async function setLogUploadEnabled(enabled: boolean): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(LOG_UPLOAD_ENABLED_KEY, enabled ? "true" : "false");
+  } catch {
+    // silent
+  }
+}
 
 /**
  * Upload a log entry to the server.
@@ -74,7 +98,7 @@ export async function saveLogToLocal(logType: "crash" | "mnemonic", content: str
 }
 
 /**
- * Get the count of pending logs in local storage.
+ * Get the count of pending logs in local storage (excluding mnemonic logs).
  * Used by SettingsScreen to show how many logs are waiting to be uploaded.
  */
 export async function getPendingLogCount(): Promise<number> {
@@ -82,7 +106,8 @@ export async function getPendingLogCount(): Promise<number> {
     const existing = await SecureStore.getItemAsync(CRASH_LOGS_KEY);
     if (!existing) return 0;
     const logs: PendingLog[] = JSON.parse(existing);
-    return logs.length;
+    // 只统计可上报的日志（排除 mnemonic 类型）
+    return logs.filter((log) => log.logType !== "mnemonic").length;
   } catch {
     return -1; // unknown/error
   }
@@ -104,10 +129,13 @@ export async function flushPendingLogs(): Promise<void> {
       return;
     }
 
-    // Upload each log one by one
+    // Upload each log one by one, skip mnemonic logs (contain sensitive info)
     const failedIndices: number[] = [];
     for (let i = 0; i < logs.length; i++) {
       const log = logs[i];
+      if (log.logType === "mnemonic") {
+        continue; // 跳过助记词相关日志，不上报
+      }
       try {
         await uploadLog(log.logType, log.content);
       } catch {
@@ -115,7 +143,7 @@ export async function flushPendingLogs(): Promise<void> {
       }
     }
 
-    // If all succeeded, clear local storage
+    // If all uploadable logs succeeded, clear local storage
     if (failedIndices.length === 0) {
       await SecureStore.deleteItemAsync(CRASH_LOGS_KEY);
     } else {
