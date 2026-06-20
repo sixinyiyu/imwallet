@@ -11,14 +11,14 @@ export enum ChainType {
 }
 
 /**
- * 代币类型枚举
+ * 资产类型枚举
  *
- * NATIVE     — 链的原生主币（如 TRX、ETH、BTC）
- * STABLECOIN — 稳定币（如 USDT）
+ * NATIVE — 链的原生主币（如 TRX、ETH、BTC）
+ * TOKEN  — 代币（如 USDT，ERC20/TRC20）
  */
 export enum TokenType {
   NATIVE = "NATIVE",
-  STABLECOIN = "STABLECOIN",
+  TOKEN = "TOKEN",
 }
 
 /**

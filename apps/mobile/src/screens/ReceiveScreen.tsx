@@ -26,7 +26,7 @@ function renderTokenIcon(symbol: string, size: number) {
 
 export default function ReceiveScreen() {
   const route = useRoute<ReceiveRouteProp>();
-  const { activeWallet, activeAccount, tokens } = useWalletStore();
+  const { activeWallet, activeAccount, assets } = useWalletStore();
   // 使用 Account.address（链上地址）而非 Wallet.address（内部标识）
   const address = activeAccount?.address ?? "";
   const qrWrapperRef = useRef<View>(null);
@@ -50,15 +50,15 @@ export default function ReceiveScreen() {
 
   const currentToken = useMemo(() => {
     if (tokenId) {
-      const found = tokens.find((t) => t.tokenId === tokenId);
+      const found = assets.find((a) => a.assetId === tokenId);
       if (found) return found;
     }
-    const found = tokens.find((t) => t.symbol === tokenSymbol);
-    return found || { symbol: tokenSymbol, name: tokenSymbol, network: "" };
-  }, [tokens, tokenSymbol, tokenId]);
+    const found = assets.find((a) => a.symbol === tokenSymbol);
+    return found || { symbol: tokenSymbol, name: tokenSymbol, chain: "" };
+  }, [assets, tokenSymbol, tokenId]);
 
-  // 优先使用代币自身的 network，回退到账户 network
-  const network = currentToken.network || activeAccount?.network || "";
+  // 优先使用代币自身的 chain，回退到账户 network
+  const network = currentToken.chain || activeAccount?.network || "";
 
   const qrValue = useMemo(() => {
     if (!address) return "";

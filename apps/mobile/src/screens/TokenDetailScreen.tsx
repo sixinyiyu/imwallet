@@ -14,7 +14,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { TransactionCard } from "../screens/RecordsScreen";
-import { tokenService } from "../services/tokenService";
+import { assetService } from "../services/assetService";
 import { USDTIcon, TransferIcon, ReceiveIcon, RecordsIcon, TronIcon } from "../components/icons";
 import type { Transaction } from "../types";
 
@@ -25,15 +25,15 @@ export default function TokenDetailScreen() {
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
   const { tokenSymbol } = route.params;
-  const { activeWallet, tokens } = useWalletStore();
+  const { activeWallet, assets } = useWalletStore();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const token = tokens.find((t) => t.symbol === tokenSymbol);
+  const asset = assets.find((a) => a.symbol === tokenSymbol);
 
   useEffect(() => {
-    navigation.setOptions({ title: token?.name ?? tokenSymbol });
-  }, [token, tokenSymbol]);
+    navigation.setOptions({ title: asset?.name ?? tokenSymbol });
+  }, [asset, tokenSymbol]);
 
   useEffect(() => {
     if (activeWallet) {
@@ -44,7 +44,7 @@ export default function TokenDetailScreen() {
   const loadTransactions = async () => {
     setLoading(true);
     try {
-      const data = await tokenService.getTransactions(activeWallet!.id, 1, 5, tokenSymbol);
+      const data = await assetService.getTransactions(activeWallet!.id, 1, 5, tokenSymbol);
       setTransactions(data.transactions);
     } catch {
       // silent
@@ -57,10 +57,10 @@ export default function TokenDetailScreen() {
       {/* Token Header */}
       <View style={styles.tokenHeader}>
         <View style={styles.iconCircle}>
-          {token?.symbol === "TRX" ? <TronIcon size={48} /> : <USDTIcon size={48} />}
+          {asset?.symbol === "TRX" ? <TronIcon size={48} /> : <USDTIcon size={48} />}
         </View>
         <Text style={styles.balance}>
-          {token?.balance ?? "0.0000"} {tokenSymbol}
+          {asset?.balance ?? "0.0000"} {tokenSymbol}
         </Text>
       </View>
 
@@ -68,14 +68,14 @@ export default function TokenDetailScreen() {
       <View style={styles.actions}>
         <TouchableOpacity
           style={styles.actionBtn}
-          onPress={() => navigation.navigate("Transfer", { tokenSymbol, tokenId: token?.tokenId })}
+          onPress={() => navigation.navigate("Transfer", { tokenSymbol, tokenId: asset?.assetId })}
         >
           <TransferIcon size={24} color="#3B82F6" />
           <Text style={styles.actionLabel}>转账</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionBtn}
-          onPress={() => navigation.navigate("Receive", { tokenSymbol, tokenId: token?.tokenId })}
+          onPress={() => navigation.navigate("Receive", { tokenSymbol, tokenId: asset?.assetId })}
         >
           <ReceiveIcon size={24} color="#10B981" />
           <Text style={styles.actionLabel}>收款</Text>
@@ -92,9 +92,9 @@ export default function TokenDetailScreen() {
       {/* Asset Info - 去掉了合约地址 */}
       <Text style={styles.sectionTitle}>资产信息</Text>
       <View style={styles.infoCard}>
-        <InfoRow label="总余额" value={`${token?.balance ?? "0"} ${tokenSymbol}`} />
+        <InfoRow label="总余额" value={`${asset?.balance ?? "0"} ${tokenSymbol}`} />
         <View style={styles.infoDivider} />
-        <InfoRow label="估值(USD)" value={`$${token?.usdValue ?? "0.00"}`} />
+        <InfoRow label="估值(USD)" value={`$${asset?.usdValue ?? "0.00"}`} />
         <View style={styles.infoDivider} />
         <InfoRow label="代币精度" value="6" />
         <View style={styles.infoDivider} />

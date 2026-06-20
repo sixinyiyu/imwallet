@@ -6,7 +6,7 @@ import { requestLogger } from "./middleware/requestLogger";
 import deviceRoutes from "./routes/device";
 import walletRoutes from "./routes/wallet";
 import transactionRoutes from "./routes/transaction";
-import tokenRoutes from "./routes/token";
+import assetRoutes from "./routes/asset";
 import fiatRoutes from "./routes/fiat";
 import contactRoutes from "./routes/contact";
 import rsaRoutes from "./routes/rsa";
@@ -48,7 +48,7 @@ app.get("/health", (_req, res) => {
 app.use("/api/v1/devices", deviceRoutes);
 app.use("/api/v1/wallets", walletRoutes);
 app.use("/api/v1/transactions", transactionRoutes);
-app.use("/api/v1/tokens", tokenRoutes);
+app.use("/api/v1/assets", assetRoutes);
 app.use("/api/v1/fiat", fiatRoutes);
 app.use("/api/v1/contacts", contactRoutes);
 app.use("/api/v1/rsa", rsaRoutes);

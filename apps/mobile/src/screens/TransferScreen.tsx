@@ -23,7 +23,7 @@ import { contactService } from "../services/contactService";
 import { configService } from "../services/configService";
 import type { FeeConfig } from "../services/configService";
 import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
-import type { Contact, TokenBalance } from "../types";
+import type { Contact, AssetBalance } from "../types";
 import { detectNetwork, isValidAddressFormat } from "../utils/address";
 import { useAlert } from "../hooks/useAlert";
 
@@ -56,35 +56,35 @@ export default function TransferScreen() {
   const alert = useAlert();
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
-  const { activeWallet, tokens, accounts } = useWalletStore();
+  const { activeWallet, assets, accounts } = useWalletStore();
   const [toAddress, setToAddress] = useState("");
-  const [selectedToken, setSelectedToken] = useState<TokenBalance | null>(null);
+  const [selectedToken, setSelectedToken] = useState<AssetBalance | null>(null);
 
   // 根据路由参数初始化选中的代币
   useEffect(() => {
-    if (tokens.length === 0) return;
+    if (assets.length === 0) return;
     const paramSymbol = route.params?.tokenSymbol;
     const paramTokenId = route.params?.tokenId;
     if (paramTokenId) {
-      const found = tokens.find((t) => t.tokenId === paramTokenId);
+      const found = assets.find((a) => a.assetId === paramTokenId);
       if (found) setSelectedToken(found);
     } else if (paramSymbol) {
-      const found = tokens.find((t) => t.symbol === paramSymbol);
+      const found = assets.find((a) => a.symbol === paramSymbol);
       if (found) setSelectedToken(found);
     }
-  }, [tokens, route.params?.tokenSymbol, route.params?.tokenId]);
+  }, [assets, route.params?.tokenSymbol, route.params?.tokenId]);
 
   // 根据链上地址自动推断网络类型并切换代币
   const detectedNetwork = useMemo(() => detectNetwork(toAddress), [toAddress]);
 
   useEffect(() => {
-    if (!detectedNetwork || tokens.length === 0) return;
+    if (!detectedNetwork || assets.length === 0) return;
     // 根据网络类型匹配代币：TRON→TRX/USDT, EVM→ETH/USDT, BTC→BTC
-    const matched = tokens.find((t) => t.network === detectedNetwork);
+    const matched = assets.find((a) => a.chain === detectedNetwork);
     if (matched && matched.symbol !== selectedToken?.symbol) {
       setSelectedToken(matched);
     }
-  }, [detectedNetwork, tokens]);
+  }, [detectedNetwork, assets]);
 
 
 
@@ -95,7 +95,7 @@ export default function TransferScreen() {
   // 根据选中的代币匹配付款账户
   const fromAccount = useMemo(() => {
     if (!selectedToken) return null;
-    return accounts.find((a) => a.tokenSymbol === selectedToken.symbol && a.network === selectedToken.network) || null;
+    return accounts.find((a) => a.network === selectedToken.chain && a.assets.some(asset => asset.symbol === selectedToken.symbol)) || null;
   }, [accounts, selectedToken]);
 
   const [amount, setAmount] = useState("");
@@ -253,7 +253,7 @@ export default function TransferScreen() {
         toAddress: toAddress.trim(),
         amount,
         tokenSymbol: selectedToken?.symbol || "USDT",
-        network: selectedToken?.network || "Tron",
+        network: selectedToken?.chain || "Tron",
         memo: memo.trim() || "",
       });
       setResult({

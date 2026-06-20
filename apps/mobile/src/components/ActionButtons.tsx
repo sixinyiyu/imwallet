@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Modal, FlatList, Pressable } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import type { TokenBalance } from "../types";
+import type { AssetBalance } from "../types";
 import TronIcon from "./icons/TronIcon";
 import { USDTIcon, TransferIcon, ReceiveIcon, RecordsIcon } from "./icons";
 
@@ -11,17 +11,17 @@ function renderTokenIcon(symbol: string, size: number) {
 }
 
 interface Props {
-  onTransfer: (token: TokenBalance) => void;
-  onReceive: (token: TokenBalance) => void;
+  onTransfer: (token: AssetBalance) => void;
+  onReceive: (token: AssetBalance) => void;
   onRecords: () => void;
-  tokens: TokenBalance[];
+  assets: AssetBalance[];
 }
 
 export default function ActionButtons({
   onTransfer,
   onReceive,
   onRecords,
-  tokens,
+  assets,
 }: Props) {
   const [showTokenPicker, setShowTokenPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<"receive" | "transfer">("receive");
@@ -74,8 +74,8 @@ export default function ActionButtons({
               {pickerMode === "transfer" ? "选择转账代币" : "选择收款代币"}
             </Text>
             <FlatList
-              data={tokens}
-              keyExtractor={(item) => item.tokenId || item.symbol}
+              data={assets}
+              keyExtractor={(item) => item.assetId || item.symbol}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.pickerItem}

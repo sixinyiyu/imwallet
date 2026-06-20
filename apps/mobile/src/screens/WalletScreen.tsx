@@ -18,7 +18,7 @@ import BalanceCard from "../components/BalanceCard";
 import TokenList from "../components/TokenList";
 import ActionButtons from "../components/ActionButtons";
 import { ScanIcon } from "../components/icons";
-import type { TokenBalance } from "../types";
+import type { AssetBalance } from "../types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -28,7 +28,7 @@ export default function WalletScreen() {
     wallets,
     activeWallet,
     totalBalanceUsd,
-    tokens,
+    assets,
     loading,
     hasFetched,
     fetchWallets,
@@ -60,17 +60,17 @@ export default function WalletScreen() {
     setRefreshing(false);
   };
 
-  const handleReceive = (token: TokenBalance) => {
+  const handleReceive = (asset: AssetBalance) => {
     navigation.navigate("Receive", {
-      tokenSymbol: token.symbol,
-      tokenId: token.tokenId,
+      tokenSymbol: asset.symbol,
+      tokenId: asset.assetId,
     });
   };
 
-  const handleTransfer = (token: TokenBalance) => {
+  const handleTransfer = (asset: AssetBalance) => {
     navigation.navigate("Transfer", {
-      tokenSymbol: token.symbol,
-      tokenId: token.tokenId,
+      tokenSymbol: asset.symbol,
+      tokenId: asset.assetId,
     });
   };
 
@@ -144,7 +144,7 @@ export default function WalletScreen() {
           onTransfer={handleTransfer}
           onReceive={handleReceive}
           onRecords={() => navigation.navigate("Records", {})}
-          tokens={tokens}
+          assets={assets}
         />
       </View>
 
@@ -159,10 +159,10 @@ export default function WalletScreen() {
         {/* Token List */}
         <Text style={styles.sectionTitle}>代币</Text>
         <TokenList
-          tokens={tokens}
+          assets={assets}
           loading={loading || !hasFetched}
-          onTokenPress={(token) =>
-            navigation.navigate("TokenDetail", { tokenSymbol: token.symbol })
+          onAssetPress={(asset) =>
+            navigation.navigate("TokenDetail", { tokenSymbol: asset.symbol })
           }
         />
       </ScrollView>

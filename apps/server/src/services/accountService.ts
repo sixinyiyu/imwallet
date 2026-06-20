@@ -20,7 +20,7 @@ export interface AccountSummary {
   id: string;
   walletId: string;
   network: string;
-  tokenSymbol: string;
+  index: number;
   name: string;
   address: string;
   createdAt: Date;
@@ -28,29 +28,31 @@ export interface AccountSummary {
 }
 
 export interface AccountDetail extends AccountSummary {
-  /** 该账户对应代币的余额信息 */
-  tokenBalances: Array<{
-    tokenId: string;
+  /** 该账户下的资产列表 */
+  assets: Array<{
+    id: string;
+    assetId: string;
     symbol: string;
     name: string;
-    network: string;
+    type: string;
+    chain: string;
     balance: string;
     decimals: number;
+    tokenId?: string | null;
     iconUrl?: string;
   }>;
 }
 
 /**
- * Create accounts under a wallet for a specific network.
- * Creates one Account per token on the specified network (e.g., Tron TRX + Tron USDT).
- * Each account is a separate entity for independent accounting.
+ * Create an account under a wallet for a specific network.
+ * Creates ONE account (one chain address) and auto-adds default assets (NATIVE + default TOKENs).
  *
  * @param walletId - Wallet ID
  * @param network - Blockchain network (e.g., "Tron", "Ethereum")
- * @param name - Optional account name prefix
+ * @param name - Optional account name
  * @param mnemonic - Optional mnemonic phrase for deterministic derivation
  * @param allowMultiAccount - If true, allows creating additional accounts even if accounts already exist on this chain
- * @returns Array of created account details
+ * @returns Created account detail
  */
 export async function createAccount(
   walletId: string,
@@ -58,7 +60,7 @@ export async function createAccount(
   name?: string,
   mnemonic?: string,
   allowMultiAccount?: boolean
-): Promise<AccountDetail[]> {
+): Promise<AccountDetail> {
   logger.info("ACCOUNT", `创建账户: walletId=${walletId}, network=${network}, allowMultiAccount=${!!allowMultiAccount}`);
 
   // Get wallet info
@@ -67,159 +69,69 @@ export async function createAccount(
     throw createError(404, "钱包不存在", "WALLET_NOT_FOUND");
   }
 
-  // Find all active tokens on this network
-  const chainTokens = await prisma.token.findMany({
-    where: { isActive: true, network },
+  // Find all active assets on this network
+  const chainAssets = await prisma.asset.findMany({
+    where: { isActive: true, chain: network },
   });
 
-  if (chainTokens.length === 0) {
-    throw createError(400, `网络 ${network} 无可用代币`, "NO_TOKENS_ON_NETWORK");
+  if (chainAssets.length === 0) {
+    throw createError(400, `网络 ${network} 无可用资产`, "NO_ASSETS_ON_NETWORK");
   }
 
-  // Check which (network, tokenSymbol) accounts already exist
+  // Check existing accounts on this network
   const existingAccounts = await prisma.account.findMany({
     where: { walletId, network },
-    select: { tokenSymbol: true, address: true, index: true },
     orderBy: { index: "desc" },
   });
-  const existingTokenSymbols = new Set(existingAccounts.map((a: any) => a.tokenSymbol));
   const maxIndex = existingAccounts.length > 0 ? (existingAccounts[0] as any).index : -1;
 
-  // Determine which tokens to create and at which index
-  let tokensToCreate: typeof chainTokens;
-  let accountIndex: number;
+  if (!allowMultiAccount && existingAccounts.length > 0) {
+    throw createError(409, "该钱包下此网络已有账户", "ACCOUNT_EXISTS");
+  }
+
+  // Determine account index
+  const accountIndex = maxIndex + 1;
+
+  // Derive address
   let address: string;
-
-  if (allowMultiAccount && existingAccounts.length > 0) {
-    // Multi-account mode: create ALL tokens at the next index
-    accountIndex = maxIndex + 1;
-    tokensToCreate = chainTokens;
-
-    // Derive new address at the new index
-    if (mnemonic) {
-      address = await deriveAddressFromMnemonic(mnemonic, network, accountIndex);
-    } else if (network === "Tron") {
-      address = generateTronAddress();
-    } else {
-      address = "0x" + uuid().replace(/-/g, "").slice(0, 40).toUpperCase();
-    }
+  if (mnemonic) {
+    address = await deriveAddressFromMnemonic(mnemonic, network, accountIndex);
+  } else if (network === "Tron") {
+    address = generateTronAddress();
   } else {
-    // Default mode: only create missing token accounts at index 0
-    accountIndex = 0;
-    tokensToCreate = chainTokens.filter((t: any) => !existingTokenSymbols.has(t.symbol));
-
-    if (tokensToCreate.length === 0) {
-      throw createError(409, "该钱包下此网络的所有代币账户已存在", "ACCOUNT_EXISTS");
-    }
-
-    // Reuse existing address if any account exists on this network
-    if (existingAccounts.length > 0 && existingAccounts[existingAccounts.length - 1].address) {
-      address = existingAccounts[existingAccounts.length - 1].address;
-    } else if (mnemonic) {
-      address = await deriveAddressFromMnemonic(mnemonic, network, 0);
-    } else if (network === "Tron") {
-      address = generateTronAddress();
-    } else {
-      address = "0x" + uuid().replace(/-/g, "").slice(0, 40).toUpperCase();
-    }
+    address = "0x" + uuid().replace(/-/g, "").slice(0, 40).toUpperCase();
   }
 
-  const createdAccounts: AccountDetail[] = [];
+  const accountName = name || `${network} Account ${accountIndex + 1}`;
 
-  for (const token of tokensToCreate) {
-    const accountName = name
-      ? `${name} ${token.symbol}`
-      : `${network} ${token.symbol}`;
-
-    const account = await prisma.account.create({
-      data: {
-        walletId,
-        network,
-        tokenSymbol: token.symbol,
-        index: accountIndex,
-        name: accountName,
-        address,
-      },
-    });
-
-    logger.info("ACCOUNT", `创建账户成功: accountId=${account.id}, network=${network}, token=${token.symbol}, index=${accountIndex}, address=${address}`);
-
-    // Ensure WalletToken exists for this token
-    await prisma.walletToken.upsert({
-      where: {
-        walletId_tokenId: { walletId, tokenId: token.id },
-      },
-      update: {},
-      create: {
-        walletId,
-        tokenId: token.id,
-        balance: 0,
-      },
-    });
-
-    // Fetch token balance for this account
-    const tokenBalances = await getAccountTokenBalances(walletId, network, token.symbol);
-
-    createdAccounts.push({
-      id: account.id,
-      walletId: account.walletId,
-      network: account.network,
-      tokenSymbol: account.tokenSymbol,
-      name: account.name,
-      address: account.address,
-      createdAt: account.createdAt,
-      updatedAt: account.updatedAt,
-      tokenBalances,
-    });
-  }
-
-  return createdAccounts;
-}
-
-/**
- * Get token balance for a specific account (filtered by tokenSymbol).
- * If tokenSymbol is provided, returns only that token's balance.
- * If not, returns all token balances for the network (backward compatibility).
- */
-async function getAccountTokenBalances(
-  walletId: string,
-  network: string,
-  tokenSymbol?: string
-): Promise<Array<{
-  tokenId: string;
-  symbol: string;
-  name: string;
-  network: string;
-  balance: string;
-  decimals: number;
-  iconUrl?: string;
-}>> {
-  // Find tokens for this network, optionally filtered by symbol
-  const networkTokens = await prisma.token.findMany({
-    where: tokenSymbol ? { network, symbol: tokenSymbol } : { network },
-  });
-  const networkTokenIds = networkTokens.map((t: any) => t.id);
-  const tokenMap = new Map<string, any>(networkTokens.map((t: any) => [t.id, t]));
-
-  const walletTokens = await prisma.walletToken.findMany({
-    where: {
+  // Create the account
+  const account = await prisma.account.create({
+    data: {
       walletId,
-      tokenId: { in: networkTokenIds },
+      network,
+      index: accountIndex,
+      name: accountName,
+      address,
     },
   });
 
-  return walletTokens.map((wt: any) => {
-    const tk = tokenMap.get(wt.tokenId);
-    return {
-      tokenId: wt.tokenId,
-      symbol: tk?.symbol || "",
-      name: tk?.name || "",
-      network: tk?.network || network,
-      balance: wt.balance.toString(),
-      decimals: tk?.decimals || 6,
-      iconUrl: tk?.iconUrl || undefined,
-    };
-  });
+  logger.info("ACCOUNT", `创建账户成功: accountId=${account.id}, network=${network}, index=${accountIndex}, address=${address}`);
+
+  // Auto-add default assets for this account (NATIVE + default TOKENs)
+  const defaultAssets = chainAssets.filter((a: any) => a.isDefault);
+  for (const asset of defaultAssets) {
+    await prisma.accountAsset.create({
+      data: {
+        accountId: account.id,
+        assetId: asset.id,
+        balance: 0,
+      },
+    });
+    logger.info("ACCOUNT", `自动添加资产: asset=${asset.symbol} (${asset.type}), accountId=${account.id}`);
+  }
+
+  // Fetch account with assets
+  return getAccountDetail(account.id);
 }
 
 /**
@@ -228,34 +140,19 @@ async function getAccountTokenBalances(
 export async function getWalletAccounts(walletId: string): Promise<AccountDetail[]> {
   const accounts = await prisma.account.findMany({
     where: { walletId },
-    orderBy: [{ network: "asc" }, { tokenSymbol: "asc" }],
+    orderBy: [{ network: "asc" }, { index: "asc" }],
   });
 
   const result: AccountDetail[] = [];
   for (const account of accounts) {
-    const tokenBalances = await getAccountTokenBalances(
-      walletId,
-      account.network,
-      account.tokenSymbol
-    );
-    result.push({
-      id: account.id,
-      walletId: account.walletId,
-      network: account.network,
-      tokenSymbol: account.tokenSymbol,
-      name: account.name,
-      address: account.address,
-      createdAt: account.createdAt,
-      updatedAt: account.updatedAt,
-      tokenBalances,
-    });
+    result.push(await getAccountDetail(account.id));
   }
 
   return result;
 }
 
 /**
- * Get account detail
+ * Get account detail with assets
  */
 export async function getAccountDetail(accountId: string): Promise<AccountDetail> {
   const account = await prisma.account.findUnique({
@@ -266,27 +163,46 @@ export async function getAccountDetail(accountId: string): Promise<AccountDetail
     throw createError(404, "账户不存在", "ACCOUNT_NOT_FOUND");
   }
 
-  const tokenBalances = await getAccountTokenBalances(
-    account.walletId,
-    account.network,
-    account.tokenSymbol
-  );
+  // Fetch account assets
+  const accountAssets = await prisma.accountAsset.findMany({
+    where: { accountId: account.id },
+  });
+
+  const assetIds = accountAssets.map((aa: any) => aa.assetId);
+  const assets = await prisma.asset.findMany({
+    where: { id: { in: assetIds } },
+  });
+  const assetMap = new Map<string, any>(assets.map((a: any) => [a.id, a]));
 
   return {
     id: account.id,
     walletId: account.walletId,
     network: account.network,
-    tokenSymbol: account.tokenSymbol,
+    index: account.index,
     name: account.name,
     address: account.address,
     createdAt: account.createdAt,
     updatedAt: account.updatedAt,
-    tokenBalances,
+    assets: accountAssets.map((aa: any) => {
+      const ast = assetMap.get(aa.assetId);
+      return {
+        id: aa.id,
+        assetId: aa.assetId,
+        symbol: ast?.symbol || "",
+        name: ast?.name || "",
+        type: ast?.type || "NATIVE",
+        chain: ast?.chain || account.network,
+        balance: aa.balance.toString(),
+        decimals: ast?.decimals || 6,
+        tokenId: ast?.tokenId || null,
+        iconUrl: ast?.iconUrl || undefined,
+      };
+    }),
   };
 }
 
 /**
- * Delete an account
+ * Delete an account and its assets
  */
 export async function deleteAccount(accountId: string): Promise<void> {
   const account = await prisma.account.findUnique({ where: { id: accountId } });
@@ -294,41 +210,46 @@ export async function deleteAccount(accountId: string): Promise<void> {
     throw createError(404, "Account not found", "ACCOUNT_NOT_FOUND");
   }
 
-  logger.info("ACCOUNT", `删除账户: accountId=${accountId}, network=${account.network}, token=${account.tokenSymbol}`);
+  logger.info("ACCOUNT", `删除账户: accountId=${accountId}, network=${account.network}`);
+
+  // Delete account assets first
+  await prisma.accountAsset.deleteMany({ where: { accountId } });
   await prisma.account.delete({ where: { id: accountId } });
 }
 
-/** Chain with its tokens, for the available chains API */
-export interface ChainWithTokens {
+/** Chain with its assets, for the available chains API */
+export interface ChainWithAssets {
   id: number;
   name: string;
   displayName: string;
   isAccountSupported: boolean;
   derivationPath: string | null;
-  tokens: Array<{
+  assets: Array<{
+    id: string;
     symbol: string;
     name: string;
-    tokenType: string;
+    type: string;
     decimals: number;
+    tokenId?: string | null;
+    isDefault: boolean;
   }>;
 }
 
 /**
  * Get available chains for creating accounts.
- * Returns chains where isAccountSupported=true, along with their tokens.
+ * Returns chains where isAccountSupported=true, along with their assets.
  */
-export async function getAvailableChains(): Promise<ChainWithTokens[]> {
+export async function getAvailableChains(): Promise<ChainWithAssets[]> {
   const chains = await prisma.chain.findMany({
     where: { isAccountSupported: true },
     orderBy: { name: "asc" },
   });
 
-  const result: ChainWithTokens[] = [];
+  const result: ChainWithAssets[] = [];
   for (const chain of chains) {
-    const tokens = await prisma.token.findMany({
-      where: { isActive: true, network: chain.name },
-      select: { symbol: true, name: true, tokenType: true, decimals: true },
-      orderBy: { tokenType: "asc" },
+    const assets = await prisma.asset.findMany({
+      where: { isActive: true, chain: chain.name },
+      orderBy: [{ type: "asc" }, { symbol: "asc" }],
     });
 
     result.push({
@@ -337,11 +258,14 @@ export async function getAvailableChains(): Promise<ChainWithTokens[]> {
       displayName: chain.displayName,
       isAccountSupported: chain.isAccountSupported,
       derivationPath: chain.derivationPath,
-      tokens: tokens.map((t: any) => ({
-        symbol: t.symbol,
-        name: t.name,
-        tokenType: t.tokenType,
-        decimals: t.decimals,
+      assets: assets.map((a: any) => ({
+        id: a.id,
+        symbol: a.symbol,
+        name: a.name,
+        type: a.type,
+        decimals: a.decimals,
+        tokenId: a.tokenId || null,
+        isDefault: a.isDefault,
       })),
     });
   }
@@ -351,7 +275,6 @@ export async function getAvailableChains(): Promise<ChainWithTokens[]> {
 
 /**
  * Batch get deduplicated networks for multiple wallets.
- * Lightweight — only returns walletId + unique network names.
  */
 export async function getWalletsNetworksBatch(walletIds: string[]): Promise<Array<{ walletId: string; networks: string[] }>> {
   const accounts = await prisma.account.findMany({
@@ -359,7 +282,6 @@ export async function getWalletsNetworksBatch(walletIds: string[]): Promise<Arra
     select: { walletId: true, network: true },
   });
 
-  // Group by walletId, deduplicate networks
   const map = new Map<string, Set<string>>();
   for (const a of accounts) {
     const set = map.get(a.walletId) || new Set<string>();

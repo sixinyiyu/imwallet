@@ -84,51 +84,75 @@ export function deriveAddress(seed: string, index: number): string {
   return "0x" + hash.slice(0, 40).toUpperCase();
 }
 
+/**
+ * Compute wallet's asset balances by aggregating all account_assets under this wallet.
+ */
 async function computeTokenBalances(walletId: string): Promise<{
   tokenBalances: WalletTokenBalance[];
   totalBalanceCny: string;
 }> {
-  // Fetch WalletTokens and Tokens separately (no relation include)
-  const walletTokens = await prisma.walletToken.findMany({
+  // 1. Find all accounts under this wallet
+  const accounts = await prisma.account.findMany({
     where: { walletId },
+    select: { id: true },
+  });
+  const accountIds = accounts.map((a: any) => a.id);
+
+  if (accountIds.length === 0) {
+    return { tokenBalances: [], totalBalanceCny: "0.00" };
+  }
+
+  // 2. Fetch all account_assets for these accounts
+  const accountAssets = await prisma.accountAsset.findMany({
+    where: { accountId: { in: accountIds } },
   });
 
-  const tokenIds = walletTokens.map((wt: any) => wt.tokenId);
-  const tokens = await prisma.token.findMany({
-    where: { id: { in: tokenIds } },
+  // 3. Fetch asset definitions
+  const assetIds = [...new Set(accountAssets.map((aa: any) => aa.assetId))];
+  const assets = await prisma.asset.findMany({
+    where: { id: { in: assetIds } },
   });
-  const tokenMap = new Map<string, any>(tokens.map((t: any) => [t.id, t]));
+  const assetMap = new Map<string, any>(assets.map((a: any) => [a.id, a]));
 
-  const [usdtFiat, cnyFiat] = await Promise.all([
+  // 4. Get fiat rates
+  const [usdFiat, cnyFiat] = await Promise.all([
     prisma.fiatCurrency.findUnique({ where: { code: "USD" } }),
     prisma.fiatCurrency.findUnique({ where: { code: "CNY" } }),
   ]);
-
-  const usdRate = usdtFiat ? parseFloat(usdtFiat.rate.toString()) : 1;
+  const usdRate = usdFiat ? parseFloat(usdFiat.rate.toString()) : 1;
   const cnyRate = cnyFiat ? parseFloat(cnyFiat.rate.toString()) : 7.25;
 
+  // 5. Aggregate balances by asset (sum across accounts)
+  const balanceMap = new Map<string, number>();
+  for (const aa of accountAssets) {
+    const current = balanceMap.get(aa.assetId) || 0;
+    balanceMap.set(aa.assetId, current + parseFloat(aa.balance.toString()));
+  }
+
   let totalCny = 0;
+  const tokenBalances: WalletTokenBalance[] = [];
 
-  const tokenBalances: WalletTokenBalance[] = walletTokens.map((wt: any) => {
-    const tk = tokenMap.get(wt.tokenId);
-    const balance = wt.balance.toString();
-    const usdValue = (parseFloat(balance) * usdRate).toFixed(2);
-    const cnyValue = (parseFloat(balance) * cnyRate).toFixed(2);
-    totalCny += parseFloat(balance) * cnyRate;
+  for (const [assetId, totalBalance] of balanceMap) {
+    const ast = assetMap.get(assetId);
+    if (!ast) continue;
+    const balance = totalBalance.toFixed(8).replace(/\.?0+$/, "");
+    const usdValue = (totalBalance * usdRate).toFixed(2);
+    const cnyValue = (totalBalance * cnyRate).toFixed(2);
+    totalCny += totalBalance * cnyRate;
 
-    return {
-      id: wt.id,
-      tokenId: wt.tokenId,
-      symbol: tk?.symbol || "",
-      name: tk?.name || "",
-      balance,
+    tokenBalances.push({
+      id: assetId,
+      tokenId: assetId,
+      symbol: ast.symbol,
+      name: ast.name,
+      balance: totalBalance.toString(),
       usdValue,
       cnyValue,
-      decimals: tk?.decimals || 6,
-      network: tk?.network || "",
-      iconUrl: tk?.iconUrl || undefined,
-    };
-  });
+      decimals: ast.decimals || 6,
+      network: ast.chain || "",
+      iconUrl: ast.iconUrl || undefined,
+    });
+  }
 
   return {
     tokenBalances,

@@ -8,8 +8,8 @@ import {
   RefreshControl,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { tokenService } from "../services/tokenService";
-import type { TokenInfo } from "../types";
+import { assetService } from "../services/assetService";
+import type { AssetInfo } from "../types";
 import { TronIcon, USDTIcon } from "../components/icons";
 import { GreenToggle } from "../components/GreenToggle";
 
@@ -20,7 +20,7 @@ const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
 };
 
 export default function TokenManageScreen() {
-  const [tokens, setTokens] = useState<TokenInfo[]>([]);
+  const [assets, setAssets] = useState<AssetInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -34,11 +34,11 @@ export default function TokenManageScreen() {
     setTimeout(() => setToastVisible(false), 2000);
   }, []);
 
-  const loadTokens = async () => {
+  const loadAssets = async () => {
     setLoading(true);
     try {
-      const { tokens: list } = await tokenService.getTokens();
-      setTokens(list);
+      const { assets: list } = await assetService.getAssets();
+      setAssets(list);
     } catch {
       showToast("加载代币列表失败");
     }
@@ -47,40 +47,40 @@ export default function TokenManageScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadTokens();
+      loadAssets();
     }, [])
   );
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadTokens();
+    await loadAssets();
     setRefreshing(false);
   };
 
-  const handleToggleTradable = async (token: TokenInfo, value: boolean) => {
-    setTogglingId(token.id);
+  const handleToggleTradable = async (asset: AssetInfo, value: boolean) => {
+    setTogglingId(asset.id);
     try {
-      await tokenService.updateTokenTradable(token.id, value);
-      setTokens((prev) =>
-        prev.map((t) => (t.id === token.id ? { ...t, isTradable: value } : t))
+      await assetService.updateAssetTradable(asset.id, value);
+      setAssets((prev) =>
+        prev.map((a) => (a.id === asset.id ? { ...a, isTradable: value } : a))
       );
-      showToast(`${token.symbol} 交易已${value ? "开启" : "关闭"}`);
+      showToast(`${asset.symbol} 交易已${value ? "开启" : "关闭"}`);
     } catch (err: any) {
       showToast(err?.response?.data?.error || "更新失败，请重试");
     }
     setTogglingId(null);
   };
 
-  const renderItem = ({ item, index }: { item: TokenInfo; index: number }) => {
+  const renderItem = ({ item, index }: { item: AssetInfo; index: number }) => {
     const IconComp = TOKEN_ICONS[item.symbol];
     return (
-      <View style={[styles.item, index < tokens.length - 1 && styles.itemBorder]}>
+      <View style={[styles.item, index < assets.length - 1 && styles.itemBorder]}>
         <View style={styles.iconContainer}>
           {IconComp ? <IconComp size={32} /> : <Text style={styles.iconFallback}>🪙</Text>}
         </View>
         <View style={styles.info}>
           <Text style={styles.symbol}>{item.symbol}</Text>
-          <Text style={styles.name}>{item.name} · {item.network}</Text>
+          <Text style={styles.name}>{item.name} · {item.chain}</Text>
         </View>
         {togglingId === item.id ? (
           <ActivityIndicator size="small" color="#287220" />
@@ -105,7 +105,7 @@ export default function TokenManageScreen() {
   return (
     <View style={styles.container}>
       <FlatList
-        data={tokens}
+        data={assets}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#287220"]} />}

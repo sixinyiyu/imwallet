@@ -80,30 +80,39 @@ export async function recharge(
     throw createError(404, "钱包不存在", "WALLET_NOT_FOUND");
   }
 
-  // 3. 查找代币（symbol + network 复合查询）
-  const token = await prisma.token.findFirst({
-    where: { symbol: tokenSymbol, network },
+  // 3. 查找资产（symbol + chain 复合查询）
+  const asset = await prisma.asset.findFirst({
+    where: { symbol: tokenSymbol, chain: network },
   });
-  if (!token) {
-    throw createError(404, "代币不存在", "TOKEN_NOT_FOUND");
+  if (!asset) {
+    throw createError(404, "资产不存在", "ASSET_NOT_FOUND");
   }
 
-  // 4. 获取或创建 WalletToken 记录，增加余额
-  const walletToken = await prisma.walletToken.upsert({
+  // 4. 获取或创建 AccountAsset 记录，增加余额
+  // 先找到钱包在该网络上的账户
+  const account = await prisma.account.findFirst({
+    where: { walletId, network },
+    orderBy: { index: "asc" },
+  });
+  if (!account) {
+    throw createError(404, "该钱包在此网络下无账户", "ACCOUNT_NOT_FOUND");
+  }
+
+  const accountAsset = await prisma.accountAsset.upsert({
     where: {
-      walletId_tokenId: { walletId, tokenId: token.id },
+      accountId_assetId: { accountId: account.id, assetId: asset.id },
     },
     update: {
       balance: { increment: parseFloat(amount) },
     },
     create: {
-      walletId,
-      tokenId: token.id,
+      accountId: account.id,
+      assetId: asset.id,
       balance: parseFloat(amount),
     },
   });
 
-  logger.info("RECHARGE", `余额更新成功: walletTokenId=${walletToken.id}, newBalance=${walletToken.balance}`);
+  logger.info("RECHARGE", `余额更新成功: accountAssetId=${accountAsset.id}, newBalance=${accountAsset.balance}`);
 
   // 5. 写入充值记录
   const record = await prisma.recharge.create({
@@ -112,7 +121,7 @@ export async function recharge(
       walletAlias: wallet.alias,
       walletAddress: wallet.address,
       tokenSymbol,
-      tokenName: token.name,
+      tokenName: asset.name,
       amount: parseFloat(amount),
       memo: memo || "",
       deviceId: deviceInfo.deviceId,

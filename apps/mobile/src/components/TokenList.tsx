@@ -1,14 +1,14 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from "react-native";
-import type { TokenBalance } from "../types";
+import type { AssetBalance } from "../types";
 import { USDTIcon } from "./icons";
 import TronIcon from "./icons/TronIcon";
 import { useFiatStore } from "../stores/fiatStore";
 import EmptyState from "./EmptyState";
 
 interface Props {
-  tokens: TokenBalance[];
-  onTokenPress: (token: TokenBalance) => void;
+  assets: AssetBalance[];
+  onAssetPress: (asset: AssetBalance) => void;
   loading?: boolean;
 }
 
@@ -42,11 +42,11 @@ function SkeletonRow() {
   );
 }
 
-export default function TokenList({ tokens, onTokenPress, loading }: Props) {
+export default function TokenList({ assets, onAssetPress, loading }: Props) {
   const { currency } = useFiatStore();
 
   // 加载中：显示骨架屏
-  if (loading && tokens.length === 0) {
+  if (loading && assets.length === 0) {
     return (
       <View style={styles.container}>
         {[0, 1, 2].map((i) => (
@@ -59,42 +59,42 @@ export default function TokenList({ tokens, onTokenPress, loading }: Props) {
     );
   }
 
-  if (tokens.length === 0) {
+  if (assets.length === 0) {
     return (
       <EmptyState message="暂无代币" />
     );
   }
 
-  const getDisplayValue = (token: TokenBalance) => {
-    return token.usdValue;
+  const getDisplayValue = (asset: AssetBalance) => {
+    return asset.usdValue;
   };
 
   return (
     <View style={styles.container}>
-      {tokens.map((token, index) => (
+      {assets.map((asset, index) => (
         <TouchableOpacity
-          key={token.tokenId || token.symbol || index}
+          key={asset.assetId || asset.symbol || index}
           style={[
             styles.item,
-            index < tokens.length - 1 && styles.itemBorder,
+            index < assets.length - 1 && styles.itemBorder,
           ]}
-          onPress={() => onTokenPress(token)}
+          onPress={() => onAssetPress(asset)}
         >
           <View style={styles.iconContainer}>
-            {token.symbol === "TRX" ? (
+            {asset.symbol === "TRX" ? (
               <TronIcon size={32} />
             ) : (
               <USDTIcon size={32} />
             )}
           </View>
           <View style={styles.info}>
-            <Text style={styles.symbol}>{token.symbol}</Text>
-            <Text style={styles.name}>{token.name}</Text>
+            <Text style={styles.symbol}>{asset.symbol}</Text>
+            <Text style={styles.name}>{asset.name}</Text>
           </View>
           <View style={styles.balance}>
-            <Text style={styles.balanceText}>{token.balance}</Text>
+            <Text style={styles.balanceText}>{asset.balance}</Text>
             <Text style={styles.fiatValue}>
-              ≈ {currency.symbol}{getDisplayValue(token)}
+              ≈ {currency.symbol}{getDisplayValue(asset)}
             </Text>
           </View>
         </TouchableOpacity>

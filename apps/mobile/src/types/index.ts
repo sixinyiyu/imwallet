@@ -44,27 +44,29 @@ export interface AggregateWallet extends SimpleWallet {
 export interface WalletBalanceDetail {
   totalBalanceUsd: string;
   totalBalanceCny: string;
-  tokens: TokenBalance[];
+  assets: AssetBalance[];
 }
 
 export interface Account {
   id: string;
   walletId: string;
   network: string;
-  /** 代币符号（如 TRX、USDT），标识该账户对应的代币 */
-  tokenSymbol: string;
+  index: number;
   name: string;
   address: string;
   createdAt: string;
   updatedAt?: string;
-  /** 该账户对应代币的余额信息 */
-  tokenBalances: Array<{
-    tokenId: string;
+  /** 该账户下的资产列表 */
+  assets: Array<{
+    id: string;
+    assetId: string;
     symbol: string;
     name: string;
-    network: string;
+    type: string;
+    chain: string;
     balance: string;
     decimals: number;
+    tokenId?: string | null;
     iconUrl?: string;
   }>;
 }
@@ -82,30 +84,33 @@ export interface WalletTokenBalance {
   iconUrl?: string;
 }
 
-export interface TokenBalance {
+export interface AssetBalance {
   id: string;
-  tokenId: string;
+  assetId: string;
   symbol: string;
   name: string;
   balance: string;
   usdValue: string;
   cnyValue: string;
   decimals: number;
-  network: string;
+  type: string;
+  chain: string;
+  tokenId?: string | null;
   iconUrl?: string;
 }
 
-export interface TokenInfo {
+export interface AssetInfo {
   id: string;
   symbol: string;
   name: string;
   decimals: number;
-  network: string;
-  contractAddress?: string;
+  chain: string;
+  type: string;
+  tokenId?: string | null;
   iconUrl?: string;
   isActive: boolean;
-  isTradable?: boolean;
-  tokenType?: string;
+  isDefault: boolean;
+  isTradable: boolean;
 }
 
 export interface ChainInfo {
@@ -114,12 +119,15 @@ export interface ChainInfo {
   displayName: string;
   isAccountSupported: boolean;
   derivationPath: string | null;
-  /** 该链下可创建账户的代币列表 */
-  tokens: Array<{
+  /** 该链下可创建账户的资产列表 */
+  assets: Array<{
+    id: string;
     symbol: string;
     name: string;
-    tokenType: string;
+    type: string;
     decimals: number;
+    tokenId?: string | null;
+    isDefault: boolean;
   }>;
 }
 

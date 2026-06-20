@@ -91,32 +91,34 @@ model Chain {
   @@map("chains")
 }
 
-/// 代币表：存储系统支持的代币类型
-model Token {
+/// 资产表：定义每条链支持的资产（原生币/代币）
+model Asset {
   id              String    @id @default(uuid())
-  /// 代币符号，如 USDT、TRX
+  /// 资产符号，如 TRX、USDT、ETH、BTC
   symbol          String    @db.VarChar(16)
-  /// 代币名称，如 Tether USD、Tron
+  /// 资产名称，如 Tether USD、Tron
   name            String    @db.VarChar(64)
   /// 精度（小数位数）
   decimals        Int       @default(6)
-  /// 所属网络
-  network         String    @default("Private Chain") @db.VarChar(64)
-  /// 合约地址（可选，原生代币为空）
-  contractAddress String?   @map("contract_address") @db.VarChar(66)
+  /// 所属链（如 Tron、Ethereum、Bitcoin）
+  chain           String    @db.VarChar(64)
+  /// 资产类型：NATIVE=原生主币, TOKEN=代币(ERC20/TRC20)
+  type            String    @default("NATIVE") @db.VarChar(16)
+  /// 合约地址（NATIVE为空，TOKEN为合约地址）
+  tokenId         String?   @map("token_id") @db.VarChar(66)
   /// 图标 URL（可选）
   iconUrl         String?   @map("icon_url") @db.VarChar(512)
+  /// 是否默认可见（NATIVE=true，常见代币=true，其他需手动添加）
+  isDefault       Boolean   @default(true) @map("is_default")
   /// 是否启用
   isActive        Boolean   @default(true) @map("is_active")
   /// 是否支持交易
   isTradable      Boolean   @default(true) @map("is_tradable")
-  /// 代币类型：NATIVE=原生主币, STABLECOIN=稳定币
-  tokenType       String    @default("NATIVE") @map("token_type") @db.VarChar(16)
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  @@unique([symbol, network])
-  @@map("tokens")
+  @@unique([symbol, chain])
+  @@map("assets")
 }
 
 /// 钱包表：存储用户创建或导入的钱包
@@ -142,38 +144,38 @@ model Wallet {
   @@map("wallets")
 }
 
-/// 钱包代币余额表：每个钱包中每种代币的余额（兼容旧数据）
-model WalletToken {
+/// 账户资产表：每个账户持有的各资产余额
+model AccountAsset {
   id        String   @id @default(uuid())
-  walletId  String   @map("wallet_id") @db.VarChar(36)
-  tokenId   String   @map("token_id") @db.VarChar(36)
-  /// 代币余额
+  /// 关联账户 ID
+  accountId String   @map("account_id") @db.VarChar(36)
+  /// 关联资产 ID
+  assetId   String   @map("asset_id") @db.VarChar(36)
+  /// 资产余额
   balance   Decimal  @default(0) @db.Decimal(30, 8)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@unique([walletId, tokenId])
-  @@map("wallet_tokens")
+  @@unique([accountId, assetId])
+  @@map("account_assets")
 }
 
-/// 账户表：钱包下的区块链网络账户，每个钱包每个网络每个代币可有多个账户（通过 index 区分）
+/// 账户表：钱包在某条链上的地址，每个钱包每条链可有多个账户（通过 index 区分）
 model Account {
   id           String   @id @default(uuid())
   walletId     String   @map("wallet_id") @db.VarChar(36)
-  /// 所属网络（如 Tron、Ethereum）
+  /// 所属网络（如 Tron、Ethereum、Bitcoin）
   network      String   @db.VarChar(64)
-  /// 代币符号（如 TRX、USDT），标识该账户对应的代币
-  tokenSymbol  String   @map("token_symbol") @db.VarChar(16)
   /// 派生路径索引，同链多账户时递增（默认0）
   index        Int      @default(0)
   /// 账户名称
   name         String   @db.VarChar(64)
-  /// 链上地址（Tron格式: T+33位随机字符）
+  /// 链上地址（Tron格式: T+33位随机字符, EVM格式: 0x+40位hex）
   address      String   @db.VarChar(64)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  @@unique([walletId, network, tokenSymbol, index])
+  @@unique([walletId, network, index])
   @@map("accounts")
 }
 

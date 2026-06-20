@@ -80,11 +80,13 @@ export default function WalletAddAccountScreen() {
       ]);
       setChains(chainsResult.chains);
 
-      // 按网络分组已有账户
+      // 按网络分组已有账户的资产符号
       const accountsByNetwork = new Map<string, Set<string>>();
       for (const acc of accountsResult.accounts) {
         const set = accountsByNetwork.get(acc.network) || new Set<string>();
-        set.add(acc.tokenSymbol || "");
+        for (const asset of acc.assets) {
+          set.add(asset.symbol);
+        }
         accountsByNetwork.set(acc.network, set);
       }
 
@@ -92,10 +94,10 @@ export default function WalletAddAccountScreen() {
       const fullSet = new Set<string>();
       const partialSet = new Set<string>();
       for (const chain of chainsResult.chains) {
-        const existingTokens = accountsByNetwork.get(chain.name);
-        if (!existingTokens || chain.tokens.length === 0) continue;
-        const allTokensExist = chain.tokens.every((t) => existingTokens.has(t.symbol));
-        if (allTokensExist) {
+        const existingAssets = accountsByNetwork.get(chain.name);
+        if (!existingAssets || chain.assets.length === 0) continue;
+        const allAssetsExist = chain.assets.every((a) => existingAssets.has(a.symbol));
+        if (allAssetsExist) {
           fullSet.add(chain.name);
         } else {
           partialSet.add(chain.name);
@@ -109,9 +111,9 @@ export default function WalletAddAccountScreen() {
         {
           id: 1, name: "Tron", displayName: "Tron (TRX)", isAccountSupported: true,
           derivationPath: "m/44'/195'/0'/0",
-          tokens: [
-            { symbol: "TRX", name: "Tron", tokenType: "NATIVE", decimals: 6 },
-            { symbol: "USDT", name: "Tether USD", tokenType: "STABLECOIN", decimals: 6 },
+          assets: [
+            { id: "trx-tron", symbol: "TRX", name: "Tron", type: "NATIVE", decimals: 6, isDefault: true },
+            { id: "usdt-tron", symbol: "USDT", name: "Tether USD", type: "STABLECOIN", decimals: 6, isDefault: false },
           ],
         },
       ]);
@@ -250,14 +252,14 @@ export default function WalletAddAccountScreen() {
                     <Text style={drawerStyles.chainName}>{chain.displayName.replace(/\s*\(.*?\)/g, "")}</Text>
                     {/* 代币列表 */}
                     <View style={drawerStyles.tokenBadges}>
-                      {chain.tokens.map((token) => {
-                        const TokenIcon = TOKEN_ICONS[token.symbol];
+                      {chain.assets.map((asset) => {
+                        const TokenIcon = TOKEN_ICONS[asset.symbol];
                         return (
-                          <View key={token.symbol} style={drawerStyles.tokenBadge}>
+                          <View key={asset.symbol} style={drawerStyles.tokenBadge}>
                             {TokenIcon ? <TokenIcon size={14} /> : null}
-                            <Text style={drawerStyles.tokenBadgeText}>{token.symbol}</Text>
+                            <Text style={drawerStyles.tokenBadgeText}>{asset.symbol}</Text>
                             <Text style={drawerStyles.tokenTypeLabel}>
-                              {token.tokenType === "NATIVE" ? "主币" : "稳定币"}
+                              {asset.type === "NATIVE" ? "主币" : "稳定币"}
                             </Text>
                           </View>
                         );

@@ -6,7 +6,7 @@ import { generateMnemonic, cleanMnemonic } from "../utils/mnemonic";
 import { ensureDeviceKeys, ensureDeviceRegistered } from "../services/api";
 import { useAuthStore } from "./authStore";
 import { uploadLog, saveLogToLocal } from "../services/logService";
-import type { Wallet, SimpleWallet, Account, TokenBalance } from "../types";
+import type { Wallet, SimpleWallet, Account, AssetBalance } from "../types";
 
 const MNEMONIC_KEY_PREFIX = "aquad_mnemonic_";
 const BACKED_UP_KEY_PREFIX = "aquad_backed_up_";
@@ -32,7 +32,7 @@ interface WalletState {
   accounts: Account[];
   activeAccount: Account | null;
   totalBalanceUsd: string;
-  tokens: TokenBalance[];
+  assets: AssetBalance[];
   loading: boolean;
   hasFetched: boolean;
   accountCount: number;
@@ -64,7 +64,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   accounts: [],
   activeAccount: null,
   totalBalanceUsd: "0",
-  tokens: [],
+  assets: [],
   loading: false,
   hasFetched: false,
   accountCount: 0,
@@ -349,13 +349,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  /** Fetch balance for wallet (single API call: total balance + token list) */
+  /** Fetch balance for wallet (single API call: total balance + asset list) */
   fetchBalance: async (walletId: string) => {
     try {
       const detail = await walletService.getWalletBalanceDetail(walletId);
       set({
         totalBalanceUsd: detail.totalBalanceUsd || "0",
-        tokens: detail.tokens,
+        assets: detail.assets,
       });
     } catch {
       // silent

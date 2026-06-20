@@ -13,10 +13,10 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { walletService } from "../services/walletService";
-import { tokenService } from "../services/tokenService";
+import { assetService } from "../services/assetService";
 import { accountService } from "../services/accountService";
 import { rechargeService, type RechargeRecord } from "../services/rechargeService";
-import type { SimpleWallet, TokenInfo, Account } from "../types";
+import type { SimpleWallet, AssetInfo, Account } from "../types";
 import { TronIcon, USDTIcon, ChevronRightIcon } from "../components/icons";
 import { RechargeSkeleton } from "../components/Skeleton";
 
@@ -28,10 +28,10 @@ const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
 
 export default function RechargeScreen() {
   const [wallets, setWallets] = useState<SimpleWallet[]>([]);
-  const [tokens, setTokens] = useState<TokenInfo[]>([]);
+  const [assets, setAssets] = useState<AssetInfo[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<SimpleWallet | null>(null);
   const [walletAccounts, setWalletAccounts] = useState<Account[]>([]);
-  const [selectedToken, setSelectedToken] = useState<TokenInfo | null>(null);
+  const [selectedToken, setSelectedToken] = useState<AssetInfo | null>(null);
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -61,12 +61,12 @@ export default function RechargeScreen() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [walletsRes, tokensRes] = await Promise.all([
+      const [walletsRes, assetsRes] = await Promise.all([
         walletService.getWallets(),
-        tokenService.getTokens(),
+        assetService.getAssets(),
       ]);
       setWallets(walletsRes.wallets);
-      setTokens(tokensRes.tokens);
+      setAssets(assetsRes.assets);
     } catch {
       showToast("加载数据失败");
     }
@@ -74,9 +74,9 @@ export default function RechargeScreen() {
   };
 
   /** 根据代币网络获取钱包在该网络上的链地址 */
-  const getTokenAddress = (token: TokenInfo): string => {
+  const getAssetAddress = (asset: AssetInfo): string => {
     if (!selectedWallet) return "";
-    const account = walletAccounts.find((a) => a.network === token.network);
+    const account = walletAccounts.find((a) => a.network === asset.chain);
     return account?.address || selectedWallet.address;
   };
 
@@ -155,7 +155,7 @@ export default function RechargeScreen() {
       await rechargeService.recharge({
         walletId: selectedWallet.id,
         tokenSymbol: selectedToken.symbol,
-        network: selectedToken.network,
+        network: selectedToken.chain,
         amount: trimmed,
         memo: memo.trim() || undefined,
       });
@@ -255,7 +255,7 @@ export default function RechargeScreen() {
                     : null}
                 <Text style={selectedToken ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
                   {selectedToken
-                    ? `${selectedToken.symbol} · ${shortAddr(getTokenAddress(selectedToken))}`
+                    ? `${selectedToken.symbol} · ${shortAddr(getAssetAddress(selectedToken))}`
                     : "请选择代币"}
                 </Text>                </View>
                 <ChevronRightIcon size={18} color="#9CA3AF" />
@@ -359,7 +359,7 @@ export default function RechargeScreen() {
           <View style={styles.pickerCard}>
             <Text style={styles.pickerTitle}>选择代币</Text>
             <FlatList
-              data={tokens}
+              data={assets}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
                 <TouchableOpacity
@@ -377,8 +377,8 @@ export default function RechargeScreen() {
                       <Text style={styles.pickerItemName}>{item.symbol}</Text>
                       <Text style={styles.pickerItemAddr}>
                         {selectedWallet
-                          ? shortAddr(getTokenAddress(item))
-                          : `${item.name} · ${item.network}`}
+                          ? shortAddr(getAssetAddress(item))
+                          : `${item.name} · ${item.chain}`}
                       </Text>
                     </View>
                   </View>

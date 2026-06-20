@@ -351,9 +351,9 @@ export default function WalletDetailScreen() {
               <View style={styles.accountInfo}>
                 <View style={styles.accountNameRow}>
                   <Text style={styles.accountName}>{acc.name}</Text>
-                  {acc.tokenSymbol ? (
+                  {acc.assets && acc.assets.length > 0 ? (
                     <View style={styles.tokenSymbolBadge}>
-                      <Text style={styles.tokenSymbolText}>{acc.tokenSymbol}</Text>
+                      <Text style={styles.tokenSymbolText}>{acc.assets.map(a => a.symbol).join(", ")}</Text>
                     </View>
                   ) : null}
                 </View>

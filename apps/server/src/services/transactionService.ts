@@ -76,13 +76,13 @@ export async function transfer(
     throw createError(403, "该钱包不属于当前设备，无法操作");
   }
 
-  // 通过 tokenSymbol + network 查找代币（获取 tokenId 用于余额操作）
-  const token = await prisma.token.findFirst({
-    where: { symbol: input.tokenSymbol, network: input.network },
+  // 通过 tokenSymbol + network 查找资产（获取 assetId 用于余额操作）
+  const asset = await prisma.asset.findFirst({
+    where: { symbol: input.tokenSymbol, chain: input.network },
   });
 
-  if (!token) {
-    logger.warn("TRANSFER", `转账失败: 代币不存在 - tokenSymbol=${input.tokenSymbol}`);
+  if (!asset) {
+    logger.warn("TRANSFER", `转账失败: 资产不存在 - tokenSymbol=${input.tokenSymbol}, network=${input.network}`);
     throw createError(404, "代币类型不存在，请刷新后重试");
   }
 
@@ -95,9 +95,9 @@ export async function transfer(
     throw createError(404, "发送钱包不存在，请刷新后重试");
   }
 
-  // 查找发送方在该网络上对应代币的 Account 链地址（取 index 最小的）
+  // 查找发送方在该网络上的 Account 链地址（取 index 最小的）
   const fromAccount = await prisma.account.findFirst({
-    where: { walletId: input.fromWalletId, network: token.network, tokenSymbol: input.tokenSymbol },
+    where: { walletId: input.fromWalletId, network: input.network },
     orderBy: { index: "asc" },
   });
   const fromAddress = fromAccount?.address || fromWallet.address;
@@ -143,15 +143,18 @@ export async function transfer(
     throw createError(400, "收款地址不在系统内，仅支持系统内账户地址转账", "RECIPIENT_NOT_IN_SYSTEM");
   }
 
-  // Get sender's WalletToken balance for this token (内部仍用 tokenId)
-  const senderWalletToken = await prisma.walletToken.findUnique({
-    where: {
-      walletId_tokenId: { walletId: input.fromWalletId, tokenId: token.id },
-    },
-  });
+  // Get sender's AccountAsset balance for this asset
+  let senderAccountAsset: any = null;
+  if (fromAccount) {
+    senderAccountAsset = await prisma.accountAsset.findUnique({
+      where: {
+        accountId_assetId: { accountId: fromAccount.id, assetId: asset.id },
+      },
+    });
+  }
 
-  if (!senderWalletToken) {
-    logger.warn("TRANSFER", `转账失败: 发送方无该代币余额 - fromWalletId=${input.fromWalletId}, tokenSymbol=${input.tokenSymbol}`);
+  if (!senderAccountAsset) {
+    logger.warn("TRANSFER", `转账失败: 发送方无该资产余额 - fromWalletId=${input.fromWalletId}, tokenSymbol=${input.tokenSymbol}`);
     throw createError(400, "当前钱包无该代币余额，请先充值");
   }
 
@@ -174,27 +177,35 @@ export async function transfer(
     requiredBalance = amountNum;
   }
 
-  const currentBalance = parseFloat(senderWalletToken.balance.toString());
+  const currentBalance = parseFloat(senderAccountAsset.balance.toString());
   if (currentBalance < requiredBalance) {
     logger.warn("TRANSFER", `转账失败: 余额不足 - 当前余额=${currentBalance}, 需要=${requiredBalance}, fromWalletId=${input.fromWalletId}`);
     throw createError(400, "余额不足，请减少转账金额或先充值");
   }
 
-  // Ensure recipient has a WalletToken entry for this token (only for in-system recipients)
-  let recipientWalletTokenId: string | null = null;
+  // Ensure recipient has an AccountAsset entry for this asset (only for in-system recipients)
+  let recipientAccountAssetId: string | null = null;
   if (toWalletId) {
-    const recipientWalletToken = await prisma.walletToken.upsert({
-      where: {
-        walletId_tokenId: { walletId: toWalletId, tokenId: token.id },
-      },
-      update: {},
-      create: {
-        walletId: toWalletId,
-        tokenId: token.id,
-        balance: 0,
-      },
+    // Find recipient's account on the same network
+    const recipientAccount = await prisma.account.findFirst({
+      where: { walletId: toWalletId, network: input.network },
+      orderBy: { index: "asc" },
     });
-    recipientWalletTokenId = recipientWalletToken.id;
+
+    if (recipientAccount) {
+      const recipientAsset = await prisma.accountAsset.upsert({
+        where: {
+          accountId_assetId: { accountId: recipientAccount.id, assetId: asset.id },
+        },
+        update: {},
+        create: {
+          accountId: recipientAccount.id,
+          assetId: asset.id,
+          balance: 0,
+        },
+      });
+      recipientAccountAssetId = recipientAsset.id;
+    }
   }
 
   const txHash =
@@ -204,16 +215,16 @@ export async function transfer(
       .digest("hex");
 
   const tx = await prisma.$transaction(async (tx: any) => {
-    // Update sender WalletToken balance
-    await tx.walletToken.update({
-      where: { id: senderWalletToken.id },
+    // Update sender AccountAsset balance
+    await tx.accountAsset.update({
+      where: { id: senderAccountAsset.id },
       data: { balance: { decrement: senderDeduction } },
     });
 
-    // Update recipient WalletToken balance (only for in-system recipients)
-    if (recipientWalletTokenId) {
-      await tx.walletToken.update({
-        where: { id: recipientWalletTokenId },
+    // Update recipient AccountAsset balance (only for in-system recipients)
+    if (recipientAccountAssetId) {
+      await tx.accountAsset.update({
+        where: { id: recipientAccountAssetId },
         data: { balance: { increment: recipientReceived } },
       });
     }
@@ -269,7 +280,7 @@ export async function transfer(
     toWalletId: tx.toWalletId || "",
     toAddress: tx.toAddress,
     tokenSymbol: tx.tokenSymbol,
-    tokenName: token.name,
+    tokenName: asset.name,
     amount: tx.amount.toString(),
     fee: tx.fee.toString(),
     receivedAmount: recipientReceived.toFixed(8),
@@ -428,7 +439,7 @@ export async function getTransactions(
 
   // 查找 tokenName（tokenSymbol 已在交易表中，只需补充 name）
   const tokenSymbols = [...new Set(transactions.map((tx: any) => tx.tokenSymbol))];
-  const tokenRecords = await prisma.token.findMany({
+  const tokenRecords = await prisma.asset.findMany({
     where: { symbol: { in: tokenSymbols } },
     select: { symbol: true, name: true },
   });
@@ -474,7 +485,7 @@ export async function getTransactionDetail(
   const contactMap = new Map<string, string>(contacts.map((c: any) => [c.address, c.name]));
 
   // 查找 tokenName（symbol 不再唯一，取任意一条即可）
-  const tokenRecord = await prisma.token.findFirst({
+  const tokenRecord = await prisma.asset.findFirst({
     where: { symbol: tx.tokenSymbol },
     select: { name: true },
   });

@@ -27,28 +27,28 @@ export async function runSeed(): Promise<void> {
       }
     }
 
-    // ─── Tokens 种子数据（含 tokenType）───
-    // 每条链有原生主币 + USDT稳定币
-    const tokensData = [
-      { id: "token-trx-default", symbol: "TRX", name: "Tron", decimals: 6, network: ChainType.Tron, tokenType: TokenType.NATIVE, isActive: true, isTradable: true },
-      { id: "token-usdt-tron", symbol: "USDT", name: "Tether USD", decimals: 6, network: ChainType.Tron, tokenType: TokenType.STABLECOIN, isActive: true, isTradable: true },
-      { id: "token-eth-default", symbol: "ETH", name: "Ethereum", decimals: 18, network: ChainType.Ethereum, tokenType: TokenType.NATIVE, isActive: true, isTradable: true },
-      { id: "token-usdt-eth", symbol: "USDT", name: "Tether USD", decimals: 6, network: ChainType.Ethereum, tokenType: TokenType.STABLECOIN, isActive: true, isTradable: true },
-      { id: "token-btc-default", symbol: "BTC", name: "Bitcoin", decimals: 8, network: ChainType.Bitcoin, tokenType: TokenType.NATIVE, isActive: true, isTradable: true },
-      { id: "token-usdt-btc", symbol: "USDT", name: "Tether USD", decimals: 8, network: ChainType.Bitcoin, tokenType: TokenType.STABLECOIN, isActive: true, isTradable: true },
+    // ─── Assets 种子数据 ───
+    // 每条链的原生币 + USDT代币（Bitcoin不支持token）
+    const assetsData = [
+      { id: "asset-trx-tron",      symbol: "TRX",  name: "Tron",       decimals: 6,  chain: ChainType.Tron,     type: TokenType.NATIVE,     tokenId: null,                                              isDefault: true, isActive: true, isTradable: true },
+      { id: "asset-usdt-tron",     symbol: "USDT", name: "Tether USD", decimals: 6,  chain: ChainType.Tron,     type: TokenType.TOKEN,      tokenId: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",              isDefault: true, isActive: true, isTradable: true },
+      { id: "asset-eth-ethereum",  symbol: "ETH",  name: "Ethereum",   decimals: 18, chain: ChainType.Ethereum, type: TokenType.NATIVE,     tokenId: null,                                              isDefault: true, isActive: true, isTradable: true },
+      { id: "asset-usdt-ethereum", symbol: "USDT", name: "Tether USD", decimals: 6,  chain: ChainType.Ethereum, type: TokenType.TOKEN,      tokenId: "0xdAC17F958D2ee523a2206206994597C13D831ec7",      isDefault: true, isActive: true, isTradable: true },
+      { id: "asset-btc-bitcoin",   symbol: "BTC",  name: "Bitcoin",    decimals: 8,  chain: ChainType.Bitcoin,  type: TokenType.NATIVE,     tokenId: null,                                              isDefault: true, isActive: true, isTradable: true },
     ];
-    for (const token of tokensData) {
-      // symbol 不再全局唯一，使用 (symbol, network) 复合查询
-      const existing = await prisma.token.findFirst({ where: { symbol: token.symbol, network: token.network } });
+    for (const asset of assetsData) {
+      const existing = await prisma.asset.findFirst({ where: { symbol: asset.symbol, chain: asset.chain } });
       if (!existing) {
-        await prisma.token.create({ data: token });
-        logger.info("SEED", `已创建 token: ${token.symbol} (${token.network}, ${token.tokenType})`);
+        await prisma.asset.create({ data: asset });
+        logger.info("SEED", `已创建 asset: ${asset.symbol} (${asset.chain}, ${asset.type})`);
       } else {
-        // 更新 tokenType（兼容旧数据）
-        await prisma.token.update({
+        await prisma.asset.update({
           where: { id: existing.id },
           data: {
-            tokenType: token.tokenType,
+            type: asset.type,
+            tokenId: asset.tokenId,
+            isDefault: asset.isDefault,
+            isTradable: asset.isTradable,
           },
         });
       }
@@ -119,69 +119,77 @@ export async function runSeed(): Promise<void> {
 /**
  * Idempotent schema migration for existing databases.
  *
- * Handles adding new columns and changing indexes that were introduced
- * after the initial init.sql was applied. These statements are safe to
- * run on every startup — they use IF NOT EXISTS / DO $$ EXCEPTION patterns.
+ * Handles the Token→Asset architecture migration:
+ * - Create assets table (replaces tokens)
+ * - Create account_assets table (replaces wallet_tokens)
+ * - Simplify accounts table (remove token_symbol)
+ * - Migrate data from old tables to new tables
  */
 async function migrateSchema(): Promise<void> {
   const migrationStatements = [
-    // 1. Add token_type column to tokens table
-    `DO $$ BEGIN
-      ALTER TABLE "tokens" ADD COLUMN "token_type" VARCHAR(16) NOT NULL DEFAULT 'NATIVE';
-    EXCEPTION WHEN duplicate_column THEN null;
-    END $$;`,
+    // 1. Create assets table if not exists
+    `CREATE TABLE IF NOT EXISTS "assets" (
+      "id"          TEXT        NOT NULL,
+      "symbol"      VARCHAR(16) NOT NULL,
+      "name"        VARCHAR(64) NOT NULL,
+      "decimals"    INT         NOT NULL DEFAULT 6,
+      "chain"       VARCHAR(64) NOT NULL,
+      "type"        VARCHAR(16) NOT NULL DEFAULT 'NATIVE',
+      "token_id"    VARCHAR(66),
+      "icon_url"    VARCHAR(512),
+      "is_default"  BOOLEAN     NOT NULL DEFAULT true,
+      "is_active"   BOOLEAN     NOT NULL DEFAULT true,
+      "is_tradable" BOOLEAN     NOT NULL DEFAULT true,
+      "created_at"  TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at"  TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "assets_pkey" PRIMARY KEY ("id")
+    );`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "assets_symbol_chain_key" ON "assets"("symbol", "chain");`,
 
-    // 2. Add token_symbol column to accounts table
-    `DO $$ BEGIN
-      ALTER TABLE "accounts" ADD COLUMN "token_symbol" VARCHAR(16) NOT NULL DEFAULT '';
-    EXCEPTION WHEN duplicate_column THEN null;
-    END $$;`,
+    // 2. Create account_assets table if not exists
+    `CREATE TABLE IF NOT EXISTS "account_assets" (
+      "id"         TEXT        NOT NULL,
+      "account_id" VARCHAR(36) NOT NULL,
+      "asset_id"   VARCHAR(36) NOT NULL,
+      "balance"    DECIMAL(30,8) NOT NULL DEFAULT 0,
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "account_assets_pkey" PRIMARY KEY ("id")
+    );`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "account_assets_account_id_asset_id_key" ON "account_assets"("account_id", "asset_id");`,
 
-    // 3. Backfill token_symbol for existing accounts based on network
-    `UPDATE "accounts" SET "token_symbol" = CASE
-      WHEN "network" = 'Tron' THEN 'TRX'
-      WHEN "network" = 'Ethereum' THEN 'ETH'
-      WHEN "network" = 'Bitcoin' THEN 'BTC'
-      ELSE 'UNKNOWN'
-    END WHERE "token_symbol" = '' OR "token_symbol" IS NULL;`,
-
-    // 4. Add index column to accounts table
+    // 3. Add index column to accounts table if not exists
     `DO $$ BEGIN
       ALTER TABLE "accounts" ADD COLUMN "index" INT NOT NULL DEFAULT 0;
     EXCEPTION WHEN duplicate_column THEN null;
     END $$;`,
 
-    // 5. Drop old unique index (wallet_id, network, token_symbol) if exists
-    `DROP INDEX IF EXISTS "accounts_wallet_id_network_token_symbol_key";`,
+    // 4. Drop old account indexes and create new one (without token_symbol)
+    `DROP INDEX IF EXISTS "accounts_wallet_id_network_token_symbol_index_key";`,
+    `DROP INDEX IF EXISTS "accounts_wallet_id_network_key";`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "accounts_wallet_id_network_index_key" ON "accounts"("wallet_id", "network", "index");`,
 
-    // 6. Create new unique index (wallet_id, network, token_symbol, index)
-    `CREATE UNIQUE INDEX IF NOT EXISTS "accounts_wallet_id_network_token_symbol_index_key"
-      ON "accounts"("wallet_id", "network", "token_symbol", "index");`,
+    // 5. Seed assets data from tokens table (if assets table is empty but tokens exists)
+    `INSERT INTO "assets" ("id", "symbol", "name", "decimals", "chain", "type", "token_id", "is_default", "is_active", "is_tradable", "created_at", "updated_at")
+     SELECT
+       CONCAT('asset-', LOWER(t."symbol"), '-', LOWER(t."network")),
+       t."symbol", t."name", t."decimals", t."network",
+       CASE WHEN t."token_type" = 'STABLECOIN' THEN 'TOKEN' ELSE t."token_type" END,
+       t."contract_address",
+       true, t."is_active", t."is_tradable", NOW(), NOW()
+     FROM "tokens" t
+     WHERE NOT EXISTS (SELECT 1 FROM "assets" a WHERE a."symbol" = t."symbol" AND a."chain" = t."network")
+     ON CONFLICT DO NOTHING;`,
 
-    // 7. Update token_type for known tokens
-    `UPDATE "tokens" SET "token_type" = 'STABLECOIN' WHERE "symbol" = 'USDT' AND ("token_type" IS NULL OR "token_type" = 'NATIVE');`,
-    `UPDATE "tokens" SET "token_type" = 'NATIVE' WHERE "symbol" IN ('TRX', 'ETH', 'BTC') AND ("token_type" IS NULL OR "token_type" != 'NATIVE');`,
-
-    // 8. Migrate unique constraint: symbol -> (symbol, network)
-    `DROP INDEX IF EXISTS "tokens_symbol_key";`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS "tokens_symbol_network_key" ON "tokens"("symbol", "network");`,
-
-    // 9. Insert USDT tokens for Ethereum and Bitcoin networks
-    `INSERT INTO "tokens" ("id", "symbol", "name", "decimals", "network", "is_active", "is_tradable", "token_type", "created_at", "updated_at")
-     SELECT 'token-usdt-eth', 'USDT', 'Tether USD', 6, 'Ethereum', true, true, 'STABLECOIN', NOW(), NOW()
-     WHERE NOT EXISTS (SELECT 1 FROM "tokens" WHERE "symbol" = 'USDT' AND "network" = 'Ethereum');`,
-    `INSERT INTO "tokens" ("id", "symbol", "name", "decimals", "network", "is_active", "is_tradable", "token_type", "created_at", "updated_at")
-     SELECT 'token-usdt-btc', 'USDT', 'Tether USD', 8, 'Bitcoin', true, true, 'STABLECOIN', NOW(), NOW()
-     WHERE NOT EXISTS (SELECT 1 FROM "tokens" WHERE "symbol" = 'USDT' AND "network" = 'Bitcoin');`,
-    // Rename old USDT token id for consistency
-    `UPDATE "tokens" SET "id" = 'token-usdt-tron' WHERE "id" = 'token-usdt-default' AND "symbol" = 'USDT' AND "network" = 'Tron';`,
+    // 6. Update asset token_id for known contracts
+    `UPDATE "assets" SET "token_id" = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t' WHERE "symbol" = 'USDT' AND "chain" = 'Tron' AND ("token_id" IS NULL OR "token_id" = '');`,
+    `UPDATE "assets" SET "token_id" = '0xdAC17F958D2ee523a2206206994597C13D831ec7' WHERE "symbol" = 'USDT' AND "chain" = 'Ethereum' AND ("token_id" IS NULL OR "token_id" = '');`,
   ];
 
   for (const stmt of migrationStatements) {
     try {
       await prisma.$executeRawUnsafe(stmt);
     } catch (err: any) {
-      // Log but don't fail — migration statements are idempotent
       logger.warn("SEED_MIGRATE", `Migration statement skipped: ${err.message}`);
     }
   }
