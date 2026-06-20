@@ -28,24 +28,27 @@ export async function runSeed(): Promise<void> {
     }
 
     // ─── Tokens 种子数据（含 tokenType）───
+    // 每条链有原生主币 + USDT稳定币
     const tokensData = [
       { id: "token-trx-default", symbol: "TRX", name: "Tron", decimals: 6, network: ChainType.Tron, tokenType: TokenType.NATIVE, isActive: true, isTradable: true },
-      { id: "token-usdt-default", symbol: "USDT", name: "Tether USD", decimals: 6, network: ChainType.Tron, tokenType: TokenType.STABLECOIN, isActive: true, isTradable: true },
+      { id: "token-usdt-tron", symbol: "USDT", name: "Tether USD", decimals: 6, network: ChainType.Tron, tokenType: TokenType.STABLECOIN, isActive: true, isTradable: true },
       { id: "token-eth-default", symbol: "ETH", name: "Ethereum", decimals: 18, network: ChainType.Ethereum, tokenType: TokenType.NATIVE, isActive: true, isTradable: true },
+      { id: "token-usdt-eth", symbol: "USDT", name: "Tether USD", decimals: 6, network: ChainType.Ethereum, tokenType: TokenType.STABLECOIN, isActive: true, isTradable: true },
       { id: "token-btc-default", symbol: "BTC", name: "Bitcoin", decimals: 8, network: ChainType.Bitcoin, tokenType: TokenType.NATIVE, isActive: true, isTradable: true },
+      { id: "token-usdt-btc", symbol: "USDT", name: "Tether USD", decimals: 8, network: ChainType.Bitcoin, tokenType: TokenType.STABLECOIN, isActive: true, isTradable: true },
     ];
     for (const token of tokensData) {
-      const existing = await prisma.token.findUnique({ where: { symbol: token.symbol } });
+      // symbol 不再全局唯一，使用 (symbol, network) 复合查询
+      const existing = await prisma.token.findFirst({ where: { symbol: token.symbol, network: token.network } });
       if (!existing) {
         await prisma.token.create({ data: token });
         logger.info("SEED", `已创建 token: ${token.symbol} (${token.network}, ${token.tokenType})`);
       } else {
-        // 更新 tokenType 和 network（兼容旧数据）
+        // 更新 tokenType（兼容旧数据）
         await prisma.token.update({
-          where: { symbol: token.symbol },
+          where: { id: existing.id },
           data: {
             tokenType: token.tokenType,
-            network: token.network,
           },
         });
       }
@@ -158,6 +161,20 @@ async function migrateSchema(): Promise<void> {
     // 7. Update token_type for known tokens
     `UPDATE "tokens" SET "token_type" = 'STABLECOIN' WHERE "symbol" = 'USDT' AND ("token_type" IS NULL OR "token_type" = 'NATIVE');`,
     `UPDATE "tokens" SET "token_type" = 'NATIVE' WHERE "symbol" IN ('TRX', 'ETH', 'BTC') AND ("token_type" IS NULL OR "token_type" != 'NATIVE');`,
+
+    // 8. Migrate unique constraint: symbol -> (symbol, network)
+    `DROP INDEX IF EXISTS "tokens_symbol_key";`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "tokens_symbol_network_key" ON "tokens"("symbol", "network");`,
+
+    // 9. Insert USDT tokens for Ethereum and Bitcoin networks
+    `INSERT INTO "tokens" ("id", "symbol", "name", "decimals", "network", "is_active", "is_tradable", "token_type", "created_at", "updated_at")
+     SELECT 'token-usdt-eth', 'USDT', 'Tether USD', 6, 'Ethereum', true, true, 'STABLECOIN', NOW(), NOW()
+     WHERE NOT EXISTS (SELECT 1 FROM "tokens" WHERE "symbol" = 'USDT' AND "network" = 'Ethereum');`,
+    `INSERT INTO "tokens" ("id", "symbol", "name", "decimals", "network", "is_active", "is_tradable", "token_type", "created_at", "updated_at")
+     SELECT 'token-usdt-btc', 'USDT', 'Tether USD', 8, 'Bitcoin', true, true, 'STABLECOIN', NOW(), NOW()
+     WHERE NOT EXISTS (SELECT 1 FROM "tokens" WHERE "symbol" = 'USDT' AND "network" = 'Bitcoin');`,
+    // Rename old USDT token id for consistency
+    `UPDATE "tokens" SET "id" = 'token-usdt-tron' WHERE "id" = 'token-usdt-default' AND "symbol" = 'USDT' AND "network" = 'Tron';`,
   ];
 
   for (const stmt of migrationStatements) {

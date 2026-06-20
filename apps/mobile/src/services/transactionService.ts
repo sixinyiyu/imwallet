@@ -17,6 +17,7 @@ export const transactionService = {
     toAddress: string;
     amount: string;
     tokenSymbol: string;
+    network: string;
     memo?: string;
   }): Promise<Transaction> {
     const { data } = await api.post("/transactions/transfer", input);

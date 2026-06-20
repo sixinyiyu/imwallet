@@ -95,7 +95,7 @@ model Chain {
 model Token {
   id              String    @id @default(uuid())
   /// 代币符号，如 USDT、TRX
-  symbol          String    @unique @db.VarChar(16)
+  symbol          String    @db.VarChar(16)
   /// 代币名称，如 Tether USD、Tron
   name            String    @db.VarChar(64)
   /// 精度（小数位数）
@@ -115,6 +115,7 @@ model Token {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
+  @@unique([symbol, network])
   @@map("tokens")
 }
 

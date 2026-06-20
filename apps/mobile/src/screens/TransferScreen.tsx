@@ -253,6 +253,7 @@ export default function TransferScreen() {
         toAddress: toAddress.trim(),
         amount,
         tokenSymbol: selectedToken?.symbol || "USDT",
+        network: selectedToken?.network || "Tron",
         memo: memo.trim() || "",
       });
       setResult({

@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS "tokens" (
     CONSTRAINT "tokens_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "tokens_symbol_key" ON "tokens"("symbol");
+CREATE UNIQUE INDEX IF NOT EXISTS "tokens_symbol_network_key" ON "tokens"("symbol", "network");
 
 -- 钱包表
 CREATE TABLE IF NOT EXISTS "wallets" (
@@ -290,14 +290,16 @@ VALUES
     ('Bitcoin',  'Bitcoin (BTC)',  true, 'm/44''/0''/0''/0')
 ON CONFLICT ("name") DO NOTHING;
 
--- 代币: TRX(Tron主币), USDT(Tron稳定币), ETH(Ethereum主币), BTC(Bitcoin主币)
+-- 代币: 每条链有原生主币 + USDT稳定币
 INSERT INTO "tokens" ("id", "symbol", "name", "decimals", "network", "is_active", "is_tradable", "token_type", "created_at", "updated_at")
 VALUES
-    ('token-usdt-default', 'USDT', 'Tether USD',  6, 'Tron',     true, true, 'STABLECOIN', NOW(), NOW()),
     ('token-trx-default',  'TRX',  'Tron',        6, 'Tron',     true, true, 'NATIVE',     NOW(), NOW()),
+    ('token-usdt-tron',    'USDT', 'Tether USD',  6, 'Tron',     true, true, 'STABLECOIN', NOW(), NOW()),
     ('token-eth-default',  'ETH',  'Ethereum',   18, 'Ethereum', true, true, 'NATIVE',     NOW(), NOW()),
-    ('token-btc-default',  'BTC',  'Bitcoin',     8, 'Bitcoin',  true, true, 'NATIVE',     NOW(), NOW())
-ON CONFLICT ("symbol") DO UPDATE SET "is_tradable" = COALESCE(EXCLUDED."is_tradable", tokens."is_tradable", true), "token_type" = COALESCE(EXCLUDED."token_type", tokens."token_type", 'NATIVE'), "updated_at" = NOW();
+    ('token-usdt-eth',     'USDT', 'Tether USD',  6, 'Ethereum', true, true, 'STABLECOIN', NOW(), NOW()),
+    ('token-btc-default',  'BTC',  'Bitcoin',     8, 'Bitcoin',  true, true, 'NATIVE',     NOW(), NOW()),
+    ('token-usdt-btc',     'USDT', 'Tether USD',  8, 'Bitcoin',  true, true, 'STABLECOIN', NOW(), NOW())
+ON CONFLICT ("symbol", "network") DO UPDATE SET "is_tradable" = COALESCE(EXCLUDED."is_tradable", tokens."is_tradable", true), "token_type" = COALESCE(EXCLUDED."token_type", tokens."token_type", 'NATIVE'), "updated_at" = NOW();
 
 -- 法币汇率
 INSERT INTO "fiat_currencies" ("id", "code", "name", "symbol", "rate", "decimals", "updated_at")

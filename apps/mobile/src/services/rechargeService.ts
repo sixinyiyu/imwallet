@@ -27,6 +27,7 @@ export const rechargeService = {
   async recharge(input: {
     walletId: string;
     tokenSymbol: string;
+    network: string;
     amount: string;
     memo?: string;
   }): Promise<RechargeRecord> {

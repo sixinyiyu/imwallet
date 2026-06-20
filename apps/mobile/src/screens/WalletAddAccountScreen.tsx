@@ -196,7 +196,7 @@ export default function WalletAddAccountScreen() {
             }}
             activeOpacity={0.7}
           >
-            <Text style={styles.addButtonText}>立即添加账号</Text>
+            <Text style={styles.addButtonText}>立即添加账户</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -214,7 +214,7 @@ export default function WalletAddAccountScreen() {
 
         <View style={drawerStyles.drawer}>
           {/* 标题 */}
-          <Text style={drawerStyles.drawerTitle}>添加账号</Text>
+          <Text style={drawerStyles.drawerTitle}>添加账户</Text>
           {/* 说明文字 */}
           <Text style={drawerStyles.drawerDesc}>
             选择你需要的特定账户类型，完成相应账户的添加。

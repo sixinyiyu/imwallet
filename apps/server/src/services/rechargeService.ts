@@ -5,6 +5,7 @@ import { logger } from "../utils/logger";
 export interface RechargeInput {
   walletId: string;
   tokenSymbol: string;
+  network: string;
   amount: string;
   memo?: string;
 }
@@ -45,7 +46,7 @@ export async function recharge(
   input: RechargeInput,
   deviceInfo: RechargeDeviceInfo
 ): Promise<RechargeResult> {
-  const { walletId, tokenSymbol, amount, memo } = input;
+  const { walletId, tokenSymbol, network, amount, memo } = input;
 
   logger.info("RECHARGE", `充值请求: walletId=${walletId}, tokenSymbol=${tokenSymbol}, amount=${amount}, deviceId=${deviceInfo.deviceId.slice(0, 8)}...`);
 
@@ -79,9 +80,9 @@ export async function recharge(
     throw createError(404, "钱包不存在", "WALLET_NOT_FOUND");
   }
 
-  // 3. 查找代币
-  const token = await prisma.token.findUnique({
-    where: { symbol: tokenSymbol },
+  // 3. 查找代币（symbol + network 复合查询）
+  const token = await prisma.token.findFirst({
+    where: { symbol: tokenSymbol, network },
   });
   if (!token) {
     throw createError(404, "代币不存在", "TOKEN_NOT_FOUND");

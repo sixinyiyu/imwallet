@@ -26,6 +26,7 @@ export interface TransferInput {
   toAddress: string;
   amount: string;
   tokenSymbol: string;
+  network: string;
   memo?: string;
 }
 
@@ -75,9 +76,9 @@ export async function transfer(
     throw createError(403, "该钱包不属于当前设备，无法操作");
   }
 
-  // 通过 tokenSymbol 查找代币（获取 tokenId 用于余额操作，获取 network 用于查找链地址）
-  const token = await prisma.token.findUnique({
-    where: { symbol: input.tokenSymbol },
+  // 通过 tokenSymbol + network 查找代币（获取 tokenId 用于余额操作）
+  const token = await prisma.token.findFirst({
+    where: { symbol: input.tokenSymbol, network: input.network },
   });
 
   if (!token) {
@@ -472,8 +473,8 @@ export async function getTransactionDetail(
 
   const contactMap = new Map<string, string>(contacts.map((c: any) => [c.address, c.name]));
 
-  // 查找 tokenName
-  const tokenRecord = await prisma.token.findUnique({
+  // 查找 tokenName（symbol 不再唯一，取任意一条即可）
+  const tokenRecord = await prisma.token.findFirst({
     where: { symbol: tx.tokenSymbol },
     select: { name: true },
   });

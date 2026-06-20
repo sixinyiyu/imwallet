@@ -155,6 +155,7 @@ export default function RechargeScreen() {
       await rechargeService.recharge({
         walletId: selectedWallet.id,
         tokenSymbol: selectedToken.symbol,
+        network: selectedToken.network,
         amount: trimmed,
         memo: memo.trim() || undefined,
       });
