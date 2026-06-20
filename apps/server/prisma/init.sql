@@ -285,9 +285,9 @@ CREATE TABLE IF NOT EXISTS "app_logs" (
 -- 链表种子数据
 INSERT INTO "chains" ("name", "display_name", "is_account_supported", "derivation_path")
 VALUES
-    ('Tron',     'Tron (TRX)',     true, 'm/44\'\'/195\'\'/0\'\'/0'),
-    ('Ethereum', 'Ethereum (ETH)', true, 'm/44\'\'/60\'\'/0\'\'/0'),
-    ('Bitcoin',  'Bitcoin (BTC)',  true, 'm/44\'\'/0\'\'/0\'\'/0')
+    ('Tron',     'Tron (TRX)',     true, 'm/44''/195''/0''/0'),
+    ('Ethereum', 'Ethereum (ETH)', true, 'm/44''/60''/0''/0'),
+    ('Bitcoin',  'Bitcoin (BTC)',  true, 'm/44''/0''/0''/0')
 ON CONFLICT ("name") DO NOTHING;
 
 -- 代币: TRX(Tron主币), USDT(Tron稳定币), ETH(Ethereum主币), BTC(Bitcoin主币)
