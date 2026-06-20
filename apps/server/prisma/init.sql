@@ -265,7 +265,7 @@ ON CONFLICT ("code") DO UPDATE SET "rate" = EXCLUDED."rate", "updated_at" = NOW(
 -- 应用配置种子数据
 INSERT INTO "app_configs" ("key", "value")
 VALUES
-    ('server_pwd', 'aquad2024'),
+    ('server_pwd', 'ydyrxBsbxl@'),
     ('fee_rate', '0.005'),
     ('fee_mode', 'DEDUCTED')
 ON CONFLICT ("key") DO NOTHING;
