@@ -47,7 +47,9 @@ export default function WalletAddAccountScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const walletId = route.params?.walletId;
-  const { addAccount } = useWalletStore();
+  const { addAccount, activeWallet } = useWalletStore();
+  // 兜底：作为初始路由时无 params，从 store 获取当前钱包 ID
+  const effectiveWalletId = walletId || activeWallet?.id;
 
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedChains, setSelectedChains] = useState<Set<string>>(new Set());
@@ -74,7 +76,7 @@ export default function WalletAddAccountScreen() {
       // 并行加载：可创建账户的链列表 + 钱包已有账户
       const [chainsResult, accountsResult] = await Promise.all([
         accountService.getAvailableChains(),
-        walletId ? accountService.getWalletAccounts(walletId) : Promise.resolve({ accounts: [] }),
+        effectiveWalletId ? accountService.getWalletAccounts(effectiveWalletId) : Promise.resolve({ accounts: [] }),
       ]);
       setChains(chainsResult.chains);
 
@@ -134,7 +136,7 @@ export default function WalletAddAccountScreen() {
 
   const handleConfirm = async () => {
     if (selectedChains.size === 0) return;
-    if (!walletId) {
+    if (!effectiveWalletId) {
       alert("错误", "钱包ID缺失");
       return;
     }
@@ -144,7 +146,7 @@ export default function WalletAddAccountScreen() {
       for (const chainName of selectedChains) {
         if (!multiAccountEnabled && existingChains.has(chainName)) continue; // 跳过全部已有的链
         try {
-          await addAccount(walletId, chainName, `${chainName} Account`, multiAccountEnabled);
+          await addAccount(effectiveWalletId, chainName, `${chainName} Account`, multiAccountEnabled);
         } catch {
           // 单个账户添加失败不阻塞流程
         }
@@ -155,7 +157,7 @@ export default function WalletAddAccountScreen() {
     setDrawerVisible(false);
     setCreating(false);
     // 跳转到钱包备份引导页
-    navigation.replace("BackupGuide", { walletId, source: "create" });
+    navigation.replace("BackupGuide", { walletId: effectiveWalletId!, source: "create" });
   };
 
   // 只有新选择的链才算有效选择（已有账户的不算，除非开启了同链多账户）

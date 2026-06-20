@@ -39,7 +39,7 @@ const CENTERED_HEADER = {
 };
 
 export function RootStack() {
-  const { hasWallets, hasFetched, loadLocalState } = useWalletStore();
+  const { hasWallets, hasFetched, accountCount, loadLocalState } = useWalletStore();
 
   useEffect(() => {
     loadLocalState();
@@ -53,7 +53,7 @@ export function RootStack() {
   return (
     <Stack.Navigator
       screenOptions={{ headerShown: false }}
-      initialRouteName={hasWallets ? "Main" : "Start"}
+      initialRouteName={!hasWallets ? "Start" : accountCount === 0 ? "WalletAddAccount" : "Main"}
     >
       {/* Start screen - always available */}
       <Stack.Screen name="Start" component={StartScreen} />
