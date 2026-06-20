@@ -56,9 +56,23 @@ export default function TransferScreen() {
   const alert = useAlert();
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
-  const { activeWallet, tokens } = useWalletStore();
+  const { activeWallet, tokens, accounts } = useWalletStore();
   const [toAddress, setToAddress] = useState("");
   const [selectedToken, setSelectedToken] = useState<TokenBalance | null>(null);
+
+  // 根据路由参数初始化选中的代币
+  useEffect(() => {
+    if (tokens.length === 0) return;
+    const paramSymbol = route.params?.tokenSymbol;
+    const paramTokenId = route.params?.tokenId;
+    if (paramTokenId) {
+      const found = tokens.find((t) => t.tokenId === paramTokenId);
+      if (found) setSelectedToken(found);
+    } else if (paramSymbol) {
+      const found = tokens.find((t) => t.symbol === paramSymbol);
+      if (found) setSelectedToken(found);
+    }
+  }, [tokens, route.params?.tokenSymbol, route.params?.tokenId]);
 
   // 根据链上地址自动推断网络类型并切换代币
   const detectedNetwork = useMemo(() => detectNetwork(toAddress), [toAddress]);
@@ -77,6 +91,12 @@ export default function TransferScreen() {
   const selectedBalance = selectedToken ? selectedToken.balance : "0";
   const balance = parseFloat(selectedBalance) || 0;
   const tokenSymbol = selectedToken?.symbol || "USDT";
+
+  // 根据选中的代币匹配付款账户
+  const fromAccount = useMemo(() => {
+    if (!selectedToken) return null;
+    return accounts.find((a) => a.tokenSymbol === selectedToken.symbol && a.network === selectedToken.network) || null;
+  }, [accounts, selectedToken]);
 
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
@@ -301,6 +321,7 @@ export default function TransferScreen() {
         <View style={z.resultCard}>
           {result.success ? (
             <>
+              <ResultRow label="付款地址" value={fromAccount ? `${fromAccount.address.slice(0, 8)}...${fromAccount.address.slice(-6)}` : "—"} />
               <ResultRow label="收款地址" value={`${toAddress.slice(0, 8)}...${toAddress.slice(-6)}`} />
               <ResultRow label="实际到账" value={`${resultReceived.toFixed(6)} ${tokenSymbol}`} />
               <ResultRow label="手续费" value={`${resultFee.toFixed(6)} ${tokenSymbol}`} />
@@ -345,6 +366,27 @@ export default function TransferScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView contentContainerStyle={z.scroll} keyboardShouldPersistTaps="handled">
+
+        {/* ── 付款账号 ── */}
+        <View style={z.sectionLabel}>
+          <Text style={z.sectionTitle}>付款账号</Text>
+        </View>
+        <View style={z.fromAccountCard}>
+          {fromAccount ? (
+            <>
+              <View style={z.fromAccountIconWrap}>
+                {fromAccount.network === "Tron" && <TronIcon size={20} />}
+                {fromAccount.network === "Ethereum" && <EthIcon size={20} />}
+                {fromAccount.network === "Bitcoin" && <BtcIcon size={20} />}
+              </View>
+              <Text style={z.fromAccountAddress} numberOfLines={1} ellipsizeMode="middle">
+                {fromAccount.address}
+              </Text>
+            </>
+          ) : (
+            <Text style={z.fromAccountEmpty}>未选择代币</Text>
+          )}
+        </View>
 
         {/* ── 收款地址 ── */}
         <View style={z.sectionLabel}>
@@ -638,6 +680,35 @@ const z = StyleSheet.create({
   scroll: { padding: 16, paddingBottom: 40 },
   sectionLabel: { marginTop: 16, marginBottom: 8 },
   sectionTitle: { fontSize: 15, fontWeight: "600", color: "#374151" },
+  // From account
+  fromAccountCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  fromAccountIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  fromAccountAddress: {
+    flex: 1,
+    fontSize: 14,
+    color: "#1F2937",
+    fontFamily: "monospace",
+  },
+  fromAccountEmpty: {
+    fontSize: 14,
+    color: "#9CA3AF",
+  },
   // Address
   addressRow: { flexDirection: "row", alignItems: "center" },
   addressInputWrap: {

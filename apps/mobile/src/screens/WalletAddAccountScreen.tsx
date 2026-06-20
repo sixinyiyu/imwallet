@@ -16,9 +16,10 @@ import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { accountService } from "../services/accountService";
 import { LinearGradient } from "expo-linear-gradient";
-import { TronIcon, USDTIcon } from "../components/icons";
-import type { TokenInfo } from "../types";
+import { TronIcon, EthIcon, BtcIcon, USDTIcon } from "../components/icons";
+import type { ChainInfo } from "../types";
 import { useAlert } from "../hooks/useAlert";
+import { configService } from "../services/configService";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "WalletAddAccount">;
 type RouteType = RouteProp<RootStackParamList, "WalletAddAccount">;
@@ -26,9 +27,18 @@ type RouteType = RouteProp<RootStackParamList, "WalletAddAccount">;
 const accountImage = require("../../assets/account.png");
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 
-/** 预置代币图标映射 */
+/** 预置链图标映射 */
+const CHAIN_ICONS: Record<string, React.FC<{ size?: number }>> = {
+  Tron: TronIcon,
+  Ethereum: EthIcon,
+  Bitcoin: BtcIcon,
+};
+
+/** 代币图标映射 */
 const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
   TRX: TronIcon,
+  ETH: EthIcon,
+  BTC: BtcIcon,
   USDT: USDTIcon,
 };
 
@@ -40,74 +50,101 @@ export default function WalletAddAccountScreen() {
   const { addAccount } = useWalletStore();
 
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [selectedNetworks, setSelectedNetworks] = useState<Set<string>>(new Set());
+  const [selectedChains, setSelectedChains] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
-  const [networks, setNetworks] = useState<TokenInfo[]>([]);
-  const [networksLoaded, setNetworksLoaded] = useState(false);
-  /** 已有账户的网络集合（锁定选中，不可操作） */
-  const [existingNetworks, setExistingNetworks] = useState<Set<string>>(new Set());
+  const [chains, setChains] = useState<ChainInfo[]>([]);
+  const [chainsLoaded, setChainsLoaded] = useState(false);
+  /** 已有账户的链集合（该链下所有代币账户都已存在） */
+  const [existingChains, setExistingChains] = useState<Set<string>>(new Set());
+  /** 已有部分账户的链集合（该链下部分代币账户已存在） */
+  const [partialChains, setPartialChains] = useState<Set<string>>(new Set());
+  /** 同链多账户开关（本地配置，默认关闭） */
+  const [multiAccountEnabled, setMultiAccountEnabled] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
+    // 读取同链多账户本地配置
+    const multiEnabled = await configService.getMultiAccountEnabled();
+    setMultiAccountEnabled(multiEnabled);
+
     try {
-      // 并行加载：可创建账户的代币列表 + 钱包已有账户
-      const [networksResult, accountsResult] = await Promise.all([
-        accountService.getAvailableNetworks(),
+      // 并行加载：可创建账户的链列表 + 钱包已有账户
+      const [chainsResult, accountsResult] = await Promise.all([
+        accountService.getAvailableChains(),
         walletId ? accountService.getWalletAccounts(walletId) : Promise.resolve({ accounts: [] }),
       ]);
+      setChains(chainsResult.chains);
 
-      // 从 networks 中提取所有代币（用于展示）
-      const allTokens: TokenInfo[] = [];
-      for (const net of networksResult.networks) {
-        allTokens.push(...net.tokens);
-      }
-      setNetworks(allTokens);
-
-      // 记录已有账户的网络
-      const existing = new Set<string>();
+      // 按网络分组已有账户
+      const accountsByNetwork = new Map<string, Set<string>>();
       for (const acc of accountsResult.accounts) {
-        existing.add(acc.network);
+        const set = accountsByNetwork.get(acc.network) || new Set<string>();
+        set.add(acc.tokenSymbol || "");
+        accountsByNetwork.set(acc.network, set);
       }
-      setExistingNetworks(existing);
+
+      // 判断每条链的状态：全部已有 / 部分已有
+      const fullSet = new Set<string>();
+      const partialSet = new Set<string>();
+      for (const chain of chainsResult.chains) {
+        const existingTokens = accountsByNetwork.get(chain.name);
+        if (!existingTokens || chain.tokens.length === 0) continue;
+        const allTokensExist = chain.tokens.every((t) => existingTokens.has(t.symbol));
+        if (allTokensExist) {
+          fullSet.add(chain.name);
+        } else {
+          partialSet.add(chain.name);
+        }
+      }
+      setExistingChains(fullSet);
+      setPartialChains(partialSet);
     } catch {
-      // API 失败，使用预置 TRX
-      setNetworks([
-        { id: "default-trx", symbol: "TRX", name: "Tron", decimals: 6, network: "Tron", isActive: true, isAccountToken: true },
+      // API 失败，使用预置链
+      setChains([
+        {
+          id: 1, name: "Tron", displayName: "Tron (TRX)", isAccountSupported: true,
+          derivationPath: "m/44'/195'/0'/0",
+          tokens: [
+            { symbol: "TRX", name: "Tron", tokenType: "NATIVE", decimals: 6 },
+            { symbol: "USDT", name: "Tether USD", tokenType: "STABLECOIN", decimals: 6 },
+          ],
+        },
       ]);
     }
-    setNetworksLoaded(true);
+    setChainsLoaded(true);
   };
 
-  const toggleNetwork = (network: string) => {
-    // 已有账户的网络不可操作
-    if (existingNetworks.has(network)) return;
+  const toggleChain = (chainName: string) => {
+    // 同链多账户关闭时，全部已有的链不可操作
+    if (!multiAccountEnabled && existingChains.has(chainName)) return;
 
-    setSelectedNetworks((prev) => {
+    setSelectedChains((prev) => {
       const next = new Set(prev);
-      if (next.has(network)) {
-        next.delete(network);
+      if (next.has(chainName)) {
+        next.delete(chainName);
       } else {
-        next.add(network);
+        next.add(chainName);
       }
       return next;
     });
   };
 
   const handleConfirm = async () => {
-    if (selectedNetworks.size === 0) return;
+    if (selectedChains.size === 0) return;
     if (!walletId) {
       alert("错误", "钱包ID缺失");
       return;
     }
     setCreating(true);
     try {
-      // 逐个添加选中的网络账户，单个失败不阻塞后续
-      for (const network of selectedNetworks) {
+      // 逐个添加选中的链账户，单个失败不阻塞后续
+      for (const chainName of selectedChains) {
+        if (!multiAccountEnabled && existingChains.has(chainName)) continue; // 跳过全部已有的链
         try {
-          await addAccount(walletId, network, `${network} Account`);
+          await addAccount(walletId, chainName, `${chainName} Account`, multiAccountEnabled);
         } catch {
           // 单个账户添加失败不阻塞流程
         }
@@ -121,8 +158,10 @@ export default function WalletAddAccountScreen() {
     navigation.replace("BackupGuide", { walletId, source: "create" });
   };
 
-  // 只有新选择的网络才算有效选择（已有账户的不算）
-  const hasNewSelection = selectedNetworks.size > 0;
+  // 只有新选择的链才算有效选择（已有账户的不算，除非开启了同链多账户）
+  const hasNewSelection = multiAccountEnabled
+    ? selectedChains.size > 0
+    : [...selectedChains].some((c) => !existingChains.has(c));
 
   return (
     <View style={styles.container}>
@@ -150,7 +189,7 @@ export default function WalletAddAccountScreen() {
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => {
-              setSelectedNetworks(new Set());
+              setSelectedChains(new Set());
               setDrawerVisible(true);
             }}
             activeOpacity={0.7}
@@ -176,39 +215,52 @@ export default function WalletAddAccountScreen() {
           <Text style={drawerStyles.drawerTitle}>添加账号</Text>
           {/* 说明文字 */}
           <Text style={drawerStyles.drawerDesc}>
-            选择你需要的特定账户类型，完成响应账户的添加。
+            选择你需要的特定账户类型，完成相应账户的添加。
           </Text>
 
-          {/* 代币卡片列表 - 多选 */}
-          {!networksLoaded ? (
+          {/* 链卡片列表 - 多选 */}
+          {!chainsLoaded ? (
             <ActivityIndicator color="#287220" size="large" style={{ marginTop: 20 }} />
           ) : (
-          <View style={drawerStyles.tokenList}>
-            {networks.map((token) => {
-              const IconComp = TOKEN_ICONS[token.symbol] ?? TronIcon;
-              const isSelected = selectedNetworks.has(token.network);
-              const isExisting = existingNetworks.has(token.network);
-              const isLocked = isExisting; // 已有账户的网络锁定选中
+          <View style={drawerStyles.chainList}>
+            {chains.map((chain) => {
+              const isSelected = selectedChains.has(chain.name);
+              const isLocked = !multiAccountEnabled && existingChains.has(chain.name);
+              const isPartial = !multiAccountEnabled && partialChains.has(chain.name);
+              const IconComp = CHAIN_ICONS[chain.name];
+
               return (
                 <TouchableOpacity
-                  key={token.id}
+                  key={chain.name}
                   style={[
-                    drawerStyles.tokenCard,
-                    (isSelected || isLocked) && drawerStyles.tokenCardSelected,
-                    isLocked && drawerStyles.tokenCardLocked,
+                    drawerStyles.chainCard,
+                    (isSelected || isLocked) && drawerStyles.chainCardSelected,
+                    isLocked && drawerStyles.chainCardLocked,
                   ]}
-                  onPress={() => toggleNetwork(token.network)}
+                  onPress={() => toggleChain(chain.name)}
                   activeOpacity={0.7}
                   disabled={isLocked}
                 >
-                  <View style={drawerStyles.tokenIconWrap}>
-                    <IconComp size={36} />
+                  <View style={drawerStyles.chainIconWrap}>
+                    {IconComp ? <IconComp size={36} /> : <Text style={drawerStyles.chainEmoji}>🔗</Text>}
                   </View>
-                  <View style={drawerStyles.tokenInfo}>
-                    <Text style={drawerStyles.tokenName}>{token.name}</Text>
-                    <Text style={drawerStyles.tokenSymbol}>
-                      {token.symbol} · {token.network}
-                    </Text>
+                  <View style={drawerStyles.chainInfo}>
+                    <Text style={drawerStyles.chainName}>{chain.displayName.replace(/\s*\(.*?\)/g, "")}</Text>
+                    {/* 代币列表 */}
+                    <View style={drawerStyles.tokenBadges}>
+                      {chain.tokens.map((token) => {
+                        const TokenIcon = TOKEN_ICONS[token.symbol];
+                        return (
+                          <View key={token.symbol} style={drawerStyles.tokenBadge}>
+                            {TokenIcon ? <TokenIcon size={14} /> : null}
+                            <Text style={drawerStyles.tokenBadgeText}>{token.symbol}</Text>
+                            <Text style={drawerStyles.tokenTypeLabel}>
+                              {token.tokenType === "NATIVE" ? "主币" : "稳定币"}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
                   </View>
                   {/* 多选 checkbox */}
                   <View
@@ -336,10 +388,10 @@ const drawerStyles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 20,
   },
-  tokenList: {
+  chainList: {
     gap: 12,
   },
-  tokenCard: {
+  chainCard: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F9FAFB",
@@ -348,16 +400,16 @@ const drawerStyles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "transparent",
   },
-  tokenCardSelected: {
+  chainCardSelected: {
     borderColor: "#287220",
     backgroundColor: "#E8F9B0",
   },
-  tokenCardLocked: {
+  chainCardLocked: {
     borderColor: "#D1D5DB",
     backgroundColor: "#F3F4F6",
     opacity: 0.7,
   },
-  tokenIconWrap: {
+  chainIconWrap: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -365,19 +417,39 @@ const drawerStyles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFFFFF",
   },
-  tokenInfo: {
+  chainEmoji: { fontSize: 20 },
+  chainInfo: {
     flex: 1,
     marginLeft: 12,
   },
-  tokenName: {
+  chainName: {
     fontSize: 16,
     fontWeight: "600",
     color: "#1F2937",
   },
-  tokenSymbol: {
+  tokenBadges: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 8,
+  },
+  tokenBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#F0F1F3",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  tokenBadgeText: {
     fontSize: 12,
+    fontWeight: "500",
+    color: "#4B5563",
+  },
+  tokenTypeLabel: {
+    fontSize: 10,
     color: "#9CA3AF",
-    marginTop: 2,
   },
   checkboxOuter: {
     width: 22,

@@ -18,6 +18,7 @@ const createAccountSchema = z.object({
   network: z.string().min(1, "Network is required"),
   name: z.string().max(64, "Name too long").optional(),
   mnemonic: z.string().optional(),
+  allowMultiAccount: z.boolean().optional(),
 });
 
 /**
@@ -39,7 +40,9 @@ async function checkWalletOwnership(walletId: string, deviceId: string): Promise
 }
 
 /**
- * POST /wallets/:walletId/accounts — Create account under a wallet for a network
+ * POST /wallets/:walletId/accounts — Create accounts under a wallet for a network
+ * Creates one account per token on the specified network (e.g., Tron TRX + Tron USDT).
+ * Returns an array of created accounts.
  */
 router.post(
   "/wallets/:walletId/accounts",
@@ -54,13 +57,14 @@ router.post(
       return;
     }
 
-    const account = await accountService.createAccount(
+    const accounts = await accountService.createAccount(
       walletId,
       req.body.network,
       req.body.name,
-      req.body.mnemonic
+      req.body.mnemonic,
+      req.body.allowMultiAccount
     );
-    res.status(201).json(account);
+    res.status(201).json({ accounts });
   })
 );
 
@@ -146,15 +150,11 @@ router.get(
 );
 
 /**
- * GET /networks/available — Get available networks for account creation
- * Only returns tokens where isAccountToken=true, grouped by network
+ * GET /chains/available — 获取支持创建账户的链列表
  */
-router.get(
-  "/networks/available",
-  asyncHandler(async (_req: Request, res: Response) => {
-    const result = await accountService.getAvailableNetworks();
-    res.json(result);
-  })
-);
+router.get("/chains/available", asyncHandler(async (_req: Request, res: Response) => {
+  const chains = await accountService.getAvailableChains();
+  res.json({ chains });
+}));
 
 export default router;

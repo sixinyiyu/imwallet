@@ -67,8 +67,11 @@ export default function WalletScreen() {
     });
   };
 
-  const handleTransfer = () => {
-    navigation.navigate("Transfer", {});
+  const handleTransfer = (token: TokenBalance) => {
+    navigation.navigate("Transfer", {
+      tokenSymbol: token.symbol,
+      tokenId: token.tokenId,
+    });
   };
 
   const closeWalletMenu = () => setWalletMenuOpen(false);

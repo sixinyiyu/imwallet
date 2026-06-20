@@ -7,6 +7,16 @@ import { logger } from "../utils/logger";
 import { decryptPassword as rsaDecryptPassword } from "../services/rsaService";
 import { deriveAddressFromMnemonic } from "../services/derivationService";
 
+/** Generate a random Tron-style address (T + 33 chars) */
+function generateRandomTronAddress(): string {
+  const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let address = "T";
+  for (let i = 0; i < 33; i++) {
+    address += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return address;
+}
+
 /**
  * Generate a wallet identifier: aqud + 32 random Base62 characters
  */
@@ -247,19 +257,60 @@ export async function createOrImportWallet(
     },
   });
 
-  // Create WalletToken entries for all active tokens (balance=0)
-  const activeTokens = await prisma.token.findMany({
-    where: { isActive: true },
+  // 为所有支持创建账户的链派生 index=0 的 Account，并为该链下所有代币创建独立账户
+  const supportedChains = await prisma.chain.findMany({
+    where: { isAccountSupported: true },
   });
 
-  if (activeTokens.length > 0) {
-    await prisma.walletToken.createMany({
-      data: activeTokens.map((token: any) => ({
-        walletId: wallet.id,
-        tokenId: token.id,
-        balance: 0,
-      })),
+  for (const chain of supportedChains) {
+    // 查找该链下所有启用的代币
+    const chainTokens = await prisma.token.findMany({
+      where: { isActive: true, network: chain.name },
     });
+
+    if (chainTokens.length === 0) {
+      logger.info("WALLET", `链 ${chain.name} 无可用代币，跳过账户创建`);
+      continue;
+    }
+
+    // 派生链地址（同一链上所有代币共享同一地址）
+    let chainAddress: string;
+    if (mnemonic) {
+      chainAddress = await deriveAddressFromMnemonic(mnemonic, chain.name, 0);
+    } else {
+      // 无助记词时使用随机地址
+      if (chain.name === "Tron") {
+        chainAddress = generateRandomTronAddress();
+      } else {
+        chainAddress = "0x" + uuid().replace(/-/g, "").slice(0, 40).toUpperCase();
+      }
+    }
+
+    // 为该链下每个代币创建独立的 Account
+    for (const token of chainTokens) {
+      await prisma.account.create({
+        data: {
+          walletId: wallet.id,
+          network: chain.name,
+          tokenSymbol: token.symbol,
+          name: `${chain.displayName} ${token.symbol}`,
+          address: chainAddress,
+        },
+      });
+
+      logger.info("WALLET", `自动派生账户: chain=${chain.name}, token=${token.symbol}, address=${chainAddress.slice(0, 10)}...`);
+    }
+
+    // 为该链下所有代币创建 WalletToken
+    if (chainTokens.length > 0) {
+      await prisma.walletToken.createMany({
+        data: chainTokens.map((token: any) => ({
+          walletId: wallet.id,
+          tokenId: token.id,
+          balance: 0,
+        })),
+      });
+    }
   }
 
   logger.info("WALLET", `${source === "IMPORT" ? "导入" : "创建"}钱包成功: walletId=${wallet.id}, identifier=${identifier}, address=${address}`);

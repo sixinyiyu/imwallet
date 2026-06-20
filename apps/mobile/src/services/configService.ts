@@ -12,6 +12,7 @@ export interface ConfigItem {
 }
 
 const SERVICE_CONFIG_ENABLED_KEY = "aquad_service_config_enabled";
+const MULTI_ACCOUNT_ENABLED_KEY = "aquad_multi_account_enabled";
 
 export const configService = {
   /**
@@ -63,6 +64,25 @@ export const configService = {
   async setServiceConfigEnabled(enabled: boolean): Promise<void> {
     try {
       await SecureStore.setItemAsync(SERVICE_CONFIG_ENABLED_KEY, enabled ? "true" : "false");
+    } catch {
+      // silent
+    }
+  },
+
+  /** 读取同链多账户开关状态（默认关闭） */
+  async getMultiAccountEnabled(): Promise<boolean> {
+    try {
+      const val = await SecureStore.getItemAsync(MULTI_ACCOUNT_ENABLED_KEY);
+      return val === "true";
+    } catch {
+      return false;
+    }
+  },
+
+  /** 设置同链多账户开关状态 */
+  async setMultiAccountEnabled(enabled: boolean): Promise<void> {
+    try {
+      await SecureStore.setItemAsync(MULTI_ACCOUNT_ENABLED_KEY, enabled ? "true" : "false");
     } catch {
       // silent
     }

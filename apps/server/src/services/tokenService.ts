@@ -16,7 +16,7 @@ export interface TokenBalance {
 }
 
 export async function getAllTokens(): Promise<
-  { id: string; symbol: string; name: string; decimals: number; network: string; contractAddress?: string; iconUrl?: string; isActive: boolean }[]
+  { id: string; symbol: string; name: string; decimals: number; network: string; contractAddress?: string; iconUrl?: string; isActive: boolean; isTradable: boolean }[]
 > {
   const tokens = await prisma.token.findMany({
     where: { isActive: true },
@@ -32,7 +32,33 @@ export async function getAllTokens(): Promise<
     contractAddress: t.contractAddress || undefined,
     iconUrl: t.iconUrl || undefined,
     isActive: t.isActive,
+    isTradable: t.isTradable,
+    tokenType: t.tokenType || "NATIVE",
   }));
+}
+
+/** 更新代币的交易开关状态 */
+export async function updateTokenTradable(
+  tokenId: string,
+  isTradable: boolean
+): Promise<{ id: string; symbol: string; isTradable: boolean }> {
+  const token = await prisma.token.findUnique({
+    where: { id: tokenId },
+  });
+  if (!token) {
+    throw createError(404, "代币不存在", "TOKEN_NOT_FOUND");
+  }
+
+  const updated = await prisma.token.update({
+    where: { id: tokenId },
+    data: { isTradable },
+  });
+
+  return {
+    id: updated.id,
+    symbol: updated.symbol,
+    isTradable: updated.isTradable,
+  };
 }
 
 export async function getTokenBalances(

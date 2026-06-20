@@ -50,7 +50,7 @@ interface WalletState {
   backupWallet: (walletId: string) => Promise<void>;
   /** Check if a specific wallet has been backed up */
   isWalletBackedUp: (walletId: string) => boolean;
-  addAccount: (walletId: string, tokenId: string, name?: string) => Promise<void>;
+  addAccount: (walletId: string, network: string, name?: string, allowMultiAccount?: boolean) => Promise<void>;
   deleteAccount: (accountId: string) => Promise<void>;
   fetchBalance: (walletId: string) => Promise<void>;
 }
@@ -318,8 +318,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     set({ backedUpWallets: backedUpSet });
   },
 
-  /** Add account to wallet */
-  addAccount: async (walletId: string, network: string, name?: string) => {
+  /** Add account to wallet — creates accounts for all tokens on the selected network */
+  addAccount: async (walletId: string, network: string, name?: string, allowMultiAccount?: boolean) => {
     try {
       // Read mnemonic from SecureStore for deterministic derivation
       let mnemonic: string | undefined;
@@ -329,7 +329,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       } catch {
         // mnemonic may not be available for CREATE wallets
       }
-      await accountService.createAccount(walletId, network, name, mnemonic);
+      await accountService.createAccount(walletId, network, name, mnemonic, allowMultiAccount);
       await get().fetchAccounts(walletId);
     } catch (err: any) {
       throw err;

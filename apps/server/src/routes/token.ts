@@ -53,4 +53,19 @@ router.get("/:walletId/list", asyncHandler(async (req: Request, res: Response) =
   res.json({ tokens });
 }));
 
+/**
+ * PUT /tokens/:id/tradable — 切换代币交易开关
+ * Request body: { isTradable: boolean }
+ */
+router.put("/:id/tradable", asyncHandler(async (req: Request, res: Response) => {
+  const tokenId = req.params.id as string;
+  const { isTradable } = req.body;
+  if (typeof isTradable !== "boolean") {
+    res.status(400).json({ error: "isTradable 必须为布尔值" });
+    return;
+  }
+  const result = await tokenService.updateTokenTradable(tokenId, isTradable);
+  res.json(result);
+}));
+
 export default router;

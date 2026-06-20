@@ -20,6 +20,7 @@ export type RootStackParamList = {
   ServiceConfig: undefined;
   ConfigManage: undefined;
   Recharge: undefined;
+  TokenManage: undefined;
   Security: undefined;
   About: undefined;
   Notifications: undefined;

@@ -74,6 +74,23 @@ model Device {
   @@map("devices")
 }
 
+/// 链表：存储系统支持的区块链网络
+model Chain {
+  id                  Int      @id @default(autoincrement())
+  /// 链名称，如 Tron、Ethereum、Bitcoin
+  name                String   @unique @db.VarChar(64)
+  /// 显示名称
+  displayName         String   @map("display_name") @db.VarChar(64)
+  /// 是否支持创建账户（派生链地址）
+  isAccountSupported  Boolean  @default(true) @map("is_account_supported")
+  /// BIP44 派生路径前缀，如 m/44'/195'/0'/0
+  derivationPath      String?  @map("derivation_path") @db.VarChar(128)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("chains")
+}
+
 /// 代币表：存储系统支持的代币类型
 model Token {
   id              String    @id @default(uuid())
@@ -91,8 +108,10 @@ model Token {
   iconUrl         String?   @map("icon_url") @db.VarChar(512)
   /// 是否启用
   isActive        Boolean   @default(true) @map("is_active")
-  /// 是否可创建账户：原生代币=true，度量币(USDT)=false
-  isAccountToken  Boolean   @default(true) @map("is_account_token")
+  /// 是否支持交易
+  isTradable      Boolean   @default(true) @map("is_tradable")
+  /// 代币类型：NATIVE=原生主币, STABLECOIN=稳定币
+  tokenType       String    @default("NATIVE") @map("token_type") @db.VarChar(16)
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
@@ -136,20 +155,24 @@ model WalletToken {
   @@map("wallet_tokens")
 }
 
-/// 账户表：钱包下的区块链网络账户，每个钱包每个网络一个账户
+/// 账户表：钱包下的区块链网络账户，每个钱包每个网络每个代币可有多个账户（通过 index 区分）
 model Account {
-  id        String   @id @default(uuid())
-  walletId  String   @map("wallet_id") @db.VarChar(36)
+  id           String   @id @default(uuid())
+  walletId     String   @map("wallet_id") @db.VarChar(36)
   /// 所属网络（如 Tron、Ethereum）
-  network   String   @db.VarChar(64)
+  network      String   @db.VarChar(64)
+  /// 代币符号（如 TRX、USDT），标识该账户对应的代币
+  tokenSymbol  String   @map("token_symbol") @db.VarChar(16)
+  /// 派生路径索引，同链多账户时递增（默认0）
+  index        Int      @default(0)
   /// 账户名称
-  name      String   @db.VarChar(64)
+  name         String   @db.VarChar(64)
   /// 链上地址（Tron格式: T+33位随机字符）
-  address   String   @db.VarChar(64)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  address      String   @db.VarChar(64)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
-  @@unique([walletId, network])
+  @@unique([walletId, network, tokenSymbol, index])
   @@map("accounts")
 }
 

@@ -94,9 +94,10 @@ export async function transfer(
     throw createError(404, "发送钱包不存在，请刷新后重试");
   }
 
-  // 查找发送方在该网络上的 Account 链地址
-  const fromAccount = await prisma.account.findUnique({
-    where: { walletId_network: { walletId: input.fromWalletId, network: token.network } },
+  // 查找发送方在该网络上对应代币的 Account 链地址（取 index 最小的）
+  const fromAccount = await prisma.account.findFirst({
+    where: { walletId: input.fromWalletId, network: token.network, tokenSymbol: input.tokenSymbol },
+    orderBy: { index: "asc" },
   });
   const fromAddress = fromAccount?.address || fromWallet.address;
 

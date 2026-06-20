@@ -11,7 +11,7 @@ function renderTokenIcon(symbol: string, size: number) {
 }
 
 interface Props {
-  onTransfer: () => void;
+  onTransfer: (token: TokenBalance) => void;
   onReceive: (token: TokenBalance) => void;
   onRecords: () => void;
   tokens: TokenBalance[];
@@ -24,6 +24,7 @@ export default function ActionButtons({
   tokens,
 }: Props) {
   const [showTokenPicker, setShowTokenPicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState<"receive" | "transfer">("receive");
 
   return (
     <>
@@ -33,7 +34,10 @@ export default function ActionButtons({
         end={{ x: 1, y: 0 }}
         style={styles.container}
       >
-        <TouchableOpacity style={styles.button} onPress={onTransfer}>
+        <TouchableOpacity style={styles.button} onPress={() => {
+          setPickerMode("transfer");
+          setShowTokenPicker(true);
+        }}>
           <View style={styles.iconCircle}>
             <TransferIcon size={22} color="#FFFFFF" />
           </View>
@@ -41,7 +45,10 @@ export default function ActionButtons({
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.button}
-          onPress={() => setShowTokenPicker(true)}
+          onPress={() => {
+            setPickerMode("receive");
+            setShowTokenPicker(true);
+          }}
         >
           <View style={styles.iconCircle}>
             <ReceiveIcon size={22} color="#FFFFFF" />
@@ -63,7 +70,9 @@ export default function ActionButtons({
           onPress={() => setShowTokenPicker(false)}
         >
           <View style={styles.pickerCard}>
-            <Text style={styles.pickerTitle}>选择收款代币</Text>
+            <Text style={styles.pickerTitle}>
+              {pickerMode === "transfer" ? "选择转账代币" : "选择收款代币"}
+            </Text>
             <FlatList
               data={tokens}
               keyExtractor={(item) => item.tokenId || item.symbol}
@@ -72,7 +81,11 @@ export default function ActionButtons({
                   style={styles.pickerItem}
                   onPress={() => {
                     setShowTokenPicker(false);
-                    onReceive(item);
+                    if (pickerMode === "transfer") {
+                      onTransfer(item);
+                    } else {
+                      onReceive(item);
+                    }
                   }}
                 >
                   <View style={styles.pickerItemIcon}>

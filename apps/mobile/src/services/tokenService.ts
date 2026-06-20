@@ -22,6 +22,12 @@ export const tokenService = {
     return data;
   },
 
+  /** 切换代币交易开关 */
+  async updateTokenTradable(tokenId: string, isTradable: boolean): Promise<{ id: string; symbol: string; isTradable: boolean }> {
+    const { data } = await api.put(`/tokens/${tokenId}/tradable`, { isTradable });
+    return data;
+  },
+
   async getTransactions(
     walletId: string,
     page = 1,

@@ -20,6 +20,7 @@ import SettingsScreen from "../screens/SettingsScreen";
 import ServiceConfigScreen from "../screens/ServiceConfigScreen";
 import ConfigManageScreen from "../screens/ConfigManageScreen";
 import RechargeScreen from "../screens/RechargeScreen";
+import TokenManageScreen from "../screens/TokenManageScreen";
 import SecurityScreen from "../screens/SecurityScreen";
 import AboutScreen from "../screens/AboutScreen";
 import ScanScreen from "../screens/ScanScreen";
@@ -152,6 +153,11 @@ export function RootStack() {
         name="Recharge"
         component={RechargeScreen}
         options={{ ...CENTERED_HEADER, title: "充值管理" }}
+      />
+      <Stack.Screen
+        name="TokenManage"
+        component={TokenManageScreen}
+        options={{ ...CENTERED_HEADER, title: "代币管理" }}
       />
       <Stack.Screen
         name="Security"

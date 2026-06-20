@@ -18,6 +18,7 @@ import rechargeRoutes from "./routes/recharge";
 import { initRSAKeys } from "./services/rsaService";
 import { runMigrations } from "./services/migrator";
 import { runSeed } from "./services/seedService";
+import { syncChainAccounts } from "./services/chainSyncService";
 import { logger } from "./utils/logger";
 
 const app = express();
@@ -71,7 +72,10 @@ if (config.nodeEnv !== "test") {
       // 2. Auto-run seed data (idempotent)
       await runSeed();
 
-      // 3. Initialize RSA keys
+      // 3. Sync chain accounts for existing wallets
+      await syncChainAccounts();
+
+      // 4. Initialize RSA keys
       initRSAKeys();
 
       // 4. Start HTTP server

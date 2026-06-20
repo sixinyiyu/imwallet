@@ -349,7 +349,14 @@ export default function WalletDetailScreen() {
                 })()}
               </View>
               <View style={styles.accountInfo}>
-                <Text style={styles.accountName}>{acc.name}</Text>
+                <View style={styles.accountNameRow}>
+                  <Text style={styles.accountName}>{acc.name}</Text>
+                  {acc.tokenSymbol ? (
+                    <View style={styles.tokenSymbolBadge}>
+                      <Text style={styles.tokenSymbolText}>{acc.tokenSymbol}</Text>
+                    </View>
+                  ) : null}
+                </View>
                 <View style={styles.accountAddressRow}>
                   <Text style={styles.accountSymbol} numberOfLines={1} ellipsizeMode="middle">
                     {acc.address}
@@ -878,6 +885,22 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500",
     color: "#1F2937",
+  },
+  accountNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  tokenSymbolBadge: {
+    backgroundColor: "#E8F5E9",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  tokenSymbolText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#287220",
   },
   accountSymbol: {
     fontSize: 12,

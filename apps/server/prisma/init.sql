@@ -61,6 +61,21 @@ CREATE TABLE IF NOT EXISTS "devices" (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "devices_device_id_key" ON "devices"("device_id");
 
+-- 链表（区块链网络）
+CREATE TABLE IF NOT EXISTS "chains" (
+    "id"                   SERIAL      NOT NULL,
+    "name"                 VARCHAR(64) NOT NULL,
+    "display_name"         VARCHAR(64) NOT NULL,
+    "is_account_supported" BOOLEAN     NOT NULL DEFAULT true,
+    "derivation_path"      VARCHAR(128),
+    "created_at"           TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at"           TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "chains_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "chains_name_key" ON "chains"("name");
+
 -- 代币表
 CREATE TABLE IF NOT EXISTS "tokens" (
     "id"               TEXT        NOT NULL,
@@ -71,7 +86,8 @@ CREATE TABLE IF NOT EXISTS "tokens" (
     "contract_address" VARCHAR(66),
     "icon_url"         VARCHAR(512),
     "is_active"        BOOLEAN     NOT NULL DEFAULT true,
-    "is_account_token" BOOLEAN     NOT NULL DEFAULT true,
+    "is_tradable"      BOOLEAN     NOT NULL DEFAULT true,
+    "token_type"       VARCHAR(16) NOT NULL DEFAULT 'NATIVE',
     "created_at"       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at"       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -113,20 +129,22 @@ CREATE TABLE IF NOT EXISTS "wallet_tokens" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "wallet_tokens_wallet_id_token_id_key" ON "wallet_tokens"("wallet_id", "token_id");
 
--- 账户表（按网络，每个钱包每个网络一个账户）
+-- 账户表（按网络+代币，每个钱包每个网络每个代币可有多个账户，通过 index 区分）
 CREATE TABLE IF NOT EXISTS "accounts" (
-    "id"        TEXT        NOT NULL,
-    "wallet_id" VARCHAR(36) NOT NULL,
-    "network"   VARCHAR(64) NOT NULL,
-    "name"      VARCHAR(64) NOT NULL,
-    "address"   VARCHAR(64) NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "id"           TEXT        NOT NULL,
+    "wallet_id"    VARCHAR(36) NOT NULL,
+    "network"      VARCHAR(64) NOT NULL,
+    "token_symbol" VARCHAR(16) NOT NULL DEFAULT '',
+    "index"        INT         NOT NULL DEFAULT 0,
+    "name"         VARCHAR(64) NOT NULL,
+    "address"      VARCHAR(64) NOT NULL,
+    "created_at"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "accounts_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "accounts_wallet_id_network_key" ON "accounts"("wallet_id", "network");
+CREATE UNIQUE INDEX IF NOT EXISTS "accounts_wallet_id_network_token_symbol_index_key" ON "accounts"("wallet_id", "network", "token_symbol", "index");
 
 -- 钱包-设备订阅关联表
 CREATE TABLE IF NOT EXISTS "wallet_subscriptions" (
@@ -264,12 +282,22 @@ CREATE TABLE IF NOT EXISTS "app_logs" (
 
 -- ─── Seed Data ───────────────────────────────────────────────────────────────
 
--- 代币: TRX(可创建账户), USDT(度量币，不可创建账户)
-INSERT INTO "tokens" ("id", "symbol", "name", "decimals", "network", "is_active", "is_account_token", "created_at", "updated_at")
+-- 链表种子数据
+INSERT INTO "chains" ("name", "display_name", "is_account_supported", "derivation_path")
 VALUES
-    ('token-usdt-default', 'USDT', 'Tether USD', 6, 'Tron', true, false, NOW(), NOW()),
-    ('token-trx-default',  'TRX',  'Tron',       6, 'Tron', true, true,  NOW(), NOW())
-ON CONFLICT ("symbol") DO UPDATE SET "is_account_token" = EXCLUDED."is_account_token", "updated_at" = NOW();
+    ('Tron',     'Tron (TRX)',     true, 'm/44\'\'/195\'\'/0\'\'/0'),
+    ('Ethereum', 'Ethereum (ETH)', true, 'm/44\'\'/60\'\'/0\'\'/0'),
+    ('Bitcoin',  'Bitcoin (BTC)',  true, 'm/44\'\'/0\'\'/0\'\'/0')
+ON CONFLICT ("name") DO NOTHING;
+
+-- 代币: TRX(Tron主币), USDT(Tron稳定币), ETH(Ethereum主币), BTC(Bitcoin主币)
+INSERT INTO "tokens" ("id", "symbol", "name", "decimals", "network", "is_active", "is_tradable", "token_type", "created_at", "updated_at")
+VALUES
+    ('token-usdt-default', 'USDT', 'Tether USD',  6, 'Tron',     true, true, 'STABLECOIN', NOW(), NOW()),
+    ('token-trx-default',  'TRX',  'Tron',        6, 'Tron',     true, true, 'NATIVE',     NOW(), NOW()),
+    ('token-eth-default',  'ETH',  'Ethereum',   18, 'Ethereum', true, true, 'NATIVE',     NOW(), NOW()),
+    ('token-btc-default',  'BTC',  'Bitcoin',     8, 'Bitcoin',  true, true, 'NATIVE',     NOW(), NOW())
+ON CONFLICT ("symbol") DO UPDATE SET "is_tradable" = COALESCE(EXCLUDED."is_tradable", tokens."is_tradable", true), "token_type" = COALESCE(EXCLUDED."token_type", tokens."token_type", 'NATIVE'), "updated_at" = NOW();
 
 -- 法币汇率
 INSERT INTO "fiat_currencies" ("id", "code", "name", "symbol", "rate", "decimals", "updated_at")

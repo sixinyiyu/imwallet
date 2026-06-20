@@ -173,6 +173,16 @@ export default function ConfigManageScreen() {
         <ChevronRightIcon size={18} color="#8899B8" />
       </TouchableOpacity>
 
+      {/* 代币管理入口 */}
+      <TouchableOpacity
+        style={[styles.infoCard, { marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}
+        onPress={() => navigation.navigate("TokenManage")}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.infoLabel}>代币管理</Text>
+        <ChevronRightIcon size={18} color="#8899B8" />
+      </TouchableOpacity>
+
       {/* Toast */}
       {toastVisible && (
         <View style={styles.toastWrap} pointerEvents="none">

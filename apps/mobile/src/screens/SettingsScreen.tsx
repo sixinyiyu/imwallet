@@ -41,11 +41,16 @@ export default function SettingsScreen() {
   const [pwdVerifying, setPwdVerifying] = useState(false);
   const [pwdError, setPwdError] = useState<string | null>(null);
 
+  // 同链多账户
+  const [multiAccountEnabled, setMultiAccountEnabled] = useState(false);
+  const [togglingMulti, setTogglingMulti] = useState(false);
+
   useEffect(() => {
     loadCurrency();
     loadPendingCount();
     loadLogUploadEnabled();
     loadServiceConfigEnabled();
+    loadMultiAccountEnabled();
   }, []);
 
   const loadPendingCount = async () => {
@@ -65,6 +70,22 @@ export default function SettingsScreen() {
   const loadServiceConfigEnabled = async () => {
     const enabled = await configService.getServiceConfigEnabled();
     setServiceConfigEnabled(enabled);
+  };
+
+  const loadMultiAccountEnabled = async () => {
+    const enabled = await configService.getMultiAccountEnabled();
+    setMultiAccountEnabled(enabled);
+  };
+
+  const handleToggleMultiAccount = async (enabled: boolean) => {
+    setTogglingMulti(true);
+    try {
+      await configService.setMultiAccountEnabled(enabled);
+      setMultiAccountEnabled(enabled);
+    } catch {
+      // silent
+    }
+    setTogglingMulti(false);
   };
 
   const handleToggleLogUpload = async (enabled: boolean) => {
@@ -146,6 +167,19 @@ export default function SettingsScreen() {
         <Text style={styles.menuValue}>
           {currency.symbol} {currency.name}
         </Text>
+      </View>
+
+      {/* 同链多账户 */}
+      <View style={styles.menuItem}>
+        <View style={styles.menuLeft}>
+          <Text style={styles.menuLabel}>同链多账户</Text>
+          <Text style={styles.menuHint}>开启后添加账户时允许同链创建多个账户</Text>
+        </View>
+        {togglingMulti ? (
+          <ActivityIndicator size="small" color="#287220" />
+        ) : (
+          <GreenToggle value={multiAccountEnabled} onValueChange={handleToggleMultiAccount} />
+        )}
       </View>
 
       {/* 日志上报 */}

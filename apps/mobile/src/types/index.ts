@@ -51,11 +51,13 @@ export interface Account {
   id: string;
   walletId: string;
   network: string;
+  /** 代币符号（如 TRX、USDT），标识该账户对应的代币 */
+  tokenSymbol: string;
   name: string;
   address: string;
   createdAt: string;
   updatedAt?: string;
-  /** 该网络账户下的代币余额列表 */
+  /** 该账户对应代币的余额信息 */
   tokenBalances: Array<{
     tokenId: string;
     symbol: string;
@@ -102,7 +104,23 @@ export interface TokenInfo {
   contractAddress?: string;
   iconUrl?: string;
   isActive: boolean;
-  isAccountToken?: boolean;
+  isTradable?: boolean;
+  tokenType?: string;
+}
+
+export interface ChainInfo {
+  id: number;
+  name: string;
+  displayName: string;
+  isAccountSupported: boolean;
+  derivationPath: string | null;
+  /** 该链下可创建账户的代币列表 */
+  tokens: Array<{
+    symbol: string;
+    name: string;
+    tokenType: string;
+    decimals: number;
+  }>;
 }
 
 export interface Transaction {
