@@ -36,6 +36,7 @@ export default function RechargeScreen() {
   const [memo, setMemo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [formCollapsed, setFormCollapsed] = useState(true);
 
   // 充值记录
   const [records, setRecords] = useState<RechargeRecord[]>([]);
@@ -216,8 +217,17 @@ export default function RechargeScreen() {
           <View>
             {/* 充值表单 */}
             <View style={styles.formCard}>
-              <Text style={styles.formTitle}>代币充值</Text>
+              <TouchableOpacity
+                style={styles.formHeader}
+                onPress={() => setFormCollapsed((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.formTitle}>代币充值</Text>
+                <Text style={styles.collapseIcon}>{formCollapsed ? "▶" : "▼"}</Text>
+              </TouchableOpacity>
 
+              {!formCollapsed && (
+              <>
               {/* 选择钱包 */}
               <Text style={styles.fieldLabel}>选择钱包</Text>
               <TouchableOpacity
@@ -284,6 +294,8 @@ export default function RechargeScreen() {
                   <Text style={styles.rechargeBtnText}>充值</Text>
                 )}
               </TouchableOpacity>
+              </>
+              )}
             </View>
 
             {/* 充值记录标题 */}
@@ -415,7 +427,13 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  formTitle: { fontSize: 16, fontWeight: "700", color: "#1F2937", marginBottom: 16 },
+  formHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  formTitle: { fontSize: 16, fontWeight: "700", color: "#1F2937" },
+  collapseIcon: { fontSize: 14, color: "#9CA3AF" },
   fieldLabel: { fontSize: 13, color: "#6B7280", marginBottom: 6, marginTop: 10 },
   pickerBtn: {
     flexDirection: "row",
