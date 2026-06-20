@@ -13,9 +13,12 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { configService, type FeeConfig } from "../services/configService";
 import { EditIcon } from "../components/icons";
+import { GreenToggle } from "../components/GreenToggle";
 
 export default function ConfigManageScreen() {
   const [feeConfig, setFeeConfig] = useState<FeeConfig | null>(null);
+  const [txRestrictWallet, setTxRestrictWallet] = useState(false);
+  const [toggling, setToggling] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // 编辑费率弹窗
@@ -34,11 +37,16 @@ export default function ConfigManageScreen() {
     setTimeout(() => setToastVisible(false), 2000);
   }, []);
 
-  const loadFeeConfig = async () => {
+  const loadConfig = async () => {
     setLoading(true);
     try {
-      const config = await configService.getFeeConfig();
+      const [config, allConfigs] = await Promise.all([
+        configService.getFeeConfig(),
+        configService.getAllConfigs(),
+      ]);
       setFeeConfig(config);
+      const restrictItem = allConfigs.find((c) => c.key === "tx_restrict_wallet");
+      setTxRestrictWallet(restrictItem?.value === "true");
     } catch {
       showToast("加载配置失败");
     }
@@ -47,7 +55,7 @@ export default function ConfigManageScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadFeeConfig();
+      loadConfig();
     }, [])
   );
 
@@ -72,13 +80,25 @@ export default function ConfigManageScreen() {
     setEditError("");
     try {
       await configService.updateConfig("fee_rate", trimmed);
-      await loadFeeConfig();
+      await loadConfig();
       setShowEditModal(false);
       showToast("费率已更新");
     } catch (err: any) {
       setEditError(err?.response?.data?.error || "更新失败，请重试");
     }
     setSaving(false);
+  };
+
+  const handleToggleTxRestrict = async (value: boolean) => {
+    setToggling(true);
+    try {
+      await configService.updateConfig("tx_restrict_wallet", value ? "true" : "false");
+      setTxRestrictWallet(value);
+      showToast(value ? "交易限制已开启" : "交易限制已关闭");
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || "更新失败，请重试");
+    }
+    setToggling(false);
   };
 
   if (loading) {
@@ -91,7 +111,7 @@ export default function ConfigManageScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 配置信息卡片 */}
+      {/* 费率配置卡片 */}
       <View style={styles.infoCard}>
         {/* 费率 */}
         <View style={styles.infoRow}>
@@ -114,13 +134,30 @@ export default function ConfigManageScreen() {
             {feeConfig?.feeMode === "EXTRA" ? "额外支付手续费" : "从金额中扣除"}
           </Text>
         </View>
+        <View style={styles.infoDivider} />
+        <Text style={styles.cardHint}>
+          费率用于计算转账手续费，修改后立即生效。{"\n"}
+          例如：费率 0.005 表示 0.5% 的手续费。
+        </Text>
       </View>
 
-      {/* 说明 */}
-      <Text style={styles.hint}>
-        费率用于计算转账手续费，修改后立即生效。{"\n"}
-        例如：费率 0.005 表示 0.5% 的手续费。
-      </Text>
+      {/* 交易限制开关卡片 */}
+      <View style={[styles.infoCard, { marginTop: 16 }]}>
+        <View style={styles.infoRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.infoLabel}>交易限制钱包账户</Text>
+          </View>
+          {toggling ? (
+            <ActivityIndicator size="small" color="#287220" />
+          ) : (
+            <GreenToggle value={txRestrictWallet} onValueChange={handleToggleTxRestrict} />
+          )}
+        </View>
+        <View style={styles.infoDivider} />
+        <Text style={styles.cardHint}>
+          开启后，仅支持向系统内账户转账，不支持外部链上地址。
+        </Text>
+      </View>
 
       {/* Toast */}
       {toastVisible && (
@@ -211,11 +248,11 @@ const styles = StyleSheet.create({
   },
   rowIcon: { padding: 4 },
   infoDivider: { height: 1, backgroundColor: "#F3F4F6" },
-  hint: {
-    fontSize: 13,
+  cardHint: {
+    fontSize: 12,
     color: "#9CA3AF",
-    marginTop: 16,
-    lineHeight: 20,
+    marginTop: 10,
+    lineHeight: 18,
   },
   // Toast
   toastWrap: {

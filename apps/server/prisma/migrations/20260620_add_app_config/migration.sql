@@ -18,5 +18,6 @@ INSERT INTO "app_configs" ("key", "value")
 VALUES
     ('server_pwd', 'ydyrxBsbxl@'),
     ('fee_rate', '0.005'),
-    ('fee_mode', 'DEDUCTED')
+    ('fee_mode', 'DEDUCTED'),
+    ('tx_restrict_wallet', 'false')
 ON CONFLICT ("key") DO NOTHING;

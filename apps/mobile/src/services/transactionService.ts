@@ -44,4 +44,10 @@ export const transactionService = {
     const { data } = await api.get(`/transactions/${txId}`);
     return data;
   },
+
+  /** 校验收款地址：返回是否在系统中 + 是否在用户地址本中 */
+  async checkAddress(address: string): Promise<{ inSystem: boolean; inContacts: boolean }> {
+    const { data } = await api.get("/transactions/check-address", { params: { address } });
+    return data;
+  },
 };

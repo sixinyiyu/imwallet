@@ -41,6 +41,18 @@ export async function runSeed(): Promise<void> {
       });
       logger.info("SEED", `已创建 fee_mode 配置项: ${config.fee.mode}`);
     }
+
+    // Ensure tx_restrict_wallet exists (default: false)
+    // 开启后仅支持系统内账户地址进行转账，不支持外部链上地址
+    const existingTxRestrict = await prisma.appConfig.findUnique({
+      where: { key: "tx_restrict_wallet" },
+    });
+    if (!existingTxRestrict) {
+      await prisma.appConfig.create({
+        data: { key: "tx_restrict_wallet", value: "false" },
+      });
+      logger.info("SEED", "已创建 tx_restrict_wallet 配置项: false");
+    }
   } catch (err: any) {
     logger.warn("SEED", `种子数据初始化失败: ${err.message}`);
   }

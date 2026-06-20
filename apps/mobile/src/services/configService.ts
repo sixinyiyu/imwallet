@@ -6,9 +6,22 @@ export interface FeeConfig {
   feeMode: "EXTRA" | "DEDUCTED";
 }
 
+export interface ConfigItem {
+  key: string;
+  value: string;
+}
+
 const SERVICE_CONFIG_ENABLED_KEY = "aquad_service_config_enabled";
 
 export const configService = {
+  /**
+   * 获取所有配置项（调用后端 GET /config/all）
+   */
+  async getAllConfigs(): Promise<ConfigItem[]> {
+    const { data } = await api.get("/config/all");
+    return data;
+  },
+
   /**
    * 获取费率配置（每次从服务端实时获取，不缓存，因为费率可动态修改）
    */
@@ -52,6 +65,17 @@ export const configService = {
       await SecureStore.setItemAsync(SERVICE_CONFIG_ENABLED_KEY, enabled ? "true" : "false");
     } catch {
       // silent
+    }
+  },
+
+  /** 读取交易限制钱包账户开关状态（从服务端实时获取，默认关闭） */
+  async getTxRestrictWallet(): Promise<boolean> {
+    try {
+      const configs = await this.getAllConfigs();
+      const item = configs.find((c) => c.key === "tx_restrict_wallet");
+      return item?.value === "true";
+    } catch {
+      return false;
     }
   },
 };

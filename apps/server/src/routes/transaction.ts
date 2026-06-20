@@ -71,6 +71,34 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
   res.json(result);
 }));
 
+/**
+ * GET /transactions/check-address?address=xxx
+ * 一次查询返回地址是否在系统中 + 是否在当前用户地址本中。
+ * 用于转账页实时校验收款地址。
+ */
+router.get("/check-address", asyncHandler(async (req: Request, res: Response) => {
+  const address = (req.query.address as string || "").trim();
+  if (!address) {
+    res.status(400).json({ error: "address 参数不能为空" });
+    return;
+  }
+
+  // 查系统内：wallets 表（EVM 地址 0x...）+ accounts 表（TRX 地址 T... 等）
+  const [walletByAddress, account] = await Promise.all([
+    prisma.wallet.findUnique({ where: { address } }),
+    prisma.account.findFirst({ where: { address } }),
+  ]);
+  const inSystem = !!(walletByAddress || account);
+
+  // 查用户地址本：contacts 表（按当前设备）
+  const contact = await prisma.contact.findFirst({
+    where: { address, device_id: req.device!.dbId },
+  });
+  const inContacts = !!contact;
+
+  res.json({ inSystem, inContacts });
+}));
+
 router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   const txId = req.params.id as string;
   const tx = await transactionService.getTransactionDetail(txId);

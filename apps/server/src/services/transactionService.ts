@@ -134,6 +134,13 @@ export async function transfer(
     throw createError(400, "不能向自己转账");
   }
 
+  // 交易限制：开启后仅支持系统内账户地址进行转账
+  const restrictConfig = await prisma.appConfig.findUnique({ where: { key: "tx_restrict_wallet" } });
+  if (restrictConfig?.value === "true" && !toWalletId) {
+    logger.warn("TRANSFER", `转账失败: 收款地址不在系统内 - toAddress=${input.toAddress}`);
+    throw createError(400, "收款地址不在系统内，仅支持系统内账户地址转账", "RECIPIENT_NOT_IN_SYSTEM");
+  }
+
   // Get sender's WalletToken balance for this token (内部仍用 tokenId)
   const senderWalletToken = await prisma.walletToken.findUnique({
     where: {

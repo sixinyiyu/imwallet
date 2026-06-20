@@ -98,12 +98,29 @@ router.put("/update", asyncHandler(async (req: Request, res: Response) => {
     throw createError(400, "费率模式必须为 EXTRA 或 DEDUCTED", "INVALID_FEE_MODE");
   }
 
+  // Validate tx_restrict_wallet value if updating
+  if (key === "tx_restrict_wallet" && !["true", "false"].includes(value)) {
+    throw createError(400, "交易限制开关必须为 true 或 false", "INVALID_TX_RESTRICT_VALUE");
+  }
+
   const updated = await prisma.appConfig.update({
     where: { key },
     data: { value },
   });
 
   res.json({ key: updated.key, value: updated.value });
+}));
+
+/**
+ * GET /config/all
+ * Returns all app_configs entries as key-value pairs.
+ * Used by ConfigManageScreen to read all configuration items.
+ */
+router.get("/all", asyncHandler(async (_req: Request, res: Response) => {
+  const configs = await prisma.appConfig.findMany({
+    orderBy: { key: "asc" },
+  });
+  res.json(configs.map((c) => ({ key: c.key, value: c.value })));
 }));
 
 export default router;

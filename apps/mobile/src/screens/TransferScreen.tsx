@@ -30,6 +30,8 @@ import { useAlert } from "../hooks/useAlert";
 /** 根据错误信息给出针对性建议 */
 function getSuggestion(error?: string): string {
   if (!error) return "请稍后重试或联系客服";
+  if (error.includes("不在系统内") || error.includes("RECIPIENT_NOT_IN_SYSTEM"))
+    return "该地址不在系统内，当前已开启交易限制，\n仅支持向系统内账户转账";
   if (error.includes("余额不足") || error.includes("无该代币余额"))
     return "1. 先充值该代币后再转账\n2. 减少转账金额（含手续费）";
   if (error.includes("不能向自己转账"))
@@ -85,6 +87,9 @@ export default function TransferScreen() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [addressInContacts, setAddressInContacts] = useState(false);
   const [addingToContacts, setAddingToContacts] = useState(false);
+  const [txRestrictWallet, setTxRestrictWallet] = useState(false);
+  const [addressCheckResult, setAddressCheckResult] = useState<{ inSystem: boolean; inContacts: boolean } | null>(null);
+  const [checkingAddress, setCheckingAddress] = useState(false);
 
   const [result, setResult] = useState<{
     success: boolean;
@@ -108,9 +113,15 @@ export default function TransferScreen() {
     setTimeout(() => setToastVisible(false), 2000);
   }, []);
 
-  // 获取手续费配置
+  // 获取手续费配置 + 交易限制配置
   useEffect(() => {
-    configService.getFeeConfig().then(setFeeConfig).catch(() => {});
+    Promise.all([
+      configService.getFeeConfig().catch(() => null),
+      configService.getTxRestrictWallet().catch(() => false),
+    ]).then(([fee, restrict]) => {
+      if (fee) setFeeConfig(fee);
+      setTxRestrictWallet(restrict);
+    });
   }, []);
 
   useEffect(() => {
@@ -132,23 +143,32 @@ export default function TransferScreen() {
 
   const addressFormatValid = useMemo(() => isValidAddressFormat(toAddress), [toAddress]);
 
-  // 当地址格式正确时，检查是否已在地址本中
+  // 地址格式正确时，调用后端接口检查地址是否在系统中 + 是否在用户地址本中
   useEffect(() => {
     if (!addressFormatValid || !toAddress.trim()) {
+      setAddressCheckResult(null);
       setAddressInContacts(false);
       return;
     }
-    contactService.getContacts().then((list) => {
-      setContacts(list);
-      const found = list.some((c) => c.address.toLowerCase() === toAddress.trim().toLowerCase());
-      setAddressInContacts(found);
+    let cancelled = false;
+    setCheckingAddress(true);
+    transactionService.checkAddress(toAddress.trim()).then((result) => {
+      if (cancelled) return;
+      setAddressCheckResult(result);
+      setAddressInContacts(result.inContacts);
     }).catch(() => {
+      if (cancelled) return;
+      setAddressCheckResult(null);
       setAddressInContacts(false);
+    }).finally(() => {
+      if (!cancelled) setCheckingAddress(false);
     });
+    return () => { cancelled = true; };
   }, [addressFormatValid, toAddress]);
 
   // 地址有效 = 格式合法（链上地址格式正确即可转账，无需收款方在系统中存在）
-  const addressValid = addressFormatValid;
+  // 但如果开启了交易限制，收款地址必须在系统中存在
+  const addressValid = addressFormatValid && (!txRestrictWallet || (addressCheckResult?.inSystem ?? false));
   const amountNum = parseFloat(amount);
   const amountValid = !isNaN(amountNum) && amountNum > 0;
 
@@ -188,8 +208,7 @@ export default function TransferScreen() {
         network: detectedNetwork || undefined,
       });
       setAddressInContacts(true);
-      const list = await contactService.getContacts();
-      setContacts(list);
+      setAddressCheckResult((prev) => prev ? { ...prev, inContacts: true } : prev);
       showToast("已添加到地址本");
     } catch (err: any) {
       alert("提示", "添加到地址本失败: " + (err.message || "未知错误"));
@@ -357,20 +376,36 @@ export default function TransferScreen() {
           <View style={z.statusRow}>
             {!addressFormatValid ? (
               <Text style={[z.statusText, { color: "#EF4444" }]}>✗ 无效的地址格式</Text>
+            ) : checkingAddress ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <ActivityIndicator size="small" color="#9CA3AF" />
+                <Text style={[z.statusText, { color: "#9CA3AF" }]}>正在校验地址...</Text>
+              </View>
             ) : (
               <>
-                <Text style={[z.statusText, { color: "#10B981" }]}>✓ 地址格式正确</Text>
-                {!addressInContacts && !addingToContacts && (
-                  <TouchableOpacity onPress={handleAddToContacts}>
-                    <Text style={z.addToContactLinkText}>＋ 添加到地址本</Text>
-                  </TouchableOpacity>
-                )}
-                {addingToContacts && (
-                  <ActivityIndicator size="small" color="#287220" />
-                )}
-                {addressInContacts && (
-                  <Text style={z.addedToContactText}>✓ 已添加到地址本</Text>
-                )}
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1, flexWrap: "wrap" }}>
+                  <Text style={[z.statusText, { color: "#10B981" }]}>✓ 地址格式正确</Text>
+                  {txRestrictWallet && addressCheckResult && (
+                    addressCheckResult.inSystem ? (
+                      <Text style={[z.statusText, { color: "#10B981" }]}>✓ 系统内地址</Text>
+                    ) : (
+                      <Text style={[z.statusText, { color: "#EF4444" }]}>⚠ 该地址不在系统内，已开启交易限制，不支持向系统外地址转账</Text>
+                    )
+                  )}
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  {!addressInContacts && !addingToContacts && (
+                    <TouchableOpacity onPress={handleAddToContacts}>
+                      <Text style={z.addToContactLinkText}>＋ 添加到地址本</Text>
+                    </TouchableOpacity>
+                  )}
+                  {addingToContacts && (
+                    <ActivityIndicator size="small" color="#287220" />
+                  )}
+                  {addressInContacts && (
+                    <Text style={z.addedToContactText}>✓ 已添加到地址本</Text>
+                  )}
+                </View>
               </>
             )}
           </View>
