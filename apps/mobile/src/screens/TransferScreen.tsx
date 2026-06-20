@@ -74,6 +74,7 @@ export default function TransferScreen() {
 
   const selectedBalance = selectedToken ? selectedToken.balance : "0";
   const balance = parseFloat(selectedBalance) || 0;
+  const tokenSymbol = selectedToken?.symbol || "USDT";
 
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
@@ -243,7 +244,7 @@ export default function TransferScreen() {
         });
       } else {
         const { Share } = require("react-native");
-        await Share.share({ message: `AquaD 转账 ${amount} USDT` });
+        await Share.share({ message: `AquaD 转账 ${amount} ${tokenSymbol}` });
       }
     } catch (err: any) {
       alert("分享失败", err.message || "请尝试截图后手动分享");
@@ -282,8 +283,8 @@ export default function TransferScreen() {
           {result.success ? (
             <>
               <ResultRow label="收款地址" value={`${toAddress.slice(0, 8)}...${toAddress.slice(-6)}`} />
-              <ResultRow label="实际到账" value={`${resultReceived.toFixed(6)} USDT`} />
-              <ResultRow label="手续费" value={`${resultFee.toFixed(6)} USDT`} />
+              <ResultRow label="实际到账" value={`${resultReceived.toFixed(6)} ${tokenSymbol}`} />
+              <ResultRow label="手续费" value={`${resultFee.toFixed(6)} ${tokenSymbol}`} />
             </>
           ) : (
             <>
@@ -446,13 +447,13 @@ export default function TransferScreen() {
           <Text style={z.sectionTitle}>交易总览</Text>
         </View>
         <View style={z.summaryCard}>
-          <SummaryRow label="转账金额" value={amountValid ? `${amountNum.toFixed(6)} USDT` : "—"} />
-          <SummaryRow label="手续费" value={`${fee.toFixed(6)} USDT`} />
-          <SummaryRow label="实际到账" value={amountValid ? `${actualReceive.toFixed(6)} USDT` : "—"} />
+          <SummaryRow label="转账金额" value={amountValid ? `${amountNum.toFixed(6)} ${tokenSymbol}` : "—"} />
+          <SummaryRow label="手续费" value={`${fee.toFixed(6)} ${tokenSymbol}`} />
+          <SummaryRow label="实际到账" value={amountValid ? `${actualReceive.toFixed(6)} ${tokenSymbol}` : "—"} />
           <View style={z.summaryDivider} />
           <SummaryRow
             label={feeMode === "EXTRA" ? "总计（含手续费）" : "发送方支付"}
-            value={amountValid ? `${senderPays.toFixed(6)} USDT` : "—"}
+            value={amountValid ? `${senderPays.toFixed(6)} ${tokenSymbol}` : "—"}
             bold
           />
           {insufficientBalance && <Text style={z.errorNote}>⚠ 余额不足</Text>}
@@ -534,13 +535,13 @@ export default function TransferScreen() {
                 : toAddress}
             </Text>
             <View style={z.modalRows}>
-              <SummaryRow label="转账金额" value={`${amountNum.toFixed(6)} USDT`} />
-              <SummaryRow label="手续费" value={`${fee.toFixed(6)} USDT`} />
-              <SummaryRow label="实际到账" value={`${actualReceive.toFixed(6)} USDT`} />
+              <SummaryRow label="转账金额" value={`${amountNum.toFixed(6)} ${tokenSymbol}`} />
+              <SummaryRow label="手续费" value={`${fee.toFixed(6)} ${tokenSymbol}`} />
+              <SummaryRow label="实际到账" value={`${actualReceive.toFixed(6)} ${tokenSymbol}`} />
               <View style={z.summaryDivider} />
               <SummaryRow
                 label={feeMode === "EXTRA" ? "总计（含手续费）" : "发送方支付"}
-                value={`${senderPays.toFixed(6)} USDT`}
+                value={`${senderPays.toFixed(6)} ${tokenSymbol}`}
                 bold
               />
             </View>

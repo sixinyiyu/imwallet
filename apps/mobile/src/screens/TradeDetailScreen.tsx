@@ -21,11 +21,17 @@ import SuccessIcon from "../components/icons/SuccessIcon";
 import FailureIcon from "../components/icons/FailureIcon";
 import PendingIcon from "../components/icons/PendingIcon";
 import USDTIcon from "../components/icons/USDTIcon";
+import TronIcon from "../components/icons/TronIcon";
 import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 
 type Route = RouteProp<RootStackParamList, "TradeDetail">;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+function renderTokenIcon(symbol: string, size: number) {
+  if (symbol === "TRX") return <TronIcon size={size} />;
+  return <USDTIcon size={size} />;
+}
 
 function formatFullTime(iso: string): string {
   const d = new Date(iso);
@@ -80,7 +86,7 @@ export default function TradeDetailScreen() {
         });
       } else {
         const { Share } = require("react-native");
-        await Share.share({ message: `AquaD 交易详情\n金额: ${tx?.amount} USDT\n状态: ${tx?.status}` });
+        await Share.share({ message: `AquaD 交易详情\n金额: ${tx?.amount} ${tx?.tokenSymbol}\n状态: ${tx?.status}` });
       }
     } catch (err: any) {
       alert("分享失败", err.message || "请尝试截图后手动分享");
@@ -263,7 +269,7 @@ function TokenTransferRow({
       {/* 下方：左侧代币icon+名称，右侧金额 */}
       <View style={ttr.bottomRow}>
         <View style={ttr.tokenLeft}>
-          <USDTIcon size={18} />
+          {renderTokenIcon(token, 18)}
           <Text style={ttr.tokenName}>{token}</Text>
         </View>
         <Text style={[ttr.tokenAmt, isOut ? ttr.out : ttr.in]}>

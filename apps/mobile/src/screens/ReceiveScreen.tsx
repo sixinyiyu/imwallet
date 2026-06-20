@@ -7,7 +7,7 @@ import * as Sharing from "expo-sharing";
 import { useWalletStore } from "../stores/walletStore";
 import { ReceiveSkeleton } from "../components/Skeleton";
 import { saveLogToLocal } from "../services/logService";
-import { CopyIcon, ShareIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
+import { CopyIcon, ShareIcon, TronIcon, EthIcon, BtcIcon, USDTIcon } from "../components/icons";
 import type { RootStackParamList } from "../types/navigation";
 
 type ReceiveRouteProp = RouteProp<RootStackParamList, "Receive">;
@@ -19,12 +19,16 @@ function renderNetworkIcon(network: string, size: number) {
   return null;
 }
 
+function renderTokenIcon(symbol: string, size: number) {
+  if (symbol === "TRX") return <TronIcon size={size} />;
+  return <USDTIcon size={size} />;
+}
+
 export default function ReceiveScreen() {
   const route = useRoute<ReceiveRouteProp>();
   const { activeWallet, activeAccount, tokens } = useWalletStore();
   // 使用 Account.address（链上地址）而非 Wallet.address（内部标识）
   const address = activeAccount?.address ?? "";
-  const network = activeAccount?.network ?? "";
   const qrWrapperRef = useRef<View>(null);
 
   // Toast state
@@ -50,8 +54,11 @@ export default function ReceiveScreen() {
       if (found) return found;
     }
     const found = tokens.find((t) => t.symbol === tokenSymbol);
-    return found || { symbol: tokenSymbol, name: tokenSymbol };
+    return found || { symbol: tokenSymbol, name: tokenSymbol, network: "" };
   }, [tokens, tokenSymbol, tokenId]);
+
+  // 优先使用代币自身的 network，回退到账户 network
+  const network = currentToken.network || activeAccount?.network || "";
 
   const qrValue = useMemo(() => {
     if (!address) return "";
@@ -97,11 +104,9 @@ export default function ReceiveScreen() {
     <View style={styles.container}>
       {/* 代币 icon + 名称 + network */}
       <View style={styles.tokenHeader}>
-        {renderNetworkIcon(network, 36) && (
-          <View style={styles.tokenIconWrap}>
-            {renderNetworkIcon(network, 36)}
-          </View>
-        )}
+        <View style={styles.tokenIconWrap}>
+          {renderTokenIcon(currentToken.symbol, 36)}
+        </View>
         <View style={styles.tokenNameRow}>
           <Text style={styles.tokenName}>{currentToken.symbol}</Text>
           {renderNetworkIcon(network, 0) && (
