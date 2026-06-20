@@ -17,6 +17,7 @@ import WalletManageScreen from "../screens/WalletManageScreen";
 import WalletDetailScreen from "../screens/WalletDetailScreen";
 import AddressBookScreen from "../screens/AddressBookScreen";
 import SettingsScreen from "../screens/SettingsScreen";
+import ServiceConfigScreen from "../screens/ServiceConfigScreen";
 import SecurityScreen from "../screens/SecurityScreen";
 import AboutScreen from "../screens/AboutScreen";
 import ScanScreen from "../screens/ScanScreen";
@@ -134,6 +135,11 @@ export function RootStack() {
         name="Settings"
         component={SettingsScreen}
         options={{ ...CENTERED_HEADER, title: "通用设置" }}
+      />
+      <Stack.Screen
+        name="ServiceConfig"
+        component={ServiceConfigScreen}
+        options={{ ...CENTERED_HEADER, title: "服务配置" }}
       />
       <Stack.Screen
         name="Security"

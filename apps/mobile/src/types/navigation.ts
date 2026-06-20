@@ -17,6 +17,7 @@ export type RootStackParamList = {
   AccountManage: { walletId: string };
   AddressBook: { selectMode?: boolean; onSelectAddress?: string } | undefined;
   Settings: undefined;
+  ServiceConfig: undefined;
   Security: undefined;
   About: undefined;
   Notifications: undefined;

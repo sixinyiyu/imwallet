@@ -1,5 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Animated, Platform } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../types/navigation";
 import { useFiatStore } from "../stores/fiatStore";
 import {
   flushPendingLogs,
@@ -60,7 +63,10 @@ function GreenToggle({ value, onValueChange }: { value: boolean; onValueChange: 
   );
 }
 
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
 export default function SettingsScreen() {
+  const navigation = useNavigation<Nav>();
   const { currency, loadCurrency } = useFiatStore();
   const [pendingCount, setPendingCount] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -171,6 +177,16 @@ export default function SettingsScreen() {
           <Text style={styles.resultText}>{uploadResult}</Text>
         </View>
       )}
+
+      {/* 服务配置 */}
+      <TouchableOpacity
+        style={styles.menuItem}
+        onPress={() => navigation.navigate("ServiceConfig")}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.menuLabel}>服务配置</Text>
+        <Text style={styles.menuArrow}>›</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -206,6 +222,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F3F4F6",
   },
   resultText: { fontSize: 14, color: "#374151", lineHeight: 20 },
+  menuArrow: { fontSize: 20, color: "#D1D5DB", fontWeight: "300" },
   // 自定义开关样式
   toggleTrack: {
     justifyContent: "center",
