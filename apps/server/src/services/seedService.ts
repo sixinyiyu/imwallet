@@ -1,4 +1,5 @@
 import prisma from "../config/prisma";
+import { config } from "../config";
 import { logger } from "../utils/logger";
 
 /**
@@ -8,18 +9,37 @@ import { logger } from "../utils/logger";
 export async function runSeed(): Promise<void> {
   try {
     // Ensure server_pwd exists (for service config password verification)
-    const existing = await prisma.appConfig.findUnique({
+    const existingPwd = await prisma.appConfig.findUnique({
       where: { key: "server_pwd" },
     });
-
-    if (!existing) {
+    if (!existingPwd) {
       await prisma.appConfig.create({
-        data: {
-          key: "server_pwd",
-          value: "aquad2024",
-        },
+        data: { key: "server_pwd", value: "aquad2024" },
       });
       logger.info("SEED", "已创建 server_pwd 配置项");
+    }
+
+    // Ensure fee_rate exists (loaded from config file on first init)
+    // Once the record exists, database value takes precedence over config file
+    const existingFeeRate = await prisma.appConfig.findUnique({
+      where: { key: "fee_rate" },
+    });
+    if (!existingFeeRate) {
+      await prisma.appConfig.create({
+        data: { key: "fee_rate", value: config.fee.rate.toString() },
+      });
+      logger.info("SEED", `已创建 fee_rate 配置项: ${config.fee.rate}`);
+    }
+
+    // Ensure fee_mode exists
+    const existingFeeMode = await prisma.appConfig.findUnique({
+      where: { key: "fee_mode" },
+    });
+    if (!existingFeeMode) {
+      await prisma.appConfig.create({
+        data: { key: "fee_mode", value: config.fee.mode },
+      });
+      logger.info("SEED", `已创建 fee_mode 配置项: ${config.fee.mode}`);
     }
   } catch (err: any) {
     logger.warn("SEED", `种子数据初始化失败: ${err.message}`);

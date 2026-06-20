@@ -18,6 +18,7 @@ export type RootStackParamList = {
   AddressBook: { selectMode?: boolean; onSelectAddress?: string } | undefined;
   Settings: undefined;
   ServiceConfig: undefined;
+  ConfigManage: undefined;
   Security: undefined;
   About: undefined;
   Notifications: undefined;

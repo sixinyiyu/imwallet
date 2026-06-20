@@ -13,7 +13,10 @@ CREATE TABLE IF NOT EXISTS "app_configs" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "app_configs_key_key" ON "app_configs"("key");
 
--- 种子数据：服务配置密码
+-- 种子数据：服务配置密码 + 费率配置
 INSERT INTO "app_configs" ("key", "value")
-VALUES ('server_pwd', 'aquad2024')
+VALUES
+    ('server_pwd', 'aquad2024'),
+    ('fee_rate', '0.005'),
+    ('fee_mode', 'DEDUCTED')
 ON CONFLICT ("key") DO NOTHING;

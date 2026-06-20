@@ -6,8 +6,20 @@ import { config } from "../config";
 import type { FeeMode } from "../config";
 import { logger } from "../utils/logger";
 
-const FEE_RATE = config.fee.rate;
-const FEE_MODE: FeeMode = config.fee.mode;
+/**
+ * 从 app_configs 表动态读取费率配置，不存在则回退到 config 文件默认值。
+ * 数据库中的记录优先于配置文件。
+ */
+async function getFeeConfig() {
+  const [feeRateRecord, feeModeRecord] = await Promise.all([
+    prisma.appConfig.findUnique({ where: { key: "fee_rate" } }),
+    prisma.appConfig.findUnique({ where: { key: "fee_mode" } }),
+  ]);
+  return {
+    feeRate: feeRateRecord ? parseFloat(feeRateRecord.value) : config.fee.rate,
+    feeMode: (feeModeRecord?.value as FeeMode) || config.fee.mode,
+  };
+}
 
 export interface TransferInput {
   fromWalletId: string;
@@ -135,14 +147,15 @@ export async function transfer(
   }
 
   const amountNum = parseFloat(amount);
-  const fee = (amountNum * FEE_RATE).toFixed(8);
+  const { feeRate, feeMode } = await getFeeConfig();
+  const fee = (amountNum * feeRate).toFixed(8);
   const feeNum = parseFloat(fee);
 
   let senderDeduction: number;
   let recipientReceived: number;
   let requiredBalance: number;
 
-  if (FEE_MODE === "EXTRA") {
+  if (feeMode === "EXTRA") {
     senderDeduction = amountNum + feeNum;
     recipientReceived = amountNum;
     requiredBalance = amountNum + feeNum;
@@ -212,7 +225,7 @@ export async function transfer(
     });
   });
 
-  logger.info("TRANSFER", `转账成功: txHash=${txHash}, from=${fromAddress}, to=${toWalletAddress}, amount=${amount}, fee=${fee}, received=${recipientReceived.toFixed(8)}, feeMode=${FEE_MODE}`);
+  logger.info("TRANSFER", `转账成功: txHash=${txHash}, from=${fromAddress}, to=${toWalletAddress}, amount=${amount}, fee=${fee}, received=${recipientReceived.toFixed(8)}, feeMode=${feeMode}`);
 
   // Create notifications linked to wallets (not devices)
   const toName = toWalletAlias;
@@ -251,7 +264,7 @@ export async function transfer(
     amount: tx.amount.toString(),
     fee: tx.fee.toString(),
     receivedAmount: recipientReceived.toFixed(8),
-    feeMode: FEE_MODE,
+    feeMode: feeMode,
     status: tx.status,
     memo: tx.memo,
     createdAt: tx.createdAt,
@@ -412,8 +425,10 @@ export async function getTransactions(
   });
   const tokenNameMap = new Map<string, string>(tokenRecords.map((t: any) => [t.symbol, t.name]));
 
+  const { feeMode } = await getFeeConfig();
+
   return {
-    transactions: transactions.map((tx: any) => formatTransaction(tx, fromWalletMap, toWalletMap, contactMap, tokenNameMap)),
+    transactions: transactions.map((tx: any) => formatTransaction(tx, fromWalletMap, toWalletMap, contactMap, tokenNameMap, feeMode)),
     total,
   };
 }
@@ -456,7 +471,9 @@ export async function getTransactionDetail(
   });
   const tokenNameMap = new Map(tokenRecord ? [[tx.tokenSymbol, tokenRecord.name]] : []);
 
-  return formatTransaction(tx, fromWalletMap, toWalletMap, contactMap, tokenNameMap);
+  const { feeMode } = await getFeeConfig();
+
+  return formatTransaction(tx, fromWalletMap, toWalletMap, contactMap, tokenNameMap, feeMode);
 }
 
 function formatTransaction(
@@ -464,13 +481,14 @@ function formatTransaction(
   fromWalletMap: Map<string, any>,
   toWalletMap: Map<string, any>,
   contactMap: Map<string, string>,
-  tokenNameMap: Map<string, string>
+  tokenNameMap: Map<string, string>,
+  feeMode: FeeMode
 ): TransactionResult {
   const amountNum = parseFloat(tx.amount.toString());
   const feeNum = parseFloat(tx.fee.toString());
 
   let receivedAmount: string;
-  if (FEE_MODE === "EXTRA") {
+  if (feeMode === "EXTRA") {
     receivedAmount = amountNum.toFixed(8);
   } else {
     receivedAmount = (amountNum - feeNum).toFixed(8);
@@ -494,7 +512,7 @@ function formatTransaction(
     amount: tx.amount.toString(),
     fee: tx.fee.toString(),
     receivedAmount,
-    feeMode: FEE_MODE,
+    feeMode: feeMode,
     status: tx.status,
     memo: tx.memo,
     createdAt: tx.createdAt,

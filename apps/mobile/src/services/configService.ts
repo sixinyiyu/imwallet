@@ -6,20 +6,15 @@ export interface FeeConfig {
   feeMode: "EXTRA" | "DEDUCTED";
 }
 
-let cachedConfig: FeeConfig | null = null;
-
 const SERVICE_CONFIG_ENABLED_KEY = "aquad_service_config_enabled";
 
 export const configService = {
+  /**
+   * 获取费率配置（每次从服务端实时获取，不缓存，因为费率可动态修改）
+   */
   async getFeeConfig(): Promise<FeeConfig> {
-    if (cachedConfig) return cachedConfig;
     const { data } = await api.get("/config/fee");
-    cachedConfig = data;
-    return cachedConfig!;
-  },
-
-  clearCache(): void {
-    cachedConfig = null;
+    return data;
   },
 
   /**
@@ -29,6 +24,16 @@ export const configService = {
   async verifyServerPassword(password: string): Promise<boolean> {
     const { data } = await api.post("/config/verify-password", { password });
     return data.verified === true;
+  },
+
+  /**
+   * 通用更新字典配置（调用后端 PUT /config/update）
+   * @param key 配置键名，如 fee_rate
+   * @param value 配置值
+   */
+  async updateConfig(key: string, value: string): Promise<{ key: string; value: string }> {
+    const { data } = await api.put("/config/update", { key, value });
+    return data;
   },
 
   /** 读取服务配置开关状态（默认关闭） */
