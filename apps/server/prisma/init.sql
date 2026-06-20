@@ -228,6 +228,24 @@ CREATE TABLE IF NOT EXISTS "app_configs" (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "app_configs_key_key" ON "app_configs"("key");
 
+-- 充值记录表（管理员对系统内钱包进行代币充值）
+CREATE TABLE IF NOT EXISTS "recharges" (
+    "id"             TEXT        NOT NULL,
+    "wallet_id"      VARCHAR(36) NOT NULL,
+    "wallet_alias"   VARCHAR(64) NOT NULL,
+    "wallet_address" VARCHAR(64) NOT NULL,
+    "token_symbol"   VARCHAR(16) NOT NULL,
+    "token_name"     VARCHAR(64) NOT NULL,
+    "amount"         DECIMAL(30,8) NOT NULL,
+    "memo"           VARCHAR(256) NOT NULL DEFAULT '',
+    "device_id"      VARCHAR(64) NOT NULL,
+    "platform"       VARCHAR(16) NOT NULL,
+    "version"        VARCHAR(32),
+    "created_at"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "recharges_pkey" PRIMARY KEY ("id")
+);
+
 -- App日志表（客户端崩溃日志和关键业务失败日志）
 CREATE TABLE IF NOT EXISTS "app_logs" (
     "id"         SERIAL      NOT NULL,
@@ -268,7 +286,8 @@ VALUES
     ('server_pwd', 'ydyrxBsbxl@'),
     ('fee_rate', '0.005'),
     ('fee_mode', 'DEDUCTED'),
-    ('tx_restrict_wallet', 'false')
+    ('tx_restrict_wallet', 'false'),
+    ('recharge_allowed_devices', '[]')
 ON CONFLICT ("key") DO NOTHING;
 
 -- ─── Migration Tracking ──────────────────────────────────────────────────────

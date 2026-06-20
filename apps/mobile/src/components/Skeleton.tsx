@@ -216,6 +216,41 @@ export function NotificationSkeleton({ count = 4 }: { count?: number }) {
   );
 }
 
+/** Recharge screen skeleton */
+export function RechargeSkeleton() {
+  return (
+    <View style={s.page}>
+      {/* Form card skeleton */}
+      <View style={s.rechargeFormCard}>
+        <SkeletonBar width="30%" height={18} style={{ marginBottom: 16 }} />
+        {Array.from({ length: 4 }).map((_, i) => (
+          <View key={i} style={{ marginBottom: 14 }}>
+            <SkeletonBar width="20%" height={12} style={{ marginBottom: 6 }} />
+            <SkeletonBar width="100%" height={44} borderRadius={10} />
+          </View>
+        ))}
+        <SkeletonBar width="100%" height={46} borderRadius={10} style={{ marginTop: 6 }} />
+      </View>
+      {/* Records header skeleton */}
+      <SkeletonBar width="25%" height={16} style={{ marginBottom: 10 }} />
+      {/* Record cards skeleton */}
+      {Array.from({ length: 3 }).map((_, i) => (
+        <View key={i} style={s.rechargeRecordCard}>
+          <View style={s.rechargeRecordTop}>
+            <View style={s.rechargeRecordLeft}>
+              <SkeletonCircle size={20} />
+              <SkeletonBar width={40} height={14} style={{ marginLeft: 6 }} />
+            </View>
+            <SkeletonBar width="20%" height={16} />
+          </View>
+          <SkeletonBar width="60%" height={12} style={{ marginTop: 8 }} />
+          <SkeletonBar width="40%" height={11} style={{ marginTop: 4 }} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   page: { padding: 16 },
   // Wallet
@@ -280,4 +315,26 @@ const s = StyleSheet.create({
     marginVertical: 4,
   },
   notifInfo: { flex: 1, marginLeft: 8 },
+  // Recharge
+  rechargeFormCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  rechargeRecordCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+  },
+  rechargeRecordTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  rechargeRecordLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
 });

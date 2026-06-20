@@ -12,10 +12,14 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { configService, type FeeConfig } from "../services/configService";
-import { EditIcon } from "../components/icons";
+import { EditIcon, ChevronRightIcon } from "../components/icons";
 import { GreenToggle } from "../components/GreenToggle";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../types/navigation";
 
 export default function ConfigManageScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [feeConfig, setFeeConfig] = useState<FeeConfig | null>(null);
   const [txRestrictWallet, setTxRestrictWallet] = useState(false);
   const [toggling, setToggling] = useState(false);
@@ -158,6 +162,16 @@ export default function ConfigManageScreen() {
           开启后，仅支持向系统内账户转账，不支持外部链上地址。
         </Text>
       </View>
+
+      {/* 充值管理入口 */}
+      <TouchableOpacity
+        style={[styles.infoCard, { marginTop: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}
+        onPress={() => navigation.navigate("Recharge")}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.infoLabel}>充值管理</Text>
+        <ChevronRightIcon size={18} color="#8899B8" />
+      </TouchableOpacity>
 
       {/* Toast */}
       {toastVisible && (

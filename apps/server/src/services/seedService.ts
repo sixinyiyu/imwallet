@@ -53,6 +53,18 @@ export async function runSeed(): Promise<void> {
       });
       logger.info("SEED", "已创建 tx_restrict_wallet 配置项: false");
     }
+
+    // Ensure recharge_allowed_devices exists (default: empty array)
+    // 充值允许设备列表，值为 JSON 数组字符串，如 ["device_id_1", "device_id_2"]
+    const existingRechargeDevices = await prisma.appConfig.findUnique({
+      where: { key: "recharge_allowed_devices" },
+    });
+    if (!existingRechargeDevices) {
+      await prisma.appConfig.create({
+        data: { key: "recharge_allowed_devices", value: "[]" },
+      });
+      logger.info("SEED", "已创建 recharge_allowed_devices 配置项: []");
+    }
   } catch (err: any) {
     logger.warn("SEED", `种子数据初始化失败: ${err.message}`);
   }

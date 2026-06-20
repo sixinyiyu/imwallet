@@ -279,6 +279,34 @@ model AppConfig {
   @@map("app_configs")
 }
 
+/// 充值记录表：管理员对系统内钱包进行代币充值的记录
+model Recharge {
+  id            String   @id @default(uuid())
+  /// 充值目标钱包 ID
+  walletId      String   @map("wallet_id") @db.VarChar(36)
+  /// 钱包别名（快照）
+  walletAlias   String   @map("wallet_alias") @db.VarChar(64)
+  /// 钱包地址（快照）
+  walletAddress String   @map("wallet_address") @db.VarChar(64)
+  /// 代币符号
+  tokenSymbol   String   @map("token_symbol") @db.VarChar(16)
+  /// 代币名称
+  tokenName     String   @map("token_name") @db.VarChar(64)
+  /// 充值金额
+  amount        Decimal  @db.Decimal(30, 8)
+  /// 备注
+  memo          String   @default("") @db.VarChar(256)
+  /// 操作设备 ID（Ed25519 公钥 hex）
+  deviceId      String   @map("device_id") @db.VarChar(64)
+  /// 操作设备平台（ios/android/web）
+  platform      String   @db.VarChar(16)
+  /// App 版本号
+  version       String?  @db.VarChar(32)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("recharges")
+}
+
 /// App日志表：存储客户端崩溃日志和关键业务失败日志
 model AppLog {
   id         Int      @id @default(autoincrement())

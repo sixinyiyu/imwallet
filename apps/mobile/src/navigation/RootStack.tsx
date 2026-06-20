@@ -19,6 +19,7 @@ import AddressBookScreen from "../screens/AddressBookScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import ServiceConfigScreen from "../screens/ServiceConfigScreen";
 import ConfigManageScreen from "../screens/ConfigManageScreen";
+import RechargeScreen from "../screens/RechargeScreen";
 import SecurityScreen from "../screens/SecurityScreen";
 import AboutScreen from "../screens/AboutScreen";
 import ScanScreen from "../screens/ScanScreen";
@@ -146,6 +147,11 @@ export function RootStack() {
         name="ConfigManage"
         component={ConfigManageScreen}
         options={{ ...CENTERED_HEADER, title: "配置管理" }}
+      />
+      <Stack.Screen
+        name="Recharge"
+        component={RechargeScreen}
+        options={{ ...CENTERED_HEADER, title: "充值管理" }}
       />
       <Stack.Screen
         name="Security"

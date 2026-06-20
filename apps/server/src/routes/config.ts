@@ -103,6 +103,18 @@ router.put("/update", asyncHandler(async (req: Request, res: Response) => {
     throw createError(400, "交易限制开关必须为 true 或 false", "INVALID_TX_RESTRICT_VALUE");
   }
 
+  // Validate recharge_allowed_devices value if updating (must be valid JSON array string)
+  if (key === "recharge_allowed_devices") {
+    try {
+      const parsed = JSON.parse(value);
+      if (!Array.isArray(parsed) || !parsed.every((v) => typeof v === "string")) {
+        throw new Error("not string array");
+      }
+    } catch {
+      throw createError(400, "充值允许设备列表必须为 JSON 字符串数组，如 [\"device_id_1\"]", "INVALID_RECHARGE_DEVICES");
+    }
+  }
+
   const updated = await prisma.appConfig.update({
     where: { key },
     data: { value },

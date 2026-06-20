@@ -14,6 +14,7 @@ import configRoutes from "./routes/config";
 import accountRoutes from "./routes/account";
 import notificationRoutes from "./routes/notification";
 import logRoutes from "./routes/log";
+import rechargeRoutes from "./routes/recharge";
 import { initRSAKeys } from "./services/rsaService";
 import { runMigrations } from "./services/migrator";
 import { runSeed } from "./services/seedService";
@@ -55,6 +56,7 @@ app.use("/api/v1/config", configRoutes);
 app.use("/api/v1/accounts", accountRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/logs", logRoutes);
+app.use("/api/v1/recharges", rechargeRoutes);
 
 // Error handler
 app.use(errorHandler);
