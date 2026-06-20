@@ -1,5 +1,17 @@
 import React, { useEffect, useState, useRef } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Animated, Platform } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Animated,
+  Platform,
+  Modal,
+  TextInput,
+  Pressable,
+  KeyboardAvoidingView,
+} from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
@@ -10,6 +22,7 @@ import {
   getLogUploadEnabled,
   setLogUploadEnabled,
 } from "../services/logService";
+import { configService } from "../services/configService";
 
 /** 绿色主题自定义开关 */
 function GreenToggle({ value, onValueChange }: { value: boolean; onValueChange: (v: boolean) => void }) {
@@ -73,10 +86,18 @@ export default function SettingsScreen() {
   const [uploadResult, setUploadResult] = useState<string | null>(null);
   const [logUploadEnabled, setLogUploadEnabled] = useState(false);
 
+  // 服务配置
+  const [serviceConfigEnabled, setServiceConfigEnabled] = useState(false);
+  const [showPwdDrawer, setShowPwdDrawer] = useState(false);
+  const [pwdInput, setPwdInput] = useState("");
+  const [pwdVerifying, setPwdVerifying] = useState(false);
+  const [pwdError, setPwdError] = useState<string | null>(null);
+
   useEffect(() => {
     loadCurrency();
     loadPendingCount();
     loadLogUploadEnabled();
+    loadServiceConfigEnabled();
   }, []);
 
   const loadPendingCount = async () => {
@@ -84,7 +105,7 @@ export default function SettingsScreen() {
       const count = await getPendingLogCount();
       setPendingCount(count);
     } catch {
-      setPendingCount(-1); // unknown
+      setPendingCount(-1);
     }
   };
 
@@ -93,13 +114,62 @@ export default function SettingsScreen() {
     setLogUploadEnabled(enabled);
   };
 
+  const loadServiceConfigEnabled = async () => {
+    const enabled = await configService.getServiceConfigEnabled();
+    setServiceConfigEnabled(enabled);
+  };
+
   const handleToggleLogUpload = async (enabled: boolean) => {
     setLogUploadEnabled(enabled);
     await setLogUploadEnabled(enabled);
     if (enabled) {
-      // 开启时刷新待上报数量
       loadPendingCount();
     }
+  };
+
+  // 服务配置开关：开启需密码验证，关闭直接关闭
+  const handleToggleServiceConfig = (enabled: boolean) => {
+    if (enabled) {
+      // 开启 → 弹出密码抽屉
+      setPwdInput("");
+      setPwdError(null);
+      setShowPwdDrawer(true);
+    } else {
+      // 关闭 → 直接关闭
+      setServiceConfigEnabled(false);
+      configService.setServiceConfigEnabled(false);
+    }
+  };
+
+  const handleVerifyPwd = async () => {
+    if (!pwdInput.trim()) {
+      setPwdError("请输入密码");
+      return;
+    }
+    setPwdVerifying(true);
+    setPwdError(null);
+    try {
+      await configService.verifyServerPassword(pwdInput.trim());
+      // 密码正确 → 启用服务配置
+      setServiceConfigEnabled(true);
+      await configService.setServiceConfigEnabled(true);
+      setShowPwdDrawer(false);
+      setPwdInput("");
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 403) {
+        setPwdError("密码错误，请重试");
+      } else {
+        setPwdError(err?.response?.data?.error || "验证失败，请检查网络");
+      }
+    }
+    setPwdVerifying(false);
+  };
+
+  const handleClosePwdDrawer = () => {
+    setShowPwdDrawer(false);
+    setPwdInput("");
+    setPwdError(null);
   };
 
   const handleUploadLogs = async () => {
@@ -134,9 +204,7 @@ export default function SettingsScreen() {
       <View style={styles.menuItem}>
         <View style={styles.menuLeft}>
           <Text style={styles.menuLabel}>日志上报</Text>
-          <Text style={styles.menuHint}>
-            开启后可手动上传异常日志
-          </Text>
+          <Text style={styles.menuHint}>开启后可手动上传异常日志</Text>
         </View>
         <GreenToggle value={logUploadEnabled} onValueChange={handleToggleLogUpload} />
       </View>
@@ -178,15 +246,78 @@ export default function SettingsScreen() {
         </View>
       )}
 
-      {/* 服务配置 */}
-      <TouchableOpacity
-        style={styles.menuItem}
-        onPress={() => navigation.navigate("ServiceConfig")}
-        activeOpacity={0.7}
+      {/* 服务配置开关 */}
+      <View style={styles.menuItem}>
+        <View style={styles.menuLeft}>
+          <Text style={styles.menuLabel}>服务配置</Text>
+          <Text style={styles.menuHint}>开启后可查看服务配置详情</Text>
+        </View>
+        <GreenToggle value={serviceConfigEnabled} onValueChange={handleToggleServiceConfig} />
+      </View>
+
+      {/* 服务配置详情入口（仅在开关开启时显示） */}
+      {serviceConfigEnabled && (
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => navigation.navigate("ServiceConfig")}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.menuLabel}>配置详情</Text>
+          <Text style={styles.menuArrow}>›</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* 密码输入抽屉 */}
+      <Modal
+        visible={showPwdDrawer}
+        transparent
+        animationType="slide"
+        onRequestClose={handleClosePwdDrawer}
       >
-        <Text style={styles.menuLabel}>服务配置</Text>
-        <Text style={styles.menuArrow}>›</Text>
-      </TouchableOpacity>
+        <KeyboardAvoidingView
+          style={styles.drawerOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <Pressable style={styles.drawerBackdrop} onPress={handleClosePwdDrawer} />
+          <View style={styles.drawerContent}>
+            <View style={styles.drawerHandle} />
+            <Text style={styles.drawerTitle}>请输入服务配置密码</Text>
+            <TextInput
+              style={styles.pwdInput}
+              value={pwdInput}
+              onChangeText={setPwdInput}
+              placeholder="请输入密码"
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+              onSubmitEditing={handleVerifyPwd}
+            />
+            {pwdError && <Text style={styles.pwdError}>{pwdError}</Text>}
+            <View style={styles.drawerActions}>
+              <TouchableOpacity
+                style={styles.drawerCancelBtn}
+                onPress={handleClosePwdDrawer}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.drawerCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.drawerConfirmBtn, pwdVerifying && styles.drawerConfirmBtnDisabled]}
+                onPress={handleVerifyPwd}
+                disabled={pwdVerifying}
+                activeOpacity={0.7}
+              >
+                {pwdVerifying ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.drawerConfirmText}>确认</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -207,11 +338,7 @@ const styles = StyleSheet.create({
   menuLabel: { fontSize: 16, fontWeight: "500", color: "#1F2937" },
   menuValue: { fontSize: 14, color: "#6B7280" },
   menuHint: { fontSize: 12, color: "#9CA3AF", marginTop: 4 },
-  uploadLink: {
-    marginLeft: 12,
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-  },
+  uploadLink: { marginLeft: 12, paddingVertical: 4, paddingHorizontal: 4 },
   uploadLinkText: { color: "#287220", fontSize: 15, fontWeight: "500" },
   uploadLinkTextDisabled: { color: "#D1D5DB" },
   resultRow: {
@@ -239,4 +366,52 @@ const styles = StyleSheet.create({
       android: { elevation: 3 },
     }),
   },
+  // 密码抽屉样式
+  drawerOverlay: { flex: 1, justifyContent: "flex-end" },
+  drawerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
+  drawerContent: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 24,
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+    paddingTop: 12,
+  },
+  drawerHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#D1D5DB",
+    alignSelf: "center",
+    marginBottom: 20,
+  },
+  drawerTitle: { fontSize: 17, fontWeight: "600", color: "#1F2937", marginBottom: 16 },
+  pwdInput: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#1F2937",
+  },
+  pwdError: { fontSize: 13, color: "#EF4444", marginTop: 8 },
+  drawerActions: { flexDirection: "row", gap: 12, marginTop: 20 },
+  drawerCancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+  },
+  drawerCancelText: { color: "#6B7280", fontWeight: "600", fontSize: 15 },
+  drawerConfirmBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: "#287220",
+    alignItems: "center",
+  },
+  drawerConfirmBtnDisabled: { opacity: 0.6 },
+  drawerConfirmText: { color: "#fff", fontWeight: "600", fontSize: 15 },
 });

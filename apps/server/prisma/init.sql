@@ -217,6 +217,17 @@ CREATE TABLE IF NOT EXISTS "notification_reads" (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "notification_reads_notification_id_device_id_idx" ON "notification_reads"("notification_id", "device_id");
 
+-- 应用配置表（key-value 字典表）
+CREATE TABLE IF NOT EXISTS "app_configs" (
+    "id"         SERIAL      NOT NULL,
+    "key"        VARCHAR(64) NOT NULL,
+    "value"      VARCHAR(256) NOT NULL,
+    "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "app_configs_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "app_configs_key_key" ON "app_configs"("key");
+
 -- App日志表（客户端崩溃日志和关键业务失败日志）
 CREATE TABLE IF NOT EXISTS "app_logs" (
     "id"         SERIAL      NOT NULL,
@@ -250,6 +261,11 @@ VALUES
     (gen_random_uuid(), 'EUR', 'Euro',             '€', 0.92,   2, NOW()),
     (gen_random_uuid(), 'JPY', 'Japanese Yen',     '¥', 155.0,  0, NOW())
 ON CONFLICT ("code") DO UPDATE SET "rate" = EXCLUDED."rate", "updated_at" = NOW();
+
+-- 应用配置种子数据
+INSERT INTO "app_configs" ("key", "value")
+VALUES ('server_pwd', 'aquad2024')
+ON CONFLICT ("key") DO NOTHING;
 
 -- ─── Migration Tracking ──────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "_migrations" (

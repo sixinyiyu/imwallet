@@ -267,6 +267,18 @@ model NotificationRead {
   @@map("notification_reads")
 }
 
+/// 应用配置表：key-value 字典表，存储系统级配置
+model AppConfig {
+  id        Int      @id @default(autoincrement())
+  /// 配置键名，如 server_pwd
+  key       String   @unique @db.VarChar(64)
+  /// 配置值
+  value     String   @db.VarChar(256)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_configs")
+}
+
 /// App日志表：存储客户端崩溃日志和关键业务失败日志
 model AppLog {
   id         Int      @id @default(autoincrement())
