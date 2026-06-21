@@ -132,7 +132,7 @@ router.get("/all", asyncHandler(async (_req: Request, res: Response) => {
   const configs = await prisma.appConfig.findMany({
     orderBy: { key: "asc" },
   });
-  res.json(configs.map((c) => ({ key: c.key, value: c.value })));
+  res.json(configs.map((c: { key: string; value: string }) => ({ key: c.key, value: c.value })));
 }));
 
 export default router;
