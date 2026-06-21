@@ -78,5 +78,8 @@
         "API_BASE_URL": "https://imwallet.dpdns.org/api/v1"
       }
     }
+  },
+  "submit": {
+    "app-store": {}
   }
 }
