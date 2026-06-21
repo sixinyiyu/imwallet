@@ -1,37 +1,12 @@
 import api from "./api";
-import type { Account, ChainInfo } from "../types";
+import type { ChainInfo } from "../types";
 
+/**
+ * 账户服务（服务端 API 部分）。
+ * 账户 CRUD 在 localAccountService 中本地处理。
+ * 服务端仅保留链/资产查询和网络列表批量查询。
+ */
 export const accountService = {
-  async getWalletAccounts(walletId: string): Promise<{ accounts: Account[] }> {
-    const { data } = await api.get(`/accounts/wallets/${walletId}/accounts`);
-    return data;
-  },
-
-  async createAccount(
-    walletId: string,
-    network: string,
-    name?: string,
-    mnemonic?: string,
-    allowMultiAccount?: boolean
-  ): Promise<{ accounts: Account[] }> {
-    const { data } = await api.post(`/accounts/wallets/${walletId}/accounts`, {
-      network,
-      name,
-      mnemonic,
-      allowMultiAccount,
-    });
-    return data;
-  },
-
-  async getAccountDetail(accountId: string): Promise<Account> {
-    const { data } = await api.get(`/accounts/accounts/${accountId}`);
-    return data;
-  },
-
-  async deleteAccount(accountId: string): Promise<void> {
-    await api.delete(`/accounts/accounts/${accountId}`);
-  },
-
   /** 获取支持创建账户的链列表 */
   async getAvailableChains(): Promise<{ chains: ChainInfo[] }> {
     const { data } = await api.get("/accounts/chains/available");

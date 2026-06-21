@@ -1,36 +1,38 @@
-export interface Device {
+/** 服务端返回的精简设备信息 */
+export interface ServerDevice {
   id: number;
   device_id: string;
   platform: string;
-  platform_store: string | null;
-  os: string | null;
-  model: string | null;
-  locale: string | null;
-  version: string | null;
-  currency: string | null;
-  token: string | null;
-  is_push_enabled: boolean;
-  is_price_alerts_enabled: boolean;
-  subscriptions_version: number | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface Wallet extends SimpleWallet {
-  updatedAt?: string;
-  tokenBalances: WalletTokenBalance[];
-  totalBalanceCny: string;
-  memo?: string;
-  passwordHint?: string;
+/** 本地钱包主表 */
+export interface LocalWallet {
+  id: string;
+  name: string;
+  type: string;
+  sort_order: number;
+  is_pinned: boolean;
+  source: string;
+  avatar: string;
+  password_hash: string;
+  password_hint: string;
+  mnemonic_hash: string;
+  created_at: string;
+  updated_at: string;
 }
 
-/** 简单钱包信息（不含代币余额，供钱包首页下拉列表使用） */
+/** 简单钱包信息（供 UI 使用） */
 export interface SimpleWallet {
   id: string;
-  identifier: string;
-  alias: string;
+  name: string;
   source: string;
-  accountCount: number;
+  type: string;
+  sort_order: number;
+  is_pinned: boolean;
+  avatar: string;
+  password_hint: string;
   createdAt: string;
 }
 
@@ -46,28 +48,37 @@ export interface WalletBalanceDetail {
   assets: AssetBalance[];
 }
 
+/** 钱包详情（含余额信息） */
+export interface Wallet extends SimpleWallet {
+  updatedAt?: string;
+  tokenBalances: WalletTokenBalance[];
+  totalBalanceCny: string;
+}
+
+/** 本地派生账户 */
 export interface Account {
   id: string;
   walletId: string;
-  network: string;
-  index: number;
-  name: string;
+  chain: string;
+  derivationPath: string;
   address: string;
+  extendedPubkey: string;
+  accountIndex: number;
+  name: string;
+  serverAddressId: string;
   createdAt: string;
   updatedAt?: string;
-  /** 该账户下的资产列表 */
-  assets: Array<{
-    id: string;
-    assetId: string;
-    symbol: string;
-    name: string;
-    type: string;
-    chain: string;
-    balance: string;
-    decimals: number;
-    tokenId?: string | null;
-    iconUrl?: string;
-  }>;
+}
+
+/** 地址元信息 */
+export interface AddressInfo {
+  id: string;
+  chain: string;
+  address: string;
+  walletId: string;
+  name: string;
+  type: string;
+  createdAt: string;
 }
 
 export interface WalletTokenBalance {
@@ -118,7 +129,6 @@ export interface ChainInfo {
   displayName: string;
   accountEnable: boolean;
   derivationPath: string;
-  /** 该链下可创建账户的资产列表 */
   assets: Array<{
     id: string;
     symbol: string;
@@ -133,10 +143,10 @@ export interface ChainInfo {
 export interface Transaction {
   id: string;
   txHash: string;
-  fromAddress: string;  // 付款链地址（如 T.../0x...）
-  toAddress: string;   // 收款链地址（始终记录）
-  tokenSymbol: string; // 代币符号（如 USDT、TRX）
-  tokenName: string;   // 代币名称
+  fromAddress: string;
+  toAddress: string;
+  tokenSymbol: string;
+  tokenName: string;
   amount: string;
   fee: string;
   receivedAmount: string;
@@ -150,12 +160,26 @@ export interface Transaction {
   toContactName: string;
 }
 
+/** 联系人（支持多链地址） */
 export interface Contact {
   id: string;
   name: string;
+  avatar: string;
+  memo: string;
+  createdAt: string;
+  updatedAt: string;
+  /** 联系人的多链地址列表 */
+  addresses: ContactAddress[];
+}
+
+/** 联系人多链地址 */
+export interface ContactAddress {
+  id: string;
+  contactId: string;
+  chain: string;
   address: string;
-  network: string;
-  memo: string | null;
+  memo: string;
+  createdAt: string;
 }
 
 export interface Notification {
@@ -171,4 +195,12 @@ export interface ApiResponse<T> {
   data: T;
   error?: string;
   code?: string;
+}
+
+/** 服务端钱包地址（wallets_addresses 表） */
+export interface ServerWalletAddress {
+  id: string;
+  chain: string;
+  address: string;
+  createdAt: string;
 }

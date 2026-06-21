@@ -39,7 +39,8 @@
           }
         }
       ],
-      "./plugins/withAbiFilter"
+      "./plugins/withAbiFilter",
+      "expo-sqlite"
     ],
     "extra": {
       "apiBaseUrl": "https://imwallet.dpdns.org/api/v1",

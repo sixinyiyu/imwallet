@@ -1,22 +1,6 @@
-import { createHash } from "crypto";
-import bcrypt from "bcryptjs";
 import prisma from "../config/prisma";
 import { createError } from "../middleware/errorHandler";
 import { logger } from "../utils/logger";
-import { decryptPassword as rsaDecryptPassword } from "../services/rsaService";
-import { deriveAddressFromMnemonic } from "../services/derivationService";
-
-/**
- * Generate a wallet identifier: aqud + 32 random Base62 characters
- */
-export function generateIdentifier(): string {
-  const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  let identifier = "aqud";
-  for (let i = 0; i < 32; i++) {
-    identifier += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return identifier;
-}
 
 export interface WalletTokenBalance {
   id: string;
@@ -35,10 +19,8 @@ export interface WalletTokenBalance {
 /** 简单钱包信息（不含代币余额，供钱包首页下拉列表使用） */
 export interface SimpleWallet {
   id: string;
-  identifier: string;
-  alias: string;
+  name: string;
   source: string;
-  accountCount: number;
   createdAt: Date;
 }
 
@@ -69,10 +51,8 @@ export interface WalletBalanceDetail {
 
 export interface WalletSummary {
   id: string;
-  identifier: string;
-  alias: string;
+  name: string;
   source: string;
-  accountCount: number;
   createdAt: Date;
   tokenBalances: WalletTokenBalance[];
   totalBalanceCny: string;
@@ -80,47 +60,34 @@ export interface WalletSummary {
 
 export interface WalletDetail extends WalletSummary {
   updatedAt: Date;
-  passwordHint?: string;
 }
 
 /**
- * Generate a deterministic mnemonic hash from a seed.
- * For CREATE wallets (no mnemonic), we use a hash-based derivation.
- * For IMPORT wallets, use BIP39/BIP44 deterministic derivation via derivationService.
- */
-export function deriveMnemonicHash(seed: string, index: number): string {
-  const hash = createHash("sha256")
-    .update(`${seed}-${index}`)
-    .digest("hex");
-
-  return "0x" + hash.slice(0, 40).toUpperCase();
-}
-
-/**
- * Compute wallet's asset balances by aggregating all account_assets under this wallet.
+ * Compute wallet's asset balances by aggregating all assets_addresses under this wallet.
+ * Uses wallet_subscriptions → wallets_addresses → assets_addresses (via address_id) chain.
  */
 async function computeTokenBalances(walletId: string): Promise<{
   tokenBalances: WalletTokenBalance[];
   totalBalanceCny: string;
 }> {
-  // 1. Find all accounts under this wallet
-  const accounts = await prisma.account.findMany({
-    where: { walletId },
-    select: { id: true },
+  // 1. 通过 subscriptions 获取 address_id
+  const subs = await prisma.walletSubscription.findMany({
+    where: { wallet_id: walletId, address_id: { not: "" } },
+    select: { address_id: true },
   });
-  const accountIds = accounts.map((a: any) => a.id);
+  const addressIds = subs.map((s: any) => s.address_id);
 
-  if (accountIds.length === 0) {
+  if (addressIds.length === 0) {
     return { tokenBalances: [], totalBalanceCny: "0.00" };
   }
 
-  // 2. Fetch all account_assets for these accounts
-  const accountAssets = await prisma.accountAsset.findMany({
-    where: { accountId: { in: accountIds } },
+  // 2. Fetch all assets_addresses for these addresses
+  const assetsAddresses = await prisma.assetsAddress.findMany({
+    where: { addressId: { in: addressIds } },
   });
 
   // 3. Fetch asset definitions
-  const assetIds = [...new Set(accountAssets.map((aa: any) => aa.assetId))];
+  const assetIds = [...new Set(assetsAddresses.map((aa: any) => aa.assetId))];
   const assets = await prisma.asset.findMany({
     where: { id: { in: assetIds } },
   });
@@ -134,9 +101,9 @@ async function computeTokenBalances(walletId: string): Promise<{
   const usdRate = usdFiat ? parseFloat(usdFiat.rate.toString()) : 1;
   const cnyRate = cnyFiat ? parseFloat(cnyFiat.rate.toString()) : 7.25;
 
-  // 5. Aggregate balances by asset (sum across accounts)
+  // 5. Aggregate balances by asset (sum across addresses)
   const balanceMap = new Map<string, number>();
-  for (const aa of accountAssets) {
+  for (const aa of assetsAddresses) {
     const current = balanceMap.get(aa.assetId) || 0;
     balanceMap.set(aa.assetId, current + parseFloat(aa.balance.toString()));
   }
@@ -147,7 +114,6 @@ async function computeTokenBalances(walletId: string): Promise<{
   for (const [assetId, totalBalance] of balanceMap) {
     const ast = assetMap.get(assetId);
     if (!ast) continue;
-    const balance = totalBalance.toFixed(8).replace(/\.?0+$/, "");
     const usdValue = (totalBalance * usdRate).toFixed(2);
     const cnyValue = (totalBalance * cnyRate).toFixed(2);
     totalCny += totalBalance * cnyRate;
@@ -173,198 +139,71 @@ async function computeTokenBalances(walletId: string): Promise<{
   };
 }
 
-/** 创建/导入钱包并自动关联设备（统一接口） */
+/**
+ * 创建/导入钱包（精简版）：服务端只创建 { id, source }，不存密码/助记词哈希。
+ * 密码、助记词哈希、别名等存储在客户端 SQLite。
+ * walletId 由客户端生成（aqud + SHA256(mnemonic)前32位hex）。
+ * 如果 walletId 已存在（相同助记词导入），更新 alias 但不改 source，返回已有 wallet。
+ * 不再创建钱包级订阅（空 chain），只创建/更新 wallets 表记录。
+ * 地址级订阅在添加网络账户时创建。
+ */
 export async function createOrImportWallet(
   deviceId: string,
-  source: "CREATE" | "IMPORT",
+  walletId: string,
   alias: string,
-  encryptedPassword: string,
-  passwordHint?: string,
-  mnemonic?: string,
-  privateKey?: string
-): Promise<WalletDetail> {
-  logger.info("WALLET", `${source === "IMPORT" ? "导入" : "创建"}钱包: deviceId=${deviceId.slice(0, 8)}..., alias=${alias}`);
+  source: "CREATE" | "IMPORT"
+): Promise<{ id: string; name: string; source: string; createdAt: Date; updatedAt: Date }> {
+  logger.info("WALLET", `${source === "IMPORT" ? "导入" : "创建"}钱包: deviceId=${deviceId.slice(0, 8)}..., walletId=${walletId}`);
 
-  const device = await prisma.device.findUnique({
-    where: { device_id: deviceId },
-  });
-  if (!device) {
-    throw createError(404, "设备未注册，请重新登录", "DEVICE_NOT_FOUND");
-  }
-
-  // 解密 RSA 加密的密码
-  let rawPassword: string;
-  try {
-    rawPassword = rsaDecryptPassword(encryptedPassword);
-  } catch {
-    throw createError(400, "密码解密失败，请重试", "PASSWORD_DECRYPT_FAILED");
-  }
-  if (rawPassword.length < 8) {
-    throw createError(400, "密码至少需要8个字符", "PASSWORD_TOO_SHORT");
-  }
-
-  // bcrypt 哈希
-  const passwordHash = await bcrypt.hash(rawPassword, 10);
-
-  // Derive mnemonic hash (mnemonic is always provided by the client)
-  const mnemonicHash = await deriveAddressFromMnemonic(mnemonic!, "Ethereum", 0);
-  const identifier = generateIdentifier();
-
-  // 检查地址是否已存在（同一助记词可能已被导入过）
-  const existingWallet = await prisma.wallet.findFirst({
-    where: { mnemonicHash },
+  // 检查钱包是否已存在（相同助记词导入会生成相同的 walletId）
+  const existingWallet = await prisma.wallet.findUnique({
+    where: { id: walletId },
   });
 
   if (existingWallet) {
-    // 地址已存在，检查当前设备是否已订阅该钱包
-    const existingSub = await prisma.walletSubscription.findFirst({
-      where: {
-        wallet_id: existingWallet.id,
-        device_id: device.id,
-      },
+    // 钱包已存在（相同助记词导入），更新 alias 但不改 source
+    logger.info("WALLET", `钱包已存在，更新别名: walletId=${walletId}`);
+
+    // 更新 alias（来源 source 不变）
+    const updatedWallet = await prisma.wallet.update({
+      where: { id: walletId },
+      data: { alias },
     });
-
-    if (existingSub) {
-      // 当前设备已订阅该钱包
-      throw createError(409, "钱包已存在于当前设备", "WALLET_ALREADY_EXISTS");
-    }
-
-    // 当前设备未订阅，自动添加订阅（多设备共享同一钱包）
-    logger.info("WALLET", `钱包地址已存在，为当前设备添加订阅: walletId=${existingWallet.id}, deviceId=${deviceId.slice(0, 8)}...`);
-    await prisma.walletSubscription.create({
-      data: {
-        wallet_id: existingWallet.id,
-        device_id: device.id,
-      },
-    });
-
-    const { tokenBalances, totalBalanceCny } = await computeTokenBalances(existingWallet.id);
-    const accountCount = await prisma.account.count({ where: { walletId: existingWallet.id } });
 
     return {
-      id: existingWallet.id,
-      identifier: existingWallet.identifier,
-      alias: existingWallet.alias,
-      source: existingWallet.source as string,
-      accountCount,
-      createdAt: existingWallet.createdAt,
-      updatedAt: existingWallet.updatedAt,
-      tokenBalances,
-      totalBalanceCny,
+      id: updatedWallet.id,
+      name: updatedWallet.alias,
+      source: updatedWallet.source as string,
+      createdAt: updatedWallet.createdAt,
+      updatedAt: updatedWallet.updatedAt,
     };
   }
 
-  // 地址不存在，创建新钱包（不使用 nested write，分步创建）
+  // 创建新钱包（id 由客户端生成）
   const wallet = await prisma.wallet.create({
     data: {
-      identifier,
+      id: walletId,
       alias,
-      mnemonicHash,
       source,
-      password: passwordHash,
-       passwordHint: passwordHint || '',    },
-  });
-
-  // 创建钱包-设备订阅关系（不使用 nested create）
-  await prisma.walletSubscription.create({
-    data: {
-      wallet_id: wallet.id,
-      device_id: device.id,
     },
   });
 
-  logger.info("WALLET", `${source === "IMPORT" ? "导入" : "创建"}钱包成功: walletId=${wallet.id}, identifier=${identifier}, mnemonicHash=${mnemonicHash}`);
-
-  const { tokenBalances, totalBalanceCny } = await computeTokenBalances(wallet.id);
-  const accountCount = await prisma.account.count({ where: { walletId: wallet.id } });
+  logger.info("WALLET", `${source === "IMPORT" ? "导入" : "创建"}钱包成功: walletId=${wallet.id}`);
 
   return {
     id: wallet.id,
-    identifier: wallet.identifier,
-    alias: wallet.alias,
+    name: wallet.alias,
     source: wallet.source as string,
-    accountCount,
     createdAt: wallet.createdAt,
     updatedAt: wallet.updatedAt,
-    tokenBalances,
-    totalBalanceCny,
-  };
-}
-
-/** 重置钱包密码（通过助记词验证身份后更新密码） */
-export async function resetWalletPassword(
-  walletId: string,
-  mnemonic: string,
-  encryptedPassword: string,
-  passwordHint?: string
-): Promise<WalletDetail> {
-  logger.info("WALLET", `重置密码: walletId=${walletId}`);
-
-  const wallet = await prisma.wallet.findUnique({
-    where: { id: walletId },
-  });
-  if (!wallet) {
-    throw createError(404, "钱包不存在");
-  }
-
-  // Verify mnemonic matches the wallet mnemonic hash
-  const derivedHash = await deriveAddressFromMnemonic(mnemonic, "Ethereum", 0);
-  if (derivedHash !== wallet.mnemonicHash) {
-    throw createError(400, "助记词与当前钱包不匹配", "MNEMONIC_MISMATCH");
-  }
-
-  // Decrypt RSA encrypted password
-  let rawPassword: string;
-  try {
-    rawPassword = rsaDecryptPassword(encryptedPassword);
-  } catch {
-    throw createError(400, "Password decryption failed", "PASSWORD_DECRYPT_FAILED");
-  }
-  if (rawPassword.length < 8) {
-    throw createError(400, "Password must be at least 8 characters", "PASSWORD_TOO_SHORT");
-  }
-
-  const passwordHash = await bcrypt.hash(rawPassword, 10);
-
-  // Update password
-  await prisma.wallet.update({
-    where: { id: walletId },
-    data: {
-      password: passwordHash,
-      passwordHint: passwordHint || '',
-    },
-  });
-
-  logger.info("WALLET", `重置密码成功: walletId=${walletId}`);
-
-  const { tokenBalances, totalBalanceCny } = await computeTokenBalances(walletId);
-  const accountCount = await prisma.account.count({ where: { walletId } });
-
-  return {
-    id: wallet.id,
-    identifier: wallet.identifier,
-    alias: wallet.alias,
-    source: wallet.source as string,
-    accountCount,
-    createdAt: wallet.createdAt,
-    updatedAt: wallet.updatedAt,
-    tokenBalances,
-    totalBalanceCny,
   };
 }
 
 /** 获取设备关联的所有钱包（简化数据，不含代币余额） */
 export async function getDeviceWallets(deviceId: string): Promise<SimpleWallet[]> {
-  const device = await prisma.device.findUnique({
-    where: { device_id: deviceId },
-  });
-  if (!device) {
-    throw createError(404, "Device not found", "DEVICE_NOT_FOUND");
-  }
-
   // Fetch subscriptions and wallets separately (no relation include)
   const subscriptions = await prisma.walletSubscription.findMany({
-    where: { device_id: device.id },
+    where: { device_id: deviceId },
     orderBy: { created_at: "desc" },
   });
 
@@ -374,26 +213,14 @@ export async function getDeviceWallets(deviceId: string): Promise<SimpleWallet[]
   });
   const walletMap = new Map<string, any>(wallets.map((w: any) => [w.id, w]));
 
-  // Batch count accounts for all wallets (single query)
-  const accountCounts = await prisma.account.groupBy({
-    by: ["walletId"],
-    where: { walletId: { in: walletIds } },
-    _count: { _all: true },
-  });
-  const accountCountMap = new Map<string, number>(
-    accountCounts.map((ac: any) => [ac.walletId, ac._count._all])
-  );
-
   const simpleWallets: SimpleWallet[] = [];
   for (const sub of subscriptions) {
     const wallet = walletMap.get(sub.wallet_id);
     if (!wallet) continue;
     simpleWallets.push({
       id: wallet.id,
-      identifier: wallet.identifier,
-      alias: wallet.alias,
+      name: wallet.alias,
       source: wallet.source as string,
-      accountCount: accountCountMap.get(wallet.id) || 0,
       createdAt: wallet.createdAt,
     });
   }
@@ -403,16 +230,9 @@ export async function getDeviceWallets(deviceId: string): Promise<SimpleWallet[]
 
 /** 获取设备关联的所有钱包（聚合数据：含网络列表，不含代币余额） */
 export async function getDeviceWalletsAggregate(deviceId: string): Promise<AggregateWallet[]> {
-  const device = await prisma.device.findUnique({
-    where: { device_id: deviceId },
-  });
-  if (!device) {
-    throw createError(404, "Device not found", "DEVICE_NOT_FOUND");
-  }
-
   // Fetch subscriptions and wallets separately (no relation include)
   const subscriptions = await prisma.walletSubscription.findMany({
-    where: { device_id: device.id },
+    where: { device_id: deviceId },
     orderBy: { created_at: "desc" },
   });
 
@@ -422,27 +242,33 @@ export async function getDeviceWalletsAggregate(deviceId: string): Promise<Aggre
   });
   const walletMap = new Map<string, any>(wallets.map((w: any) => [w.id, w]));
 
-  // Batch count accounts for all wallets
-  const accountCounts = await prisma.account.groupBy({
-    by: ["walletId"],
-    where: { walletId: { in: walletIds } },
-    _count: { _all: true },
+  // 通过 subscriptions 获取 address_id
+  const subs = await prisma.walletSubscription.findMany({
+    where: { wallet_id: { in: walletIds }, address_id: { not: "" } },
+    select: { wallet_id: true, address_id: true },
   });
-  const accountCountMap = new Map<string, number>(
-    accountCounts.map((ac: any) => [ac.walletId, ac._count._all])
-  );
 
-  // Batch fetch all accounts for all wallets (single query)
-  const allAccounts = await prisma.account.findMany({
-    where: { walletId: { in: walletIds } },
-    select: { walletId: true, network: true },
+  // 然后查 wallets_addresses 获取 chain
+  const addressIds = subs.map((s: any) => s.address_id);
+  const walletAddresses = await prisma.walletAddress.findMany({
+    where: { id: { in: addressIds } },
+    select: { id: true, chain: true },
   });
-  // Group by walletId, deduplicate networks
+
+  // Build address_id → chain map
+  const addressChainMap = new Map<string, string>();
+  for (const wa of walletAddresses) {
+    addressChainMap.set(wa.id, wa.chain);
+  }
+
+  // Group by walletId, deduplicate chains
   const networksMap = new Map<string, Set<string>>();
-  for (const acc of allAccounts) {
-    const set = networksMap.get(acc.walletId) || new Set<string>();
-    set.add(acc.network);
-    networksMap.set(acc.walletId, set);
+  for (const sub of subs) {
+    const chain = addressChainMap.get(sub.address_id);
+    if (!chain) continue;
+    const set = networksMap.get(sub.wallet_id) || new Set<string>();
+    set.add(chain);
+    networksMap.set(sub.wallet_id, set);
   }
 
   const aggregateWallets: AggregateWallet[] = [];
@@ -451,10 +277,8 @@ export async function getDeviceWalletsAggregate(deviceId: string): Promise<Aggre
     if (!wallet) continue;
     aggregateWallets.push({
       id: wallet.id,
-      identifier: wallet.identifier,
-      alias: wallet.alias,
+      name: wallet.alias,
       source: wallet.source as string,
-      accountCount: accountCountMap.get(wallet.id) || 0,
       createdAt: wallet.createdAt,
       networks: Array.from(networksMap.get(wallet.id) || new Set<string>()),
     });
@@ -516,15 +340,11 @@ export async function getWalletDetail(
   }
 
   const { tokenBalances, totalBalanceCny } = await computeTokenBalances(wallet.id);
-  const accountCount = await prisma.account.count({ where: { walletId: wallet.id } });
 
   return {
     id: wallet.id,
-    identifier: wallet.identifier,
-    alias: wallet.alias,
+    name: wallet.alias,
     source: wallet.source as string,
-    passwordHint: wallet.passwordHint,
-    accountCount,
     createdAt: wallet.createdAt,
     updatedAt: wallet.updatedAt,
     tokenBalances,
@@ -532,91 +352,179 @@ export async function getWalletDetail(
   };
 }
 
-/** 更新钱包别名 */
-export async function updateWalletAlias(
-  walletId: string,
-  alias: string
-): Promise<WalletSummary> {
-  const wallet = await prisma.wallet.update({
-    where: { id: walletId },
-    data: { alias },
-  });
-  const accountCount = await prisma.account.count({ where: { walletId } });
-  const { tokenBalances, totalBalanceCny } = await computeTokenBalances(walletId);
-  return {
-    id: wallet.id,
-    identifier: wallet.identifier,
-    alias: wallet.alias,
-    source: wallet.source as string,
-    accountCount,
-    createdAt: wallet.createdAt,
-    tokenBalances,
-    totalBalanceCny,
-  };
-}
-
-/** 删除钱包（取消当前设备的订阅，钱包记录保留） */
+/**
+ * 删除钱包（取消当前设备的订阅）
+ * 删除该设备对该钱包的所有订阅记录（地址级）。
+ * 钱包记录和 wallets_addresses 永远保留，以便相同助记词重新导入时恢复。
+ */
 export async function deleteWallet(
   walletId: string,
   deviceId: string
 ): Promise<void> {
-  const device = await prisma.device.findUnique({
-    where: { device_id: deviceId },
-  });
-  if (!device) {
-    throw createError(404, "Device not found", "DEVICE_NOT_FOUND");
-  }
-
-  const subscription = await prisma.walletSubscription.findFirst({
+  const result = await prisma.walletSubscription.deleteMany({
     where: {
       wallet_id: walletId,
-      device_id: device.id,
+      device_id: deviceId,
     },
   });
 
-  if (!subscription) {
+  if (result.count === 0) {
     throw createError(404, "该设备未订阅此钱包");
   }
 
-  logger.info("WALLET", `删除钱包订阅: walletId=${walletId}, deviceId=${deviceId.slice(0, 8)}...`);
+  logger.info("WALLET", `删除钱包订阅: walletId=${walletId}, deviceId=${deviceId.slice(0, 8)}..., 删除 ${result.count} 条订阅`);
 
-  // 删除订阅关系
-  await prisma.walletSubscription.delete({
-    where: { id: subscription.id },
-  });
-
-  // 如果没有任何设备订阅此钱包，则真正删除钱包
-  const remainingSubs = await prisma.walletSubscription.count({
-    where: { wallet_id: walletId },
-  });
-
-  if (remainingSubs === 0) {
-    logger.info("WALLET", `钱包无其他订阅，删除钱包记录: walletId=${walletId}`);
-    await prisma.wallet.delete({
-      where: { id: walletId },
-    });
-  }
+  // 不删除 wallets、wallets_addresses、assets_addresses
+  // 钱包永远保留，以便相同助记词重新导入时恢复
 }
 
-/** 验证钱包密码 */
-export async function verifyWalletPassword(
+// ─── WalletAddress 管理 ──────────────────────────────────────────────────────
+
+export interface WalletAddressResult {
+  id: string;
+  chain: string;
+  address: string;
+  createdAt: Date;
+}
+
+/**
+ * 同步地址到服务端 wallets_addresses 表。
+ * 客户端创建账户后调用此接口。
+ * 同时为该地址自动创建默认资产的 assets_addresses 记录。
+ * 地址与钱包的关联通过 wallet_subscriptions 实现。
+ */
+export async function addWalletAddress(
   walletId: string,
-  encryptedPassword: string
-): Promise<boolean> {
+  deviceId: string,
+  chain: string,
+  address: string
+): Promise<WalletAddressResult> {
+  logger.info("WALLET", `同步地址: walletId=${walletId}, chain=${chain}, address=${address}`);
+
+  // 检查钱包是否存在
   const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
   if (!wallet) {
-    throw createError(404, "Wallet not found");
+    throw createError(404, "钱包不存在", "WALLET_NOT_FOUND");
   }
 
-  // RSA 解密客户端发送的密码
-  let rawPassword: string;
-  try {
-    rawPassword = rsaDecryptPassword(encryptedPassword);
-  } catch {
-    throw createError(400, "Password decryption failed", "PASSWORD_DECRYPT_FAILED");
+  // 1. 查找或创建 wallets_addresses（unique on chain+address）
+  const existing = await prisma.walletAddress.findUnique({
+    where: {
+      chain_address: { chain, address },
+    },
+  });
+
+  let walletAddress;
+  if (existing) {
+    walletAddress = existing;
+  } else {
+    walletAddress = await prisma.walletAddress.create({
+      data: { chain, address },
+    });
   }
 
-  // bcrypt 比对
-  const match = await bcrypt.compare(rawPassword, wallet.password);
-  return match;
+  // 2. 创建 wallet_subscription（wallet_id + chain + address_id）
+  // 地址级订阅是钱包级的，不按 device_id 去重：
+  // 同一助记词在不同设备派生出相同地址，订阅已存在则跳过，
+  // 这样所有设备共享同一地址的交易记录和余额。
+  const existingSub = await prisma.walletSubscription.findFirst({
+    where: {
+      wallet_id: walletId,
+      chain,
+      address_id: walletAddress.id,
+    },
+  });
+
+  if (!existingSub) {
+    await prisma.walletSubscription.create({
+      data: {
+        wallet_id: walletId,
+        device_id: deviceId,
+        chain,
+        address_id: walletAddress.id,
+      },
+    });
+  }
+
+  // 3. 创建 assets_addresses 默认资产记录（加 chain 字段）
+  const defaultAssets = await prisma.asset.findMany({
+    where: { isActive: true, chain, isDefault: true },
+  });
+
+  for (const asset of defaultAssets) {
+    await prisma.assetsAddress.upsert({
+      where: {
+        addressId_assetId: { addressId: walletAddress.id, assetId: asset.id },
+      },
+      update: {},
+      create: {
+        addressId: walletAddress.id,
+        assetId: asset.id,
+        chain,
+        balance: 0,
+      },
+    });
+    logger.info("WALLET", `自动添加资产: asset=${asset.symbol} (${asset.type}), addressId=${walletAddress.id}`);
+  }
+
+  return {
+    id: walletAddress.id,
+    chain: walletAddress.chain,
+    address: walletAddress.address,
+    createdAt: walletAddress.createdAt,
+  };
+}
+
+/**
+ * 删除服务端的地址订阅（客户端删除账户时同步调用）。
+ * 地址级订阅是钱包级的、跨设备共享的，删除时按 wallet_id + address_id 操作。
+ * 只删除 wallet_subscription，不删除 wallets_addresses 和 assets_addresses。
+ */
+export async function deleteWalletAddress(
+  walletId: string,
+  _deviceId: string,
+  addressId: string
+): Promise<void> {
+  logger.info("WALLET", `删除地址订阅: walletId=${walletId}, addressId=${addressId}`);
+
+  // 地址级订阅是钱包级的，不按 device_id 过滤
+  const result = await prisma.walletSubscription.deleteMany({
+    where: {
+      wallet_id: walletId,
+      address_id: addressId,
+    },
+  });
+
+  if (result.count === 0) {
+    throw createError(404, "地址订阅不存在", "SUBSCRIPTION_NOT_FOUND");
+  }
+
+  // 不删除 wallets_addresses 和 assets_addresses
+}
+
+/**
+ * 获取钱包的所有链上地址（服务端视角）。
+ * 通过 wallet_subscriptions 获取地址列表。
+ */
+export async function getWalletAddresses(walletId: string): Promise<WalletAddressResult[]> {
+  const subs = await prisma.walletSubscription.findMany({
+    where: { wallet_id: walletId, address_id: { not: "" } },
+  });
+  const addressIds = subs.map((s: any) => s.address_id);
+
+  if (addressIds.length === 0) {
+    return [];
+  }
+
+  const addresses = await prisma.walletAddress.findMany({
+    where: { id: { in: addressIds } },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return addresses.map((wa: any) => ({
+    id: wa.id,
+    chain: wa.chain,
+    address: wa.address,
+    createdAt: wa.createdAt,
+  }));
 }

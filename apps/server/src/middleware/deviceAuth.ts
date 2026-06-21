@@ -21,8 +21,7 @@ setInterval(() => {
 }, 60 * 1000);
 
 export interface DevicePayload {
-  deviceId: string;   // 公钥 hex (64字符)
-  dbId: number;       // devices 表自增 ID
+  deviceId: string;   // 公钥 hex (64字符)，即 devices.id
   platform: string;
 }
 
@@ -142,7 +141,7 @@ export async function deviceAuthMiddleware(
 
   // 6. 签名合法，查询设备是否已注册
   let device = await prisma.device.findUnique({
-    where: { device_id: deviceId },
+    where: { id: deviceId },
   });
 
   // 7. 设备不存在但签名合法 → 数据库被清空/重置，自动重建设备记录
@@ -150,17 +149,16 @@ export async function deviceAuthMiddleware(
     logger.info("DEVICE_AUTH", `设备未注册但签名合法，自动重建设备记录 - device_id=${deviceId.slice(0, 8)}...`);
     device = await prisma.device.create({
       data: {
-        device_id: deviceId,
+        id: deviceId,
         platform: "android",
       },
     });
-    logger.info("DEVICE_AUTH", `设备自动注册成功: id=${device.id}, device_id=${deviceId.slice(0, 8)}...`);
+    logger.info("DEVICE_AUTH", `设备自动注册成功: id=${deviceId.slice(0, 8)}...`);
   }
 
   // 8. 设置 req.device
   req.device = {
     deviceId,
-    dbId: device.id,
     platform: device.platform,
   };
 

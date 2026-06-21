@@ -21,7 +21,7 @@ interface MenuItem {
 export default function ProfileScreen() {
   const navigation = useNavigation<Nav>();
   const { wallets } = useWalletStore();
-  const totalAccountCount = wallets.reduce((sum, w) => sum + w.accountCount, 0);
+  const totalAccountCount = wallets.length;
   const [unreadCount, setUnreadCount] = React.useState(0);
   const [serviceConfigEnabled, setServiceConfigEnabled] = React.useState(false);
 

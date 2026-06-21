@@ -14,7 +14,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { walletService } from "../services/walletService";
 import { assetService } from "../services/assetService";
-import { accountService } from "../services/accountService";
+import { localAccountService } from "../services/localAccountService";
 import { rechargeService, type RechargeRecord } from "../services/rechargeService";
 import type { SimpleWallet, AssetInfo, Account } from "../types";
 import { TronIcon, USDTIcon, ChevronRightIcon } from "../components/icons";
@@ -76,7 +76,7 @@ export default function RechargeScreen() {
   /** 根据代币网络获取钱包在该网络上的链地址 */
   const getAssetAddress = (asset: AssetInfo): string => {
     if (!selectedWallet) return "";
-    const account = walletAccounts.find((a) => a.network === asset.chain);
+    const account = walletAccounts.find((a) => a.chain === asset.chain);
     return account?.address || "";
   };
 
@@ -91,7 +91,7 @@ export default function RechargeScreen() {
     setSelectedWallet(wallet);
     setShowWalletPicker(false);
     try {
-      const { accounts } = await accountService.getWalletAccounts(wallet.id);
+      const accounts = await localAccountService.getWalletAccounts(wallet.id);
       setWalletAccounts(accounts);
     } catch {
       setWalletAccounts([]);
@@ -237,7 +237,7 @@ export default function RechargeScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={selectedWallet ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
-                  {selectedWallet ? `${selectedWallet.alias}` : "请选择钱包"}
+                  {selectedWallet ? `${selectedWallet.name}` : "请选择钱包"}
                 </Text>
                 <ChevronRightIcon size={18} color="#9CA3AF" />
               </TouchableOpacity>
@@ -337,7 +337,7 @@ export default function RechargeScreen() {
                   onPress={() => handleSelectWallet(item)}
                 >
                   <View>
-                    <Text style={styles.pickerItemName}>{item.alias}</Text>
+                    <Text style={styles.pickerItemName}>{item.name}</Text>
                   </View>
                 </TouchableOpacity>
               )}

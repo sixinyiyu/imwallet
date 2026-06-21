@@ -20,6 +20,7 @@ import { WalletDetailSkeleton } from "../components/Skeleton";
 import { saveLogToLocal } from "../services/logService";
 import { useAlert } from "../hooks/useAlert";
 import { walletService } from "../services/walletService";
+import { localWalletService } from "../services/localWalletService";
 import {
   WalletIcon,
   PlusCircleIcon,
@@ -58,7 +59,7 @@ export default function WalletDetailScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const walletId = route.params?.walletId;
-  const { wallets, accounts, fetchAccounts, deleteWallet, fetchWallets } = useWalletStore();
+  const { wallets, accounts, fetchAccounts, deleteWallet, fetchWallets, verifyPassword, assets } = useWalletStore();
 
   const [detail, setDetail] = useState<SimpleWallet | null>(null);
   const [loading, setLoading] = useState(true);
@@ -147,20 +148,8 @@ export default function WalletDetailScreen() {
     }
   }, [walletId]);
 
-  const handleCopyAddress = async () => {
-    if (!accounts[0]?.address) return;
-    try {
-      const Clipboard = require("expo-clipboard");
-      await Clipboard.setStringAsync(accounts[0].address);
-      showToast("复制成功");
-    } catch (err: any) {
-      saveLogToLocal("crash", `[WalletDetail] handleCopyAddress failed: ${err?.message || String(err)}`);
-      showToast("复制失败");
-    }
-  };
-
   const handleOpenEditAlias = () => {
-    setEditAlias(wallet?.alias || "");
+    setEditAlias(wallet?.name || "");
     setShowEditModal(true);
   };
 
@@ -168,8 +157,8 @@ export default function WalletDetailScreen() {
     if (!walletId || !editAlias.trim()) return;
     setSavingAlias(true);
     try {
-      const updated = await walletService.updateWalletAlias(walletId, editAlias.trim());
-      setDetail(updated as Wallet);
+      await localWalletService.updateWallet(walletId, { name: editAlias.trim() });
+      setDetail(null);
       await fetchWallets();
       setShowEditModal(false);
     } catch (err: any) {
@@ -184,7 +173,7 @@ export default function WalletDetailScreen() {
     setRemoving(true);
     setRemovePasswordError("");
     try {
-      const verified = await walletService.verifyWalletPassword(walletId, removePassword.trim());
+      const verified = await verifyPassword(walletId, removePassword.trim());
       if (verified) {
         await deleteWallet(wallet.id);
         setShowRemoveDrawer(false);
@@ -234,7 +223,7 @@ export default function WalletDetailScreen() {
               <Text style={styles.infoLabel}>名称</Text>
             </View>
             <View style={styles.infoRightWithIcon}>
-              <Text style={styles.infoValue}>{wallet.alias}</Text>
+              <Text style={styles.infoValue}>{wallet.name}</Text>
               <TouchableOpacity onPress={handleOpenEditAlias} activeOpacity={0.6} style={styles.rowIcon}>
                 <EditIcon size={18} color="#8899B8" />
               </TouchableOpacity>
@@ -242,23 +231,10 @@ export default function WalletDetailScreen() {
           </View>
           <View style={styles.infoDivider} />
 
-          {/* 标识符 */}
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>标识符</Text>
-              <TouchableOpacity
-                style={styles.identifierWrap}
-                onPress={handleCopyAddress}
-                activeOpacity={0.6}
-              >
-                <Text style={styles.identifierText}>{accounts[0]?.address || '暂无账户'}</Text>
-              </TouchableOpacity>
-          </View>
-          <View style={styles.infoDivider} />
-
           {/* 账户数 */}
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>账户数</Text>
-            <Text style={styles.infoValue}>{wallet.accountCount}</Text>
+            <Text style={styles.infoValue}>{accounts.length}</Text>
           </View>
           <View style={styles.infoDivider} />
 
@@ -344,19 +320,12 @@ export default function WalletDetailScreen() {
             <View key={acc.id} style={styles.accountCard}>
               <View style={styles.accountIconRow}>
                 {(() => {
-                  const IconComp = getNetworkIcon(acc.network);
+                  const IconComp = getNetworkIcon(acc.chain);
                   return IconComp ? <IconComp size={28} /> : null;
                 })()}
               </View>
               <View style={styles.accountInfo}>
-                <View style={styles.accountNameRow}>
-                  <Text style={styles.accountName}>{acc.name}</Text>
-                  {acc.assets && acc.assets.length > 0 ? (
-                    <View style={styles.tokenSymbolBadge}>
-                      <Text style={styles.tokenSymbolText}>{acc.assets.map(a => a.symbol).join(", ")}</Text>
-                    </View>
-                  ) : null}
-                </View>
+                <Text style={styles.accountName}>{acc.name}</Text>
                 <View style={styles.accountAddressRow}>
                   <Text style={styles.accountSymbol} numberOfLines={1} ellipsizeMode="middle">
                     {acc.address}
@@ -566,7 +535,7 @@ export default function WalletDetailScreen() {
                 setVerifying(true);
                 setPasswordError("");
                 try {
-                  const verified = await walletService.verifyWalletPassword(walletId, backupPassword.trim());
+                  const verified = await verifyPassword(walletId, backupPassword.trim());
                   if (verified) {
                     setShowPasswordModal(false);
                     navigation.navigate("BackupGuide", { walletId: wallet.id, source: "detail" });
@@ -599,7 +568,7 @@ export default function WalletDetailScreen() {
                   setVerifying(true);
                   setPasswordError("");
                 try {
-                  const verified = await walletService.verifyWalletPassword(walletId, backupPassword.trim());
+                  const verified = await verifyPassword(walletId, backupPassword.trim());
                   if (verified) {
                     setShowPasswordModal(false);
                     navigation.navigate("BackupGuide", { walletId: wallet.id, source: "detail" });
@@ -789,17 +758,6 @@ const styles = StyleSheet.create({
   rowIcon: {
     padding: 4,
   },
-  identifierWrap: {
-    maxWidth: "70%",
-  },
-  identifierText: {
-    fontSize: 12,
-    color: "#1F2937",
-    fontFamily: "monospace",
-    fontWeight: "500",
-    textAlign: "right",
-    lineHeight: 18,
-  },
   infoDivider: {
     height: 1,
     backgroundColor: "#F3F4F6",
@@ -885,22 +843,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500",
     color: "#1F2937",
-  },
-  accountNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  tokenSymbolBadge: {
-    backgroundColor: "#E8F5E9",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  tokenSymbolText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#287220",
   },
   accountSymbol: {
     fontSize: 12,

@@ -13,10 +13,10 @@ export interface NotificationResult {
 }
 
 /** 获取设备的通知列表（基于订阅的钱包） */
-export async function getDeviceNotifications(deviceDbId: number): Promise<NotificationResult[]> {
+export async function getDeviceNotifications(deviceId: string): Promise<NotificationResult[]> {
   // 1. 获取该设备订阅的所有钱包 ID
   const subscriptions = await prisma.walletSubscription.findMany({
-    where: { device_id: deviceDbId },
+    where: { device_id: deviceId },
     select: { wallet_id: true },
   });
   const walletIds = subscriptions.map((s: any) => s.wallet_id);
@@ -37,7 +37,7 @@ export async function getDeviceNotifications(deviceDbId: number): Promise<Notifi
   const readStatuses = await prisma.notificationRead.findMany({
     where: {
       notification_id: { in: notificationIds },
-      device_id: deviceDbId,
+      device_id: deviceId,
     },
   });
 
@@ -60,7 +60,7 @@ export async function getDeviceNotifications(deviceDbId: number): Promise<Notifi
 }
 
 /** 标记通知已读（为当前设备创建/更新阅读状态） */
-export async function markAsRead(notificationId: string, deviceDbId: number): Promise<void> {
+export async function markAsRead(notificationId: string, deviceId: string): Promise<void> {
   // 验证该设备有权查看此通知（通过钱包订阅）
   const notification = await prisma.notification.findUnique({
     where: { id: notificationId },
@@ -73,7 +73,7 @@ export async function markAsRead(notificationId: string, deviceDbId: number): Pr
   const subscription = await prisma.walletSubscription.findFirst({
     where: {
       wallet_id: notification.wallet_id,
-      device_id: deviceDbId,
+      device_id: deviceId,
     },
   });
 
@@ -84,12 +84,12 @@ export async function markAsRead(notificationId: string, deviceDbId: number): Pr
   // 创建或更新阅读状态
   await prisma.notificationRead.upsert({
     where: {
-      notification_id_device_id: { notification_id: notificationId, device_id: deviceDbId },
+      notification_id_device_id: { notification_id: notificationId, device_id: deviceId },
     },
     update: { isRead: true, readAt: new Date() },
     create: {
       notification_id: notificationId,
-      device_id: deviceDbId,
+      device_id: deviceId,
       isRead: true,
       readAt: new Date(),
     },
@@ -97,10 +97,10 @@ export async function markAsRead(notificationId: string, deviceDbId: number): Pr
 }
 
 /** 标记所有通知已读（为当前设备） */
-export async function markAllAsRead(deviceDbId: number): Promise<void> {
+export async function markAllAsRead(deviceId: string): Promise<void> {
   // 获取该设备订阅的所有钱包 ID
   const subscriptions = await prisma.walletSubscription.findMany({
-    where: { device_id: deviceDbId },
+    where: { device_id: deviceId },
     select: { wallet_id: true },
   });
   const walletIds = subscriptions.map((s: any) => s.wallet_id);
@@ -120,17 +120,17 @@ export async function markAllAsRead(deviceDbId: number): Promise<void> {
   for (const nid of notificationIds) {
     await prisma.notificationRead.upsert({
       where: {
-        notification_id_device_id: { notification_id: nid, device_id: deviceDbId },
+        notification_id_device_id: { notification_id: nid, device_id: deviceId },
       },
       update: { isRead: true, readAt: new Date() },
       create: {
         notification_id: nid,
-        device_id: deviceDbId,
+        device_id: deviceId,
         isRead: true,
         readAt: new Date(),
       },
     });
   }
 
-  logger.info("NOTIFICATION", `标记所有通知已读: device_id=${deviceDbId}, count=${notificationIds.length}`);
+  logger.info("NOTIFICATION", `标记所有通知已读: deviceId=${deviceId.slice(0, 8)}..., count=${notificationIds.length}`);
 }

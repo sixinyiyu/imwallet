@@ -30,24 +30,20 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
-  // 权限校验：验证设备是否关联该钱包（手动查找设备，不使用 relation filter）
-  const device = await prisma.device.findUnique({
-    where: { device_id: req.device!.deviceId },
-  });
-  if (!device) {
-    res.status(404).json({ error: "Device not found" });
-    return;
-  }
-
+  // 权限校验：验证设备是否关联该钱包
   const subscription = await prisma.walletSubscription.findFirst({
     where: {
       wallet_id: walletId,
-      device_id: device.id,
+      device_id: req.device!.deviceId,
     },
   });
   if (!subscription) {
-    res.status(403).json({ error: "You do not have permission to view this wallet's transactions" });
-    return;
+    // 兜底：钱包存在即允许（刚创建还没添加网络账户）
+    const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
+    if (!wallet) {
+      res.status(403).json({ error: "You do not have permission to view this wallet's transactions" });
+      return;
+    }
   }
 
   const page = parseInt((req.query.page as string) || "1", 10);
@@ -73,8 +69,7 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * GET /transactions/check-address?address=xxx
- * 一次查询返回地址是否在系统中 + 是否在当前用户地址本中。
- * 用于转账页实时校验收款地址。
+ * 查询地址是否在系统中（contacts 在客户端，不再查询）
  */
 router.get("/check-address", asyncHandler(async (req: Request, res: Response) => {
   const address = (req.query.address as string || "").trim();
@@ -83,42 +78,31 @@ router.get("/check-address", asyncHandler(async (req: Request, res: Response) =>
     return;
   }
 
-  // 查系统内：accounts 表（所有链地址）
-  const account = await prisma.account.findFirst({ where: { address } });
-  const inSystem = !!account;
+  // 查系统内：wallets_addresses 表（所有链地址）
+  const walletAddress = await prisma.walletAddress.findFirst({ where: { address } });
+  const inSystem = !!walletAddress;
 
-  // 查用户地址本：contacts 表（按当前设备）
-  const contact = await prisma.contact.findFirst({
-    where: { address, device_id: req.device!.dbId },
-  });
-  const inContacts = !!contact;
-
-  res.json({ inSystem, inContacts });
+  // contacts 在客户端，inContacts 始终返回 false
+  res.json({ inSystem, inContacts: false });
 }));
 
 router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   const txId = req.params.id as string;
   const tx = await transactionService.getTransactionDetail(txId);
 
-  // 权限校验：验证设备是否关联该交易涉及的地址
-  const device = await prisma.device.findUnique({
-    where: { device_id: req.device!.deviceId },
-  });
-  if (!device) {
-    res.status(404).json({ error: "Device not found" });
-    return;
-  }
-
-  // 获取设备订阅的所有钱包的所有链地址
+  // 获取设备订阅的所有地址（通过 wallet_subscriptions）
   const deviceSubs = await prisma.walletSubscription.findMany({
-    where: { device_id: device.id },
-    select: { wallet_id: true },
+    where: { device_id: req.device!.deviceId, address_id: { not: "" } },
+    select: { address_id: true },
   });
-  const walletIds = deviceSubs.map((s: any) => s.wallet_id);
+  const addressIds = deviceSubs.map((s: any) => s.address_id);
 
-  const accounts = await prisma.account.findMany({ where: { walletId: { in: walletIds } }, select: { address: true } });
+  const walletAddresses = await prisma.walletAddress.findMany({
+    where: { id: { in: addressIds } },
+    select: { address: true },
+  });
   const myAddresses = new Set<string>();
-  for (const a of accounts) myAddresses.add(a.address);
+  for (const wa of walletAddresses) myAddresses.add(wa.address);
 
   if (!myAddresses.has(tx.fromAddress) && !(tx.toAddress && myAddresses.has(tx.toAddress))) {
     res.status(403).json({ error: "You do not have permission to view this transaction" });

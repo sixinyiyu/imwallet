@@ -1,12 +1,15 @@
 import { create } from "zustand";
 import * as SecureStore from "../utils/secureStorage";
 import { walletService } from "../services/walletService";
-import { accountService } from "../services/accountService";
-import { generateMnemonic, cleanMnemonic } from "../utils/mnemonic";
+import { syncService } from "../services/syncService";
+import { localWalletService, hashPassword } from "../services/localWalletService";
+import { localAccountService } from "../services/localAccountService";
+import { generateMnemonic, cleanMnemonic, generateIdentifier } from "../utils/mnemonic";
+import { deriveAddressFromMnemonic, getDerivationPath } from "../utils/derivation";
 import { ensureDeviceKeys, ensureDeviceRegistered } from "../services/api";
 import { useAuthStore } from "./authStore";
 import { uploadLog, saveLogToLocal } from "../services/logService";
-import type { Wallet, SimpleWallet, Account, AssetBalance } from "../types";
+import type { SimpleWallet, Account, AssetBalance, LocalWallet } from "../types";
 
 const MNEMONIC_KEY_PREFIX = "aquad_mnemonic_";
 const BACKED_UP_KEY_PREFIX = "aquad_backed_up_";
@@ -22,9 +25,23 @@ function backedUpKey(walletId: string): string {
   return `${BACKED_UP_KEY_PREFIX}${walletId}`;
 }
 
+/** Convert LocalWallet (DB row) to SimpleWallet (UI type) */
+function localToSimple(w: LocalWallet): SimpleWallet {
+  return {
+    id: w.id,
+    name: w.name,
+    source: w.source,
+    type: w.type,
+    sort_order: w.sort_order,
+    is_pinned: w.is_pinned,
+    avatar: w.avatar,
+    password_hint: w.password_hint,
+    createdAt: w.created_at,
+  };
+}
+
 interface WalletState {
   mnemonic: string | null;
-  /** Set of wallet IDs that have been backed up */
   backedUpWallets: Set<string>;
   hasWallets: boolean;
   wallets: SimpleWallet[];
@@ -48,11 +65,11 @@ interface WalletState {
   resetPassword: (walletId: string, mnemonic: string, password: string, passwordHint?: string) => Promise<void>;
   deleteWallet: (walletId: string) => Promise<void>;
   backupWallet: (walletId: string) => Promise<void>;
-  /** Check if a specific wallet has been backed up */
   isWalletBackedUp: (walletId: string) => boolean;
   addAccount: (walletId: string, network: string, name?: string, allowMultiAccount?: boolean) => Promise<void>;
   deleteAccount: (accountId: string) => Promise<void>;
   fetchBalance: (walletId: string) => Promise<void>;
+  verifyPassword: (walletId: string, password: string) => Promise<boolean>;
 }
 
 export const useWalletStore = create<WalletState>((set, get) => ({
@@ -69,26 +86,24 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   hasFetched: false,
   accountCount: 0,
 
-  /** Check if a specific wallet has been backed up */
   isWalletBackedUp: (walletId: string): boolean => {
     return get().backedUpWallets.has(walletId);
   },
 
-  /** Load local state: initialize device identity then fetch wallets from server */
+  /** Load local state: initialize device identity then load wallets from local SQLite */
   loadLocalState: async () => {
     try {
       // 1. Initialize device identity (generate keys + register)
       const keys = await ensureDeviceKeys();
       if (keys) {
         await ensureDeviceRegistered(keys.publicKeyHex);
-        // 显式初始化 authStore，设置 isReady 和 deviceId
         await useAuthStore.getState().initDevice();
       }
 
       // 2. Load per-wallet backup status from SecureStore
+      const localWallets = await localWalletService.getAllWallets();
       const backedUpSet = new Set<string>();
-      const wallets = await walletService.getWallets();
-      for (const w of wallets.wallets) {
+      for (const w of localWallets) {
         const flag = await SecureStore.getItemAsync(backedUpKey(w.id));
         if (flag === "true") {
           backedUpSet.add(w.id);
@@ -96,26 +111,25 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       }
       set({ backedUpWallets: backedUpSet });
 
-      // 3. Fetch wallet state from server (sets hasFetched + hasWallets)
+      // 3. Fetch wallet state from local SQLite
       await get().fetchWallets();
     } catch {
       set({ hasFetched: true, hasWallets: false });
     }
   },
 
-  /** Fetch wallets from server */
+  /** Fetch wallets from local SQLite */
   fetchWallets: async () => {
     set({ loading: true });
     try {
-      const data = await walletService.getWallets();
-      const wallets = data.wallets;
+      const localWallets = await localWalletService.getAllWallets();
+      const wallets = localWallets.map(localToSimple);
       const active = wallets[0] || null;
 
       let accounts: Account[] = [];
       if (active) {
         try {
-          const accData = await accountService.getWalletAccounts(active.id);
-          accounts = accData.accounts;
+          accounts = await localAccountService.getWalletAccounts(active.id);
         } catch {
           // accounts may not exist yet
         }
@@ -140,31 +154,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         hasFetched: true,
         backedUpWallets: backedUpSet,
       });
-
-      // If server returns empty wallet list, backedUpWallets is already empty
-      // hasWallets is already false from the set() above
-    } catch (err: any) {
-      // If device not registered (401) or server unreachable, reset local state
-      // so the app redirects to Start (wallet creation guide) page
-      const status = err?.response?.status;
-      const errorMsg = err?.response?.data?.error;
-      if (status === 401 || errorMsg === "Device not registered") {
-        // Device was cleared on server side — reset local wallet state
-        // backedUpWallets Set is reset below, per-wallet keys remain in SecureStore
-        // but are harmless since they won't match any wallet ID
-        set({
-          hasWallets: false,
-          wallets: [],
-          activeWallet: null,
-          accounts: [],
-          activeAccount: null,
-          backedUpWallets: new Set<string>(),
-          hasFetched: true,
-        });
-      } else {
-        // Other errors — keep local state, just mark fetch done
-        set({ hasFetched: true });
-      }
+    } catch {
+      set({ hasFetched: true });
     }
     set({ loading: false });
   },
@@ -173,8 +164,19 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   fetchWalletsAggregate: async () => {
     set({ loading: true });
     try {
-      const data = await walletService.getWalletsAggregate();
-      const wallets = data.wallets;
+      const localWallets = await localWalletService.getAllWallets();
+
+      // 为每个钱包查询本地账户，填充 networks 字段
+      const wallets = await Promise.all(
+        localWallets.map(async (w) => {
+          const accounts = await localAccountService.getWalletAccounts(w.id);
+          const networks = [...new Set(accounts.map((a) => a.chain))];
+          return {
+            ...localToSimple(w),
+            networks,
+          };
+        })
+      );
 
       // Load per-wallet backup status
       const backedUpSet = new Set<string>();
@@ -193,127 +195,151 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       });
 
       return wallets;
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const errorMsg = err?.response?.data?.error;
-      if (status === 401 || errorMsg === "Device not registered") {
-        set({
-          hasWallets: false,
-          wallets: [],
-          activeWallet: null,
-          backedUpWallets: new Set<string>(),
-          hasFetched: true,
-        });
-      } else {
-        set({ hasFetched: true });
-      }
+    } catch {
+      set({ hasFetched: true });
       return [];
     } finally {
       set({ loading: false });
     }
   },
 
-  /** Fetch accounts for a specific wallet */
+  /** Fetch accounts for a specific wallet from local SQLite */
   fetchAccounts: async (walletId: string) => {
     try {
-      const data = await accountService.getWalletAccounts(walletId);
+      const accounts = await localAccountService.getWalletAccounts(walletId);
       set({
-        accounts: data.accounts,
-        accountCount: data.accounts.length,
-        activeAccount: data.accounts[0] || null,
+        accounts,
+        accountCount: accounts.length,
+        activeAccount: accounts[0] || null,
       });
     } catch {
       // silent
     }
   },
 
-  /** Set active wallet */
   setActiveWallet: (wallet: SimpleWallet) => {
     set({ activeWallet: wallet });
     get().fetchAccounts(wallet.id);
   },
 
-  /** Set active account */
   setActiveAccount: (account: Account) => {
     set({ activeAccount: account });
   },
 
-  /** Create wallet — generates mnemonic locally, creates on server */
+  /** Create wallet — generates mnemonic locally, saves to local SQLite + syncs to server */
   createWallet: async (alias: string, password: string, passwordHint?: string): Promise<string> => {
     let mnemonic: string;
     try {
       mnemonic = await generateMnemonic();
     } catch (err: any) {
-      saveLogToLocal("mnemonic", `[createWallet] generateMnemonic threw: ${err?.message || String(err)}, stack=${err?.stack?.slice(0, 200) || "none"}`);
+      saveLogToLocal("mnemonic", `[createWallet] generateMnemonic threw: ${err?.message || String(err)}`);
       throw new Error("助记词生成失败，请重试");
     }
     if (!mnemonic || mnemonic.trim().split(/\s+/).length !== 12) {
-      saveLogToLocal("mnemonic", `[createWallet] generateMnemonic invalid: words=${mnemonic?.trim().split(/\s+/).length || 0}, prefix=${mnemonic?.slice(0, 20) || "null"}`);
+      saveLogToLocal("mnemonic", `[createWallet] generateMnemonic invalid`);
       throw new Error("助记词生成失败，请重试");
     }
-    saveLogToLocal("mnemonic", `[createWallet] generateMnemonic OK: words=12, prefix=${mnemonic.slice(0, 20)}`);
 
-    // Create wallet on server with mnemonic for deterministic derivation
-    const wallet = await walletService.saveWallet("CREATE", alias, password, passwordHint, mnemonic);
+    // 1. 基于助记词确定性生成 walletId
+    const walletId = generateIdentifier(mnemonic);
 
-    // Store mnemonic per walletId
-    await SecureStore.setItemAsync(mnemonicKey(wallet.id), mnemonic);
+    // 2. 在服务端注册钱包（传 source + walletId + alias）
+    await syncService.registerWallet("CREATE", walletId, alias);
 
-    // 🔍 DIAG: log wallet.id and storage key
-    console.warn(`[createWallet] wallet.id=${wallet.id}, storageKey=${mnemonicKey(wallet.id)}, mnemonicPrefix=${mnemonic.slice(0, 20)}`);
+    // 3. 生成密码 hash 和助记词 hash
+    const passwordHash = hashPassword(password);
+    const mnemonicHash = hashPassword(mnemonic);
 
-    set({
-      mnemonic,
-      hasWallets: true,
+    // 4. 在本地 SQLite 创建钱包记录
+    await localWalletService.createWallet({
+      id: walletId,
+      name: alias,
+      source: "CREATE",
+      password_hash: passwordHash,
+      password_hint: passwordHint || "",
+      mnemonic_hash: mnemonicHash,
     });
 
+    // 5. 安全存储助记词
+    await SecureStore.setItemAsync(mnemonicKey(walletId), mnemonic);
+
+    set({ mnemonic, hasWallets: true });
     await get().fetchWallets();
-    return wallet.id;
+    return walletId;
   },
 
   /** Import wallet with mnemonic */
   importWallet: async (mnemonicInput: string, alias: string, password: string, passwordHint?: string): Promise<string> => {
-    // Clean mnemonic before processing
     const cleaned = cleanMnemonic(mnemonicInput);
-    const wallet = await walletService.saveWallet("IMPORT", alias, password, passwordHint, cleaned);
 
-    // Store cleaned mnemonic per walletId
-    await SecureStore.setItemAsync(mnemonicKey(wallet.id), cleaned);
+    // 1. 基于助记词确定性生成 walletId
+    const walletId = generateIdentifier(cleaned);
 
-    set({
-      mnemonic: mnemonicInput,
-      hasWallets: true,
+    // 2. 在服务端注册钱包（传 source + walletId + alias）
+    await syncService.registerWallet("IMPORT", walletId, alias);
+
+    // 3. 生成密码 hash 和助记词 hash
+    const passwordHash = hashPassword(password);
+    const mnemonicHash = hashPassword(cleaned);
+
+    // 4. 在本地 SQLite 创建钱包记录
+    await localWalletService.createWallet({
+      id: walletId,
+      name: alias,
+      source: "IMPORT",
+      password_hash: passwordHash,
+      password_hint: passwordHint || "",
+      mnemonic_hash: mnemonicHash,
     });
 
+    // 5. 安全存储助记词
+    await SecureStore.setItemAsync(mnemonicKey(walletId), cleaned);
+
+    set({ mnemonic: mnemonicInput, hasWallets: true });
     await get().fetchWallets();
-    return wallet.id;
+    return walletId;
   },
 
-  /** Reset wallet password — verify mnemonic identity then update password */
+  /** Reset wallet password — verify mnemonic locally then update password */
   resetPassword: async (walletId: string, mnemonic: string, password: string, passwordHint?: string): Promise<void> => {
     const cleaned = cleanMnemonic(mnemonic);
-    await walletService.resetPassword(walletId, cleaned, password, passwordHint);
+    const mnemonicHash = hashPassword(cleaned);
 
-    // Update local mnemonic storage (keep it consistent)
+    // 本地验证助记词哈希
+    const valid = await localWalletService.verifyMnemonicHash(walletId, mnemonicHash);
+    if (!valid) {
+      throw new Error("助记词与当前钱包不匹配");
+    }
+
+    // 更新本地密码
+    const newPasswordHash = hashPassword(password);
+    await localWalletService.updatePassword(walletId, newPasswordHash, passwordHint);
+
+    // 更新本地助记词存储
     await SecureStore.setItemAsync(mnemonicKey(walletId), cleaned);
 
     await get().fetchWallets();
   },
 
-  /** Delete wallet */
+  /** Delete wallet — delete local + server */
   deleteWallet: async (walletId: string) => {
     try {
-      // Delete local mnemonic and backup flag for this wallet
+      // 删除本地 SQLite 数据
+      await localWalletService.deleteWallet(walletId);
+
+      // 删除本地助记词和备份标记
       await SecureStore.deleteItemAsync(mnemonicKey(walletId));
       await SecureStore.deleteItemAsync(backedUpKey(walletId));
-      await walletService.deleteWallet(walletId);
+
+      // 删除服务端钱包（取消订阅）
+      await syncService.deleteWallet(walletId);
+
       await get().fetchWallets();
     } catch {
       // silent
     }
   },
 
-  /** Mark wallet as backed up (per-wallet, stored in SecureStore) */
   backupWallet: async (walletId: string) => {
     await SecureStore.setItemAsync(backedUpKey(walletId), "true");
     const backedUpSet = new Set(get().backedUpWallets);
@@ -321,28 +347,71 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     set({ backedUpWallets: backedUpSet });
   },
 
-  /** Add account to wallet — creates accounts for all tokens on the selected network */
+  /** Add account — derive address locally, save to SQLite + sync to server */
   addAccount: async (walletId: string, network: string, name?: string, allowMultiAccount?: boolean) => {
     try {
-      // Read mnemonic from SecureStore for deterministic derivation
-      let mnemonic: string | undefined;
-      try {
-        const stored = await SecureStore.getItemAsync(mnemonicKey(walletId));
-        if (stored) mnemonic = stored;
-      } catch {
-        // mnemonic may not be available for CREATE wallets
+      // 读取助记词用于地址派生
+      const mnemonic = await SecureStore.getItemAsync(mnemonicKey(walletId));
+      if (!mnemonic) {
+        throw new Error("无法获取助记词，请重新导入钱包");
       }
-      await accountService.createAccount(walletId, network, name, mnemonic, allowMultiAccount);
+
+      // 获取当前链上的最大账户索引
+      const maxIndex = await localAccountService.getMaxAccountIndex(walletId, network);
+      const accountIndex = maxIndex + 1;
+
+      // 检查是否已存在账户
+      if (!allowMultiAccount && maxIndex >= 0) {
+        throw new Error("该钱包下此网络已有账户");
+      }
+
+      // 使用 BIP44 从助记词派生链上地址
+      const address = deriveAddressFromMnemonic(mnemonic, network, accountIndex);
+      const derivationPath = getDerivationPath(network, accountIndex);
+
+      const { generateUUID } = await import("../db/database");
+      const accountId = generateUUID();
+      const accountName = name || `${network} Account ${accountIndex + 1}`;
+
+      // 同步地址到服务端，获取 serverAddressId
+      const serverAddress = await syncService.syncAddress(walletId, network, address);
+
+      // 保存到本地 SQLite
+      await localAccountService.createAccount({
+        id: accountId,
+        wallet_id: walletId,
+        chain: network,
+        derivation_path: derivationPath,
+        address: address,
+        extended_pubkey: "",
+        account_index: accountIndex,
+        name: accountName,
+        server_address_id: serverAddress.id,
+      });
+
       await get().fetchAccounts(walletId);
     } catch (err: any) {
       throw err;
     }
   },
 
-  /** Delete account */
+  /** Delete account — delete local + server */
   deleteAccount: async (accountId: string) => {
     try {
-      await accountService.deleteAccount(accountId);
+      const account = await localAccountService.getAccountById(accountId);
+      if (!account) return;
+
+      // 删除服务端地址记录
+      if (account.serverAddressId) {
+        const walletId = get().activeWallet?.id;
+        if (walletId) {
+          await syncService.deleteAddress(walletId, account.serverAddressId);
+        }
+      }
+
+      // 删除本地账户
+      await localAccountService.deleteAccount(accountId);
+
       const walletId = get().activeWallet?.id;
       if (walletId) {
         await get().fetchAccounts(walletId);
@@ -352,7 +421,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  /** Fetch balance for wallet (single API call: total balance + asset list) */
+  /** Fetch balance for wallet (from server API) */
   fetchBalance: async (walletId: string) => {
     try {
       const detail = await walletService.getWalletBalanceDetail(walletId);
@@ -365,4 +434,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
+  /** Verify wallet password locally */
+  verifyPassword: async (walletId: string, password: string): Promise<boolean> => {
+    return localWalletService.verifyPassword(walletId, password);
+  },
 }));

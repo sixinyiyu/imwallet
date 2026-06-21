@@ -15,6 +15,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { accountService } from "../services/accountService";
+import { localAccountService } from "../services/localAccountService";
 import { LinearGradient } from "expo-linear-gradient";
 import { TronIcon, EthIcon, BtcIcon, USDTIcon } from "../components/icons";
 import type { ChainInfo } from "../types";
@@ -74,33 +75,24 @@ export default function WalletAddAccountScreen() {
 
     try {
       // 并行加载：可创建账户的链列表 + 钱包已有账户
-      const [chainsResult, accountsResult] = await Promise.all([
+      const [chainsResult, walletAccounts] = await Promise.all([
         accountService.getAvailableChains(),
-        effectiveWalletId ? accountService.getWalletAccounts(effectiveWalletId) : Promise.resolve({ accounts: [] }),
+        effectiveWalletId ? localAccountService.getWalletAccounts(effectiveWalletId) : Promise.resolve([]),
       ]);
       setChains(chainsResult.chains);
 
-      // 按网络分组已有账户的资产符号
-      const accountsByNetwork = new Map<string, Set<string>>();
-      for (const acc of accountsResult.accounts) {
-        const set = accountsByNetwork.get(acc.network) || new Set<string>();
-        for (const asset of acc.assets) {
-          set.add(asset.symbol);
-        }
-        accountsByNetwork.set(acc.network, set);
+      // 按链分组已有账户
+      const accountsByChain = new Set<string>();
+      for (const acc of walletAccounts) {
+        accountsByChain.add(acc.chain);
       }
 
       // 判断每条链的状态：全部已有 / 部分已有
       const fullSet = new Set<string>();
       const partialSet = new Set<string>();
       for (const chain of chainsResult.chains) {
-        const existingAssets = accountsByNetwork.get(chain.name);
-        if (!existingAssets || chain.assets.length === 0) continue;
-        const allAssetsExist = chain.assets.every((a) => existingAssets.has(a.symbol));
-        if (allAssetsExist) {
+        if (accountsByChain.has(chain.name)) {
           fullSet.add(chain.name);
-        } else {
-          partialSet.add(chain.name);
         }
       }
       setExistingChains(fullSet);

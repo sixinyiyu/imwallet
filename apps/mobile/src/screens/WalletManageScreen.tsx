@@ -191,7 +191,7 @@ export default function WalletManageScreen() {
                 activeOpacity={0.6}
               >
                 <WalletIcon size={20} color="#9CA3AF" />
-                <Text style={styles.walletAlias} numberOfLines={1}>{item.alias}</Text>
+                <Text style={styles.walletAlias} numberOfLines={1}>{item.name}</Text>
                 {index === 0 && (
                   <View style={styles.activeBadge}>
                     <Text style={styles.activeBadgeText}>当前</Text>
@@ -205,7 +205,7 @@ export default function WalletManageScreen() {
               {/* Account count + backup status */}
               <View style={styles.cardMiddle}>
                 <Text style={styles.walletAccountCount}>
-                  {item.accountCount}个账户
+                  {networks.length}个账户
                 </Text>
                 <Text style={styles.walletBackupStatus}>
                   {backedUpWallets.has(item.id) ? "✅ 已备份" : "⚠️ 未备份"}

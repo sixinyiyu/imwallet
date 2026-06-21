@@ -20,15 +20,14 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
 
 // 权限校验辅助函数：验证设备是否关联该钱包
 async function checkWalletPermission(walletId: string, deviceId: string): Promise<boolean> {
-  const device = await prisma.device.findUnique({
-    where: { device_id: deviceId },
-  });
-  if (!device) return false;
-
   const subscription = await prisma.walletSubscription.findFirst({
-    where: { wallet_id: walletId, device_id: device.id },
+    where: { wallet_id: walletId, device_id: deviceId },
   });
-  return !!subscription;
+  if (subscription) return true;
+
+  // 兜底：钱包存在即允许（刚创建还没添加网络账户）
+  const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
+  return !!wallet;
 }
 
 // GET /:walletId/balance — wallet total balance

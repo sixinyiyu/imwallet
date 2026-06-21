@@ -41,6 +41,7 @@ export interface RechargeListFilter {
 /**
  * 充值：对系统内钱包的指定代币增加余额，并记录充值日志。
  * 仅允许 recharge_allowed_devices 配置中的设备操作。
+ * 余额操作通过 wallet_subscriptions → wallets_addresses → assets_addresses (address_id) 链路。
  */
 export async function recharge(
   input: RechargeInput,
@@ -88,38 +89,45 @@ export async function recharge(
     throw createError(404, "资产不存在", "ASSET_NOT_FOUND");
   }
 
-  // 4. 获取或创建 AccountAsset 记录，增加余额
-  // 先找到钱包在该网络上的账户
-  const account = await prisma.account.findFirst({
-    where: { walletId, network },
-    orderBy: { index: "asc" },
+  // 4. 获取或创建 AssetsAddress 记录，增加余额
+  // 先通过 subscription 找到钱包在该网络上的地址
+  const subs = await prisma.walletSubscription.findMany({
+    where: { wallet_id: walletId, address_id: { not: "" } },
+    select: { address_id: true },
   });
-  if (!account) {
-    throw createError(404, "该钱包在此网络下无账户", "ACCOUNT_NOT_FOUND");
+  const subAddressIds = subs.map((s: any) => s.address_id);
+  const walletAddress = await prisma.walletAddress.findFirst({
+    where: { id: { in: subAddressIds }, chain: network },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!walletAddress) {
+    throw createError(404, "该钱包在此网络下无地址", "ADDRESS_NOT_FOUND");
   }
 
-  const accountAsset = await prisma.accountAsset.upsert({
+  const assetsAddress = await prisma.assetsAddress.upsert({
     where: {
-      accountId_assetId: { accountId: account.id, assetId: asset.id },
+      addressId_assetId: { addressId: walletAddress.id, assetId: asset.id },
     },
     update: {
       balance: { increment: parseFloat(amount) },
     },
     create: {
-      accountId: account.id,
+      addressId: walletAddress.id,
       assetId: asset.id,
+      chain: network,
       balance: parseFloat(amount),
     },
   });
 
-  logger.info("RECHARGE", `余额更新成功: accountAssetId=${accountAsset.id}, newBalance=${accountAsset.balance}`);
+  logger.info("RECHARGE", `余额更新成功: assetsAddressId=${assetsAddress.id}, newBalance=${assetsAddress.balance}`);
 
   // 5. 写入充值记录
+  // 注意：服务端不再存储 alias，walletAlias 使用 wallet.id 代替
   const record = await prisma.recharge.create({
     data: {
       walletId,
-      walletAlias: wallet.alias,
-      walletAddress: account.address,
+      walletAlias: wallet.id,
+      walletAddress: walletAddress.address,
       tokenSymbol,
       tokenName: asset.name,
       amount: parseFloat(amount),
@@ -130,7 +138,7 @@ export async function recharge(
     },
   });
 
-  logger.info("RECHARGE", `充值成功: recordId=${record.id}, wallet=${wallet.alias}, token=${tokenSymbol}, amount=${amount}`);
+  logger.info("RECHARGE", `充值成功: recordId=${record.id}, wallet=${wallet.id}, token=${tokenSymbol}, amount=${amount}`);
 
   return {
     id: record.id,

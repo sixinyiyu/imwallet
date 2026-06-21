@@ -1,36 +1,19 @@
 import api from "./api";
-import type { Device } from "../types";
+import type { ServerDevice } from "../types";
 
 export const authService = {
   /** 注册设备（首次启动自动调用，由 api.ts 拦截器处理） */
   async registerDevice(input: {
     device_id: string;
     platform: string;
-    os?: string;
-    model?: string;
-    locale?: string;
-    version?: string;
-    currency?: string;
-  }): Promise<Device> {
+  }): Promise<ServerDevice> {
     const { data } = await api.post("/devices", input);
     return data;
   },
 
   /** 获取当前设备信息 */
-  async getDeviceInfo(): Promise<Device> {
+  async getDeviceInfo(): Promise<ServerDevice> {
     const { data } = await api.get("/devices/me");
-    return data;
-  },
-
-  /** 更新设备信息 */
-  async updateDevice(input: {
-    locale?: string;
-    currency?: string;
-    token?: string;
-    is_push_enabled?: boolean;
-    is_price_alerts_enabled?: boolean;
-  }): Promise<Device> {
-    const { data } = await api.put("/devices", input);
     return data;
   },
 };

@@ -34,27 +34,16 @@ END $$;
 
 -- ─── Tables ──────────────────────────────────────────────────────────────────
 
--- 设备表
+-- 设备表（精简：仅保留验签所需字段，完整设备信息在客户端 SQLite）
+-- id 即 Ed25519 公钥 hex（64字符），直接作为主键
 CREATE TABLE IF NOT EXISTS "devices" (
-    "id"                     SERIAL      NOT NULL,
-    "device_id"              VARCHAR(64) NOT NULL,
+    "id"                     VARCHAR(64) NOT NULL,
     "platform"               "Platform" NOT NULL,
-    "platform_store"         VARCHAR(16) NOT NULL DEFAULT '',
-    "os"                     VARCHAR(32) NOT NULL DEFAULT '',
-    "model"                  VARCHAR(64) NOT NULL DEFAULT '',
-    "locale"                 VARCHAR(16) NOT NULL DEFAULT '',
-    "version"                VARCHAR(32) NOT NULL DEFAULT '',
-    "currency"               VARCHAR(8)  NOT NULL DEFAULT '',
-    "token"                  VARCHAR(256) NOT NULL DEFAULT '',
-    "is_push_enabled"        BOOLEAN   NOT NULL DEFAULT false,
-    "is_price_alerts_enabled" BOOLEAN   NOT NULL DEFAULT false,
-    "subscriptions_version"  INT       NOT NULL DEFAULT 0,
     "created_at"             TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at"             TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "devices_pkey" PRIMARY KEY ("id")
 );
-CREATE UNIQUE INDEX IF NOT EXISTS "devices_device_id_key" ON "devices"("device_id");
 
 -- 链表（区块链网络）
 CREATE TABLE IF NOT EXISTS "chains" (
@@ -92,59 +81,54 @@ CREATE TABLE IF NOT EXISTS "assets" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "assets_symbol_chain_key" ON "assets"("symbol", "chain");
 
--- 钱包表
+-- 钱包表（精简：仅保留标识信息，密码/助记词/别名在客户端 SQLite）
+-- id 由客户端生成（aqud + SHA256(mnemonic)前32位hex）
 CREATE TABLE IF NOT EXISTS "wallets" (
     "id"           TEXT        NOT NULL,
-    "identifier"   VARCHAR(36) NOT NULL,
-    "alias"        VARCHAR(64) NOT NULL,
-    "mnemonic_hash" VARCHAR(128) NOT NULL DEFAULT '',
+    "alias"        VARCHAR(64) NOT NULL DEFAULT '',
     "source"       "WalletSource" NOT NULL DEFAULT 'CREATE',
-    "password"     VARCHAR(128) NOT NULL DEFAULT '',
-    "password_hint" VARCHAR(128) NOT NULL DEFAULT '',
-    "memo"         VARCHAR(256) NOT NULL DEFAULT '',
     "created_at"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "wallets_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "wallets_identifier_key" ON "wallets"("identifier");
-
--- 账户表（每条链一个账户，通过 index 区分同链多账户）
-CREATE TABLE IF NOT EXISTS "accounts" (
+-- 钱包地址表（全局唯一）：替代原 accounts 表在服务端的角色
+-- 客户端创建账户后，同步地址到此表
+-- 地址与钱包的关联通过 wallet_subscriptions 实现
+CREATE TABLE IF NOT EXISTS "wallets_addresses" (
     "id"           TEXT        NOT NULL,
-    "wallet_id"    VARCHAR(36) NOT NULL,
-    "network"      VARCHAR(64) NOT NULL,
-    "index"        INT         NOT NULL DEFAULT 0,
-    "name"         VARCHAR(64) NOT NULL,
+    "chain"        VARCHAR(64) NOT NULL,
     "address"      VARCHAR(64) NOT NULL,
     "created_at"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "accounts_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "wallets_addresses_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "accounts_wallet_id_network_index_key" ON "accounts"("wallet_id", "network", "index");
+CREATE UNIQUE INDEX IF NOT EXISTS "wallets_addresses_chain_address_key" ON "wallets_addresses"("chain", "address");
+CREATE INDEX IF NOT EXISTS "wallets_addresses_address_idx" ON "wallets_addresses"("address");
 
--- 账户资产表：每个账户持有的各资产余额
-CREATE TABLE IF NOT EXISTS "account_assets" (
+-- 资产地址表：每个链上地址持有的各资产余额
+-- 关联键为 address_id（关联 wallets_addresses.id）
+CREATE TABLE IF NOT EXISTS "assets_addresses" (
     "id"         TEXT        NOT NULL,
-    "account_id" VARCHAR(36) NOT NULL,
+    "address_id" VARCHAR(36) NOT NULL,
     "asset_id"   VARCHAR(36) NOT NULL,
+    "chain"      VARCHAR(64) NOT NULL DEFAULT '',
     "balance"    DECIMAL(30,8) NOT NULL DEFAULT 0,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "account_assets_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "assets_addresses_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "account_assets_account_id_asset_id_key" ON "account_assets"("account_id", "asset_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "assets_addresses_address_id_asset_id_key" ON "assets_addresses"("address_id", "asset_id");
 
 -- 钱包-设备订阅关联表
 CREATE TABLE IF NOT EXISTS "wallet_subscriptions" (
     "id"         SERIAL      NOT NULL,
     "wallet_id"  VARCHAR(36) NOT NULL,
-    "device_id"  INT       NOT NULL,
+    "device_id"  VARCHAR(64) NOT NULL,
     "chain"      VARCHAR(32) NOT NULL DEFAULT '',
     "address_id" VARCHAR(36) NOT NULL DEFAULT '',
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -187,20 +171,6 @@ CREATE TABLE IF NOT EXISTS "transactions" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "transactions_tx_hash_key" ON "transactions"("tx_hash");
 
--- 联系人表
-CREATE TABLE IF NOT EXISTS "contacts" (
-    "id"         TEXT        NOT NULL,
-    "device_id"  INT         NOT NULL,
-    "name"       VARCHAR(64) NOT NULL,
-    "address"    VARCHAR(64) NOT NULL,
-    "network"    VARCHAR(64) NOT NULL DEFAULT 'Tron',
-    "memo"       VARCHAR(256) NOT NULL DEFAULT '',
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "contacts_pkey" PRIMARY KEY ("id")
-);
-
 -- 通知表（关联钱包）
 CREATE TABLE IF NOT EXISTS "notifications" (
     "id"         TEXT        NOT NULL,
@@ -218,7 +188,7 @@ CREATE INDEX IF NOT EXISTS "notifications_wallet_id_idx" ON "notifications"("wal
 CREATE TABLE IF NOT EXISTS "notification_reads" (
     "id"              SERIAL      NOT NULL,
     "notification_id" TEXT        NOT NULL,
-    "device_id"       INT         NOT NULL,
+    "device_id"       VARCHAR(64) NOT NULL,
     "is_read"         BOOLEAN     NOT NULL DEFAULT false,
     "read_at"         TIMESTAMP(3),
     "created_at"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -58,7 +58,7 @@ export default function ReceiveScreen() {
   }, [assets, tokenSymbol, tokenId]);
 
   // 优先使用代币自身的 chain，回退到账户 network
-  const network = currentToken.chain || activeAccount?.network || "";
+  const network = currentToken.chain || activeAccount?.chain || "";
 
   const qrValue = useMemo(() => {
     if (!address) return "";

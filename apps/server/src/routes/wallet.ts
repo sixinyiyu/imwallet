@@ -1,10 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { deviceAuthMiddleware } from "../middleware/deviceAuth";
 import { validate } from "../middleware/validate";
-import {
-  walletSchema,
-  resetPasswordSchema,
-} from "../validators/wallet";
+import { walletSchema, walletAddressSchema } from "../validators/wallet";
 import * as walletService from "../services/walletService";
 import prisma from "../config/prisma";
 
@@ -18,6 +15,24 @@ const asyncHandler =
 // 所有钱包操作需要设备签名验证
 router.use(deviceAuthMiddleware);
 
+/**
+ * Helper: 验证设备是否关联该钱包
+ * 先查地址级订阅，没有则兜底查 wallets 表（刚创建还没添加账户的情况）
+ */
+async function checkWalletOwnership(walletId: string, _deviceId: string): Promise<boolean> {
+  const subscription = await prisma.walletSubscription.findFirst({
+    where: {
+      wallet_id: walletId,
+      device_id: _deviceId,
+    },
+  });
+  if (subscription) return true;
+
+  // 兜底：钱包存在即允许（刚创建还没添加网络账户）
+  const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
+  return !!wallet;
+}
+
 // 获取当前设备的钱包列表（简化数据，不含代币余额）
 router.get("/", asyncHandler(async (req: Request, res: Response) => {
   const wallets = await walletService.getDeviceWallets(req.device!.deviceId);
@@ -30,58 +45,18 @@ router.get("/aggregate", asyncHandler(async (req: Request, res: Response) => {
   res.json({ wallets });
 }));
 
-// 创建/导入钱包（统一接口，通过 source 字段区分）
+// 创建/导入钱包（精简：服务端只创建 { id, source }，walletId 由客户端生成）
 router.post(
   "/",
   validate(walletSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const wallet = await walletService.createOrImportWallet(
       req.device!.deviceId,
-      req.body.source,
-      req.body.alias,
-      req.body.password,
-      req.body.passwordHint,
-      req.body.mnemonic,
-      req.body.privateKey
+      req.body.walletId,
+      req.body.alias || "",
+      req.body.source
     );
     res.status(201).json(wallet);
-  })
-);
-
-// 重置钱包密码（通过助记词验证身份后更新密码）
-router.put(
-  "/:id/reset-password",
-  validate(resetPasswordSchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const walletId = req.params.id as string;
-
-    // 验证设备与钱包关联（手动查找设备，不使用 relation filter）
-    const device = await prisma.device.findUnique({
-      where: { device_id: req.device!.deviceId },
-    });
-    if (!device) {
-      res.status(404).json({ error: "Device not found" });
-      return;
-    }
-
-    const subscription = await prisma.walletSubscription.findFirst({
-      where: {
-        wallet_id: walletId,
-        device_id: device.id,
-      },
-    });
-    if (!subscription) {
-      res.status(403).json({ error: "You do not have permission to reset this wallet password" });
-      return;
-    }
-
-    const wallet = await walletService.resetWalletPassword(
-      walletId,
-      req.body.mnemonic,
-      req.body.password,
-      req.body.passwordHint
-    );
-    res.json(wallet);
   })
 );
 
@@ -89,22 +64,8 @@ router.put(
 router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   const walletId = req.params.id as string;
 
-  // Verify device-wallet ownership (手动查找设备，不使用 relation filter)
-  const device = await prisma.device.findUnique({
-    where: { device_id: req.device!.deviceId },
-  });
-  if (!device) {
-    res.status(404).json({ error: "Device not found" });
-    return;
-  }
-
-  const subscription = await prisma.walletSubscription.findFirst({
-    where: {
-      wallet_id: walletId,
-      device_id: device.id,
-    },
-  });
-  if (!subscription) {
+  const hasPermission = await checkWalletOwnership(walletId, req.device!.deviceId);
+  if (!hasPermission) {
     res.status(403).json({ error: "You do not have permission to view this wallet" });
     return;
   }
@@ -117,22 +78,8 @@ router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
 router.get("/:id/balance", asyncHandler(async (req: Request, res: Response) => {
   const walletId = req.params.id as string;
 
-  // 验证设备与钱包关联
-  const device = await prisma.device.findUnique({
-    where: { device_id: req.device!.deviceId },
-  });
-  if (!device) {
-    res.status(404).json({ error: "Device not found" });
-    return;
-  }
-
-  const subscription = await prisma.walletSubscription.findFirst({
-    where: {
-      wallet_id: walletId,
-      device_id: device.id,
-    },
-  });
-  if (!subscription) {
+  const hasPermission = await checkWalletOwnership(walletId, req.device!.deviceId);
+  if (!hasPermission) {
     res.status(403).json({ error: "You do not have permission to view this wallet" });
     return;
   }
@@ -147,73 +94,58 @@ router.delete("/:id", asyncHandler(async (req: Request, res: Response) => {
   res.status(204).send();
 }));
 
-// 更新钱包别名
-router.put("/:id", asyncHandler(async (req: Request, res: Response) => {
-  const walletId = req.params.id as string;
-  const { alias } = req.body;
-  if (!alias || typeof alias !== "string") {
-    res.status(400).json({ error: "alias is required" });
-    return;
-  }
+// ─── Wallet Addresses 路由 ──────────────────────────────────────────────────
 
-  // 验证设备与钱包关联（手动查找设备，不使用 relation filter）
-  const device = await prisma.device.findUnique({
-    where: { device_id: req.device!.deviceId },
-  });
-  if (!device) {
-    res.status(404).json({ error: "Device not found" });
-    return;
-  }
-
-  const subscription = await prisma.walletSubscription.findFirst({
-    where: {
-      wallet_id: walletId,
-      device_id: device.id,
-    },
-  });
-  if (!subscription) {
-    res.status(403).json({ error: "You do not have permission to update this wallet" });
-    return;
-  }
-
-  const wallet = await walletService.updateWalletAlias(walletId, alias);
-  res.json(wallet);
-}));
-
-// 验证钱包密码
+// 同步地址到服务端（客户端创建账户后调用）
 router.post(
-  "/:id/verify-password",
+  "/:id/addresses",
+  validate(walletAddressSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const walletId = req.params.id as string;
-    const { password } = req.body;
-    if (!password || typeof password !== "string") {
-      res.status(400).json({ error: "password is required" });
+
+    const hasPermission = await checkWalletOwnership(walletId, req.device!.deviceId);
+    if (!hasPermission) {
+      res.status(403).json({ error: "You do not have permission to access this wallet" });
       return;
     }
 
-    // 验证设备与钱包关联（手动查找设备，不使用 relation filter）
-    const device = await prisma.device.findUnique({
-      where: { device_id: req.device!.deviceId },
-    });
-    if (!device) {
-      res.status(404).json({ error: "Device not found" });
-      return;
-    }
-
-    const subscription = await prisma.walletSubscription.findFirst({
-      where: {
-        wallet_id: walletId,
-        device_id: device.id,
-      },
-    });
-    if (!subscription) {
-      res.status(403).json({ error: "You do not have permission to verify this wallet" });
-      return;
-    }
-
-    const verified = await walletService.verifyWalletPassword(walletId, password);
-    res.json({ verified });
+    const result = await walletService.addWalletAddress(
+      walletId,
+      req.device!.deviceId,
+      req.body.chain,
+      req.body.address
+    );
+    res.status(201).json(result);
   })
 );
+
+// 删除服务端地址记录（客户端删除账户时同步调用）
+router.delete("/:id/addresses/:addressId", asyncHandler(async (req: Request, res: Response) => {
+  const walletId = req.params.id as string;
+  const addressId = req.params.addressId as string;
+
+  const hasPermission = await checkWalletOwnership(walletId, req.device!.deviceId);
+  if (!hasPermission) {
+    res.status(403).json({ error: "You do not have permission to access this wallet" });
+    return;
+  }
+
+  await walletService.deleteWalletAddress(walletId, req.device!.deviceId, addressId);
+  res.status(204).send();
+}));
+
+// 查询钱包的所有链上地址（服务端视角）
+router.get("/:id/addresses", asyncHandler(async (req: Request, res: Response) => {
+  const walletId = req.params.id as string;
+
+  const hasPermission = await checkWalletOwnership(walletId, req.device!.deviceId);
+  if (!hasPermission) {
+    res.status(403).json({ error: "You do not have permission to access this wallet" });
+    return;
+  }
+
+  const addresses = await walletService.getWalletAddresses(walletId);
+  res.json({ addresses });
+}));
 
 export default router;

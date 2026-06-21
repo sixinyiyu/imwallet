@@ -27,40 +27,19 @@ enum NotificationType {
   TRANSFER_OUT
 }
 
-
 enum Platform {
   ios
   android
   web
 }
 
-/// 设备表：存储设备信息，设备标识 = Ed25519 公钥 hex
+/// 设备表（精简）：仅保留验签所需字段
+/// 完整设备信息存储在客户端 SQLite
 model Device {
-  id           Int       @id @default(autoincrement())
-  /// 设备标识，Ed25519 公钥 hex（64字符），客户端生成的密钥对公钥
-  device_id    String    @unique @db.VarChar(64)
+  /// 设备标识，Ed25519 公钥 hex（64字符），客户端生成的密钥对公钥，直接作为主键
+  id           String    @id @db.VarChar(64)
   /// 设备平台：ios/android/web
   platform     Platform
-  /// 商店来源：appStore/googlePlay/fdroid（web平台为空字符串）
-  platform_store String    @default("") @map("platform_store") @db.VarChar(16)
-  /// 操作系统版本
-  os           String    @default("") @db.VarChar(32)
-  /// 设备型号
-  model        String    @default("") @db.VarChar(64)
-  /// 语言/地区设置
-  locale       String    @default("") @db.VarChar(16)
-  /// App 版本号
-  version      String    @default("") @db.VarChar(32)
-  /// 法币货币代码
-  currency     String    @default("") @db.VarChar(8)
-  /// Push 推送 token
-  token        String    @default("") @db.VarChar(256)
-  /// 是否启用推送通知
-  is_push_enabled Boolean @default(false) @map("is_push_enabled")
-  /// 是否启用价格提醒
-  is_price_alerts_enabled Boolean @default(false) @map("is_price_alerts_enabled")
-  /// 订阅版本号，用于增量同步
-  subscriptions_version Int @default(0) @map("subscriptions_version")
   created_at   DateTime  @default(now()) @map("created_at")
   updated_at   DateTime  @updatedAt @map("updated_at")
 
@@ -114,62 +93,51 @@ model Asset {
   @@map("assets")
 }
 
-/// 钱包表：存储用户创建或导入的钱包
+/// 钱包表（精简）：服务端仅保留标识信息
+/// 密码、助记词哈希、别名等存储在客户端 SQLite
 model Wallet {
-  id           String        @id @default(uuid())
-  /// 钱包标识，aqud + 32位Base62随机字符串，全局唯一
-  identifier   String        @unique @db.VarChar(36)
-  /// 钱包别名，用户自定义名称
-  alias        String        @db.VarChar(64)
-  /// 助记词哈希（助记词的确定性派生，用于防重复导入和密码重置验证）
-  mnemonicHash String        @default("") @map("mnemonic_hash") @db.VarChar(128)
-  /// 钱包来源
+  id           String        @id  // aqud + 32位助记词SHA256哈希前缀，客户端生成
+  alias        String        @default("") @db.VarChar(64) // 钱包别名
   source       WalletSource  @default(CREATE)
-  /// 钱包密码（bcrypt hash），用于备份、删除等敏感操作的验证
-  password      String        @default("") @db.VarChar(128)
-  /// 密码提示，帮助用户回忆密码
-  passwordHint  String    @default("") @map("password_hint") @db.VarChar(128)
-  /// 备注说明
-  memo         String        @default("") @db.VarChar(256)
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
 
   @@map("wallets")
 }
 
-/// 账户资产表：每个账户持有的各资产余额
-model AccountAsset {
+/// 钱包地址表（全局唯一）：替代原 accounts 表在服务端的角色
+/// 客户端创建账户后，同步地址到此表
+/// 地址与钱包的关联通过 wallet_subscriptions 实现
+model WalletAddress {
+  id           String   @id @default(uuid())
+  /// 链名称（如 Tron、Ethereum、Bitcoin）
+  chain        String   @db.VarChar(64)
+  /// 链上地址
+  address      String   @db.VarChar(64)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([chain, address])
+  @@index([address])
+  @@map("wallets_addresses")
+}
+
+/// 资产合约地址表：每个链上地址持有的各资产余额
+/// 关联键从 account_id 改为 address_id（关联 wallets_addresses.id）
+model AssetsAddress {
   id        String   @id @default(uuid())
-  /// 关联账户 ID
-  accountId String   @map("account_id") @db.VarChar(36)
+  /// 关联钱包地址 ID（wallets_addresses.id）
+  addressId String   @map("address_id") @db.VarChar(36)
   /// 关联资产 ID
   assetId   String   @map("asset_id") @db.VarChar(36)
+  /// 链名称（如 Tron、Ethereum、Bitcoin）
+  chain     String   @db.VarChar(64)
   /// 资产余额
   balance   Decimal  @default(0) @db.Decimal(30, 8)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@unique([accountId, assetId])
-  @@map("account_assets")
-}
-
-/// 账户表：钱包在某条链上的地址，每个钱包每条链可有多个账户（通过 index 区分）
-model Account {
-  id           String   @id @default(uuid())
-  walletId     String   @map("wallet_id") @db.VarChar(36)
-  /// 所属网络（如 Tron、Ethereum、Bitcoin）
-  network      String   @db.VarChar(64)
-  /// 派生路径索引，同链多账户时递增（默认0）
-  index        Int      @default(0)
-  /// 账户名称
-  name         String   @db.VarChar(64)
-  /// 链上地址（Tron格式: T+33位随机字符, EVM格式: 0x+40位hex）
-  address      String   @db.VarChar(64)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  @@unique([walletId, network, index])
-  @@map("accounts")
+  @@unique([addressId, assetId])
+  @@map("assets_addresses")
 }
 
 /// 钱包-设备订阅关联表：多对多关系
@@ -177,8 +145,8 @@ model WalletSubscription {
   id         Int      @id @default(autoincrement())
   /// 钱包 ID
   wallet_id  String   @db.VarChar(36)
-  /// 设备 ID（devices 表的自增主键）
-  device_id  Int
+  /// 设备 ID（devices.id，Ed25519 公钥 hex）
+  device_id  String   @db.VarChar(64)
   /// 链标识（预留）
   chain      String   @default("") @db.VarChar(32)
   /// 地址标识（预留）
@@ -212,7 +180,7 @@ model Transaction {
   id           String   @id @default(uuid())
   /// 交易哈希，链上唯一标识
   txHash       String   @unique @map("tx_hash") @db.VarChar(66)
-  /// 付款链地址（Account.address，如 T.../0x...）
+  /// 付款链地址（如 T.../0x...）
   fromAddress  String   @map("from_address") @db.VarChar(64)
   /// 收款链地址（始终记录，如 T.../0x...）
   toAddress    String   @map("to_address") @db.VarChar(128)
@@ -230,25 +198,6 @@ model Transaction {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("transactions")
-}
-
-/// 地址本：常用联系人地址表
-model Contact {
-  id        String   @id @default(uuid())
-  /// 设备 ID（devices 表的自增主键）
-  device_id Int
-  /// 联系人名称
-  name      String   @db.VarChar(64)
-  /// 链上地址（Account.address，如 T.../0x.../1...）
-  address   String   @db.VarChar(64)
-  /// 链类型（Tron/Ethereum/Bitcoin）
-  network   String   @default("Tron") @db.VarChar(64)
-  /// 备注
-  memo      String   @default("") @db.VarChar(256)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("contacts")
 }
 
 /// 通知/消息表：站内信通知（关联到钱包）
@@ -271,7 +220,7 @@ model Notification {
 model NotificationRead {
   id              Int      @id @default(autoincrement())
   notification_id String   @map("notification_id")
-  device_id       Int      @map("device_id")
+  device_id       String   @map("device_id") @db.VarChar(64)
   /// 是否已读
   isRead          Boolean  @default(false) @map("is_read")
   /// 阅读时间

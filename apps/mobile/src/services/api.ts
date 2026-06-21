@@ -121,11 +121,6 @@ export async function ensureDeviceRegistered(publicKeyHex: string): Promise<void
     await axios.post(`${BASE_URL}/devices`, {
       device_id: publicKeyHex,
       platform,
-      os: Platform.OS,
-      model: "Mobile Device",
-      locale: "zh",
-      version: "1.0.0",
-      currency: "CNY",
     });
     await SecureStore.setItemAsync(DEVICE_REGISTERED, "true");
   } catch (err: any) {

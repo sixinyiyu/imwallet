@@ -209,14 +209,15 @@ export function validateMnemonicWords(mnemonic: string): {
 }
 
 /**
- * Generate a wallet identifier: aqud + 32 random Base62 characters
+ * Generate a deterministic wallet identifier from mnemonic:
+ * aqud + SHA256(mnemonic) first 32 hex chars.
+ *
+ * Same mnemonic always produces the same identifier,
+ * enabling cross-device wallet recognition.
  */
-export function generateIdentifier(): string {
-  const chars =
-    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  let identifier = "aqud";
-  for (let i = 0; i < 32; i++) {
-    identifier += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return identifier;
+export function generateIdentifier(mnemonic: string): string {
+  const data = new TextEncoder().encode(mnemonic.trim().toLowerCase());
+  const hash = sha256(data);
+  const hex = Array.from(hash).map(b => b.toString(16).padStart(2, "0")).join("");
+  return "aqud" + hex.slice(0, 32);
 }

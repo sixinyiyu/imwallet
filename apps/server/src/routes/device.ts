@@ -12,16 +12,11 @@ const asyncHandler =
     fn(req, res, next).catch(next);
 
 // ===== 设备注册（无需签名，首次启动） =====
+// 精简：只接收 device_id + platform
 
 const registerDeviceSchema = z.object({
   device_id: z.string().regex(/^[0-9a-fA-F]{64}$/, "device_id must be 64-char hex (Ed25519 public key)"),
   platform: z.enum(["ios", "android", "web"], { required_error: "platform is required" }),
-  platform_store: z.enum(["appStore", "googlePlay", "fdroid"]).optional(),
-  os: z.string().max(32).optional(),
-  model: z.string().max(64).optional(),
-  locale: z.string().max(16).optional(),
-  version: z.string().max(32).optional(),
-  currency: z.string().max(8).optional(),
 });
 
 router.post(
@@ -32,32 +27,6 @@ router.post(
     // 新设备返回 201，已存在设备返回 200（幂等）
     const status = result.created_at.getTime() === result.updated_at.getTime() ? 201 : 200;
     res.status(status).json(result);
-  })
-);
-
-// ===== 设备更新（需要签名） =====
-
-const updateDeviceSchema = z.object({
-  platform: z.enum(["ios", "android", "web"]).optional(),
-  platform_store: z.enum(["appStore", "googlePlay", "fdroid"]).optional(),
-  os: z.string().max(32).optional(),
-  model: z.string().max(64).optional(),
-  locale: z.string().max(16).optional(),
-  version: z.string().max(32).optional(),
-  currency: z.string().max(8).optional(),
-  token: z.string().max(256).optional(),
-  is_push_enabled: z.boolean().optional(),
-  is_price_alerts_enabled: z.boolean().optional(),
-});
-
-router.put(
-  "/",
-  deviceAuthMiddleware,
-  validate(updateDeviceSchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const deviceId = req.headers["x-device-id"] as string;
-    const result = await deviceService.updateDevice(deviceId, req.body);
-    res.json(result);
   })
 );
 

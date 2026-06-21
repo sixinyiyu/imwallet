@@ -77,7 +77,8 @@ export async function updateAssetTradable(
 }
 
 /**
- * Get wallet's aggregated asset balances (sum across all accounts).
+ * Get wallet's aggregated asset balances (sum across all addresses).
+ * Uses wallet_subscriptions → wallets_addresses → assets_addresses (via address_id) chain.
  */
 export async function getWalletAssetBalances(walletId: string): Promise<AssetBalance[]> {
   const wallet = await prisma.wallet.findUnique({
@@ -88,24 +89,24 @@ export async function getWalletAssetBalances(walletId: string): Promise<AssetBal
     throw createError(404, "钱包不存在");
   }
 
-  // 1. Find all accounts under this wallet
-  const accounts = await prisma.account.findMany({
-    where: { walletId },
-    select: { id: true },
+  // 1. 通过 subscriptions 获取 address_id
+  const subs = await prisma.walletSubscription.findMany({
+    where: { wallet_id: walletId, address_id: { not: "" } },
+    select: { address_id: true },
   });
-  const accountIds = accounts.map((a: any) => a.id);
+  const addressIds = subs.map((s: any) => s.address_id);
 
-  if (accountIds.length === 0) {
+  if (addressIds.length === 0) {
     return [];
   }
 
-  // 2. Fetch all account_assets
-  const accountAssets = await prisma.accountAsset.findMany({
-    where: { accountId: { in: accountIds } },
+  // 2. Fetch all assets_addresses for these addresses
+  const assetsAddresses = await prisma.assetsAddress.findMany({
+    where: { addressId: { in: addressIds } },
   });
 
   // 3. Fetch asset definitions
-  const assetIds = [...new Set(accountAssets.map((aa: any) => aa.assetId))];
+  const assetIds = [...new Set(assetsAddresses.map((aa: any) => aa.assetId))];
   const assets = await prisma.asset.findMany({
     where: { id: { in: assetIds } },
   });
@@ -121,7 +122,7 @@ export async function getWalletAssetBalances(walletId: string): Promise<AssetBal
 
   // 5. Aggregate balances by asset
   const balanceMap = new Map<string, number>();
-  for (const aa of accountAssets) {
+  for (const aa of assetsAddresses) {
     const current = balanceMap.get(aa.assetId) || 0;
     balanceMap.set(aa.assetId, current + parseFloat(aa.balance.toString()));
   }
@@ -154,6 +155,7 @@ export async function getWalletAssetBalances(walletId: string): Promise<AssetBal
 
 /**
  * Get wallet total balance (CNY + USD).
+ * Uses wallet_subscriptions → wallets_addresses → assets_addresses (via address_id) chain.
  */
 export async function getWalletBalance(
   walletId: string
@@ -166,19 +168,19 @@ export async function getWalletBalance(
     throw createError(404, "Wallet not found");
   }
 
-  // Aggregate from account_assets
-  const accounts = await prisma.account.findMany({
-    where: { walletId },
-    select: { id: true },
+  // 通过 subscriptions 获取 address_id
+  const subs = await prisma.walletSubscription.findMany({
+    where: { wallet_id: walletId, address_id: { not: "" } },
+    select: { address_id: true },
   });
-  const accountIds = accounts.map((a: any) => a.id);
+  const addressIds = subs.map((s: any) => s.address_id);
 
-  if (accountIds.length === 0) {
+  if (addressIds.length === 0) {
     return { totalBalanceCny: "0.00", totalBalanceUsd: "0.00" };
   }
 
-  const accountAssets = await prisma.accountAsset.findMany({
-    where: { accountId: { in: accountIds } },
+  const assetsAddresses = await prisma.assetsAddress.findMany({
+    where: { addressId: { in: addressIds } },
   });
 
   const [usdFiat, cnyFiat] = await Promise.all([
@@ -190,7 +192,7 @@ export async function getWalletBalance(
 
   let totalCny = 0;
   let totalUsd = 0;
-  for (const aa of accountAssets) {
+  for (const aa of assetsAddresses) {
     const balance = parseFloat(aa.balance.toString());
     totalCny += balance * cnyRate;
     totalUsd += balance * usdRate;

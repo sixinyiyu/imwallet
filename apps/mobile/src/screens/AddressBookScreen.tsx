@@ -95,7 +95,7 @@ export default function AddressBookScreen() {
     setFormMode("edit");
     setEditingContact(contact);
     setFormName(contact.name);
-    setFormAddress(contact.address);
+    setFormAddress(contact.addresses[0]?.address || "");
     setFormMemo(contact.memo || "");
     setFormVisible(true);
   };
@@ -122,20 +122,31 @@ export default function AddressBookScreen() {
     setSubmitting(true);
     try {
       if (formMode === "add") {
-        await contactService.createContact({
+        const contact = await contactService.createContact({
           name: formName.trim(),
-          address: formAddress.trim(),
-          network: detectedNetwork,
           memo: formMemo.trim() || undefined,
         });
+        if (detectedNetwork) {
+          await contactService.addContactAddress(contact.id, {
+            chain: detectedNetwork,
+            address: formAddress.trim(),
+          });
+        }
         showToast("联系人已添加");
       } else if (formMode === "edit" && editingContact) {
         await contactService.updateContact(editingContact.id, {
           name: formName.trim(),
-          address: formAddress.trim(),
-          network: detectedNetwork,
           memo: formMemo.trim() || undefined,
         });
+        if (detectedNetwork) {
+          for (const addr of editingContact.addresses) {
+            await contactService.deleteContactAddress(addr.id);
+          }
+          await contactService.addContactAddress(editingContact.id, {
+            chain: detectedNetwork,
+            address: formAddress.trim(),
+          });
+        }
         showToast("联系人已更新");
       }
       closeForm();
@@ -186,7 +197,7 @@ export default function AddressBookScreen() {
           <View style={styles.contactItem}>
             {/* 左侧：网络icon */}
             <View style={styles.contactIconWrap}>
-              <NetworkIcon network={item.network} size={28} />
+              <NetworkIcon network={item.addresses[0]?.chain} size={28} />
             </View>
 
             {/* 右侧：名称 + 地址 + 操作链接 */}
@@ -197,18 +208,17 @@ export default function AddressBookScreen() {
                   {item.name}
                 </Text>
                 <View style={styles.networkBadge}>
-                  <Text style={styles.networkBadgeText}>{item.network || "未知"}</Text>
+                  <Text style={styles.networkBadgeText}>{item.addresses[0]?.chain || "未知"}</Text>
                 </View>
               </View>
 
               {/* 第二行：地址 + 复制icon */}
               <View style={styles.contactAddressRow}>
-                <Text style={styles.contactAddress} numberOfLines={1} ellipsizeMode="middle">
-                  {item.address}
-                </Text>
-                <TouchableOpacity
+                  <Text style={styles.contactAddress} numberOfLines={1} ellipsizeMode="middle">
+                    {item.addresses[0]?.address}
+                  </Text>                <TouchableOpacity
                   style={styles.copyBtn}
-                  onPress={() => handleCopyAddress(item.address)}
+                  onPress={() => handleCopyAddress(item.addresses[0]?.address || "")}
                   activeOpacity={0.6}
                 >
                   <CopyIcon size={14} color="#9CA3AF" />

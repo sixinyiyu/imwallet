@@ -85,7 +85,7 @@ export default function WalletScreen() {
           onPress={() => setWalletMenuOpen(!walletMenuOpen)}
         >
           <Text style={styles.walletSelectorText} numberOfLines={1}>
-            {activeWallet?.alias ?? "选择钱包"} <Text style={styles.arrow}>▼</Text>
+            {activeWallet?.name ?? "选择钱包"} <Text style={styles.arrow}>▼</Text>
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -124,7 +124,7 @@ export default function WalletScreen() {
                   ]}
                   numberOfLines={1}
                 >
-                  {w.alias} ({w.accountCount}个账户)
+                  {w.name}
                 </Text>
               </TouchableOpacity>
             ))}

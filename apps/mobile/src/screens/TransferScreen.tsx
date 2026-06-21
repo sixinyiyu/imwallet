@@ -95,7 +95,7 @@ export default function TransferScreen() {
   // 根据选中的代币匹配付款账户
   const fromAccount = useMemo(() => {
     if (!selectedToken) return null;
-    return accounts.find((a) => a.network === selectedToken.chain && a.assets.some(asset => asset.symbol === selectedToken.symbol)) || null;
+    return accounts.find((a) => a.chain === selectedToken.chain) || null;
   }, [accounts, selectedToken]);
 
   const [amount, setAmount] = useState("");
@@ -157,7 +157,7 @@ export default function TransferScreen() {
   }, []);
 
   const selectContact = (c: Contact) => {
-    setToAddress(c.address);
+    setToAddress(c.addresses[0]?.address || "");
     setShowContactPicker(false);
   };
 
@@ -222,11 +222,15 @@ export default function TransferScreen() {
     setAddingToContacts(true);
     try {
       const contactName = toAddress.trim().slice(0, 10);
-      await contactService.createContact({
+      const contact = await contactService.createContact({
         name: contactName,
-        address: toAddress.trim(),
-        network: detectedNetwork || undefined,
       });
+      if (detectedNetwork) {
+        await contactService.addContactAddress(contact.id, {
+          chain: detectedNetwork,
+          address: toAddress.trim(),
+        });
+      }
       setAddressInContacts(true);
       setAddressCheckResult((prev) => prev ? { ...prev, inContacts: true } : prev);
       showToast("已添加到地址本");
@@ -376,9 +380,9 @@ export default function TransferScreen() {
           {fromAccount ? (
             <>
               <View style={z.fromAccountIconWrap}>
-                {fromAccount.network === "Tron" && <TronIcon size={20} />}
-                {fromAccount.network === "Ethereum" && <EthIcon size={20} />}
-                {fromAccount.network === "Bitcoin" && <BtcIcon size={20} />}
+                {fromAccount.chain === "Tron" && <TronIcon size={20} />}
+                {fromAccount.chain === "Ethereum" && <EthIcon size={20} />}
+                {fromAccount.chain === "Bitcoin" && <BtcIcon size={20} />}
               </View>
               <Text style={z.fromAccountAddress} numberOfLines={1} ellipsizeMode="middle">
                 {fromAccount.address}
@@ -565,7 +569,7 @@ export default function TransferScreen() {
               data={contacts}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
-                <TouchableOpacity style={[z.contactItem, item.address.toLowerCase() === toAddress.trim().toLowerCase() && z.contactItemActive]} onPress={() => selectContact(item)}>
+                <TouchableOpacity style={[z.contactItem, (item.addresses[0]?.address || "").toLowerCase() === toAddress.trim().toLowerCase() && z.contactItemActive]} onPress={() => selectContact(item)}>
                   <View style={z.contactAvatar}>
                     <Text style={z.contactAvatarText}>👤</Text>
                   </View>
@@ -573,11 +577,11 @@ export default function TransferScreen() {
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                       <Text style={z.contactName}>{item.name}</Text>
                       <View style={{ backgroundColor: "#DBEAFE", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
-                        <Text style={{ fontSize: 10, color: "#3B82F6", fontWeight: "500" }}>{item.network}</Text>
+                        <Text style={{ fontSize: 10, color: "#3B82F6", fontWeight: "500" }}>{item.addresses[0]?.chain}</Text>
                       </View>
                     </View>
                     <Text style={z.contactAddr}>
-                      {item.address.slice(0, 14)}...{item.address.slice(-8)}
+                      {(item.addresses[0]?.address || "").slice(0, 14)}...{(item.addresses[0]?.address || "").slice(-8)}
                     </Text>
                   </View>
                 </TouchableOpacity>
