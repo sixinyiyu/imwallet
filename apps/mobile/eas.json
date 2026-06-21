@@ -82,7 +82,8 @@
   "submit": {
     "app-store": {
       "ios": {
-        "ascAppId": "6782636061"
+        "ascAppId": "6782636061",
+        "appleId": "${APPLE_ID}"
       }
     }
   }
