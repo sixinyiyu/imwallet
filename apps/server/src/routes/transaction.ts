@@ -90,12 +90,20 @@ router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   const txId = req.params.id as string;
   const tx = await transactionService.getTransactionDetail(txId);
 
-  // 获取设备订阅的所有地址（通过 wallet_subscriptions）
-  const deviceSubs = await prisma.walletSubscription.findMany({
-    where: { device_id: req.device!.deviceId, address_id: { not: "" } },
+  // 权限校验：设备关联的所有钱包 → 这些钱包下的所有链地址
+  // 注意：地址级订阅是钱包级共享的（不按 device_id 去重），
+  // 所以需要先查设备订阅的钱包，再查这些钱包下的地址。
+  const deviceWalletSubs = await prisma.walletSubscription.findMany({
+    where: { device_id: req.device!.deviceId },
+    select: { wallet_id: true },
+  });
+  const walletIds = [...new Set(deviceWalletSubs.map((s: any) => s.wallet_id))];
+
+  const addressSubs = await prisma.walletSubscription.findMany({
+    where: { wallet_id: { in: walletIds }, address_id: { not: "" } },
     select: { address_id: true },
   });
-  const addressIds = deviceSubs.map((s: any) => s.address_id);
+  const addressIds = addressSubs.map((s: any) => s.address_id);
 
   const walletAddresses = await prisma.walletAddress.findMany({
     where: { id: { in: addressIds } },
