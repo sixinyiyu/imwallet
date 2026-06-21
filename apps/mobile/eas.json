@@ -80,6 +80,10 @@
     }
   },
   "submit": {
-    "app-store": {}
+    "app-store": {
+      "ios": {
+        "ascAppId": "6782636061"
+      }
+    }
   }
 }
