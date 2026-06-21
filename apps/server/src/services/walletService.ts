@@ -469,6 +469,7 @@ export async function addWalletAddress(
       wallet_id: walletId,
       chain,
       address_id: walletAddress.id,
+      device_id: deviceId,
     },
   });
 
