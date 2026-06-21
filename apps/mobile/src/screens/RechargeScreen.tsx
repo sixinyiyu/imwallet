@@ -77,7 +77,7 @@ export default function RechargeScreen() {
   const getAssetAddress = (asset: AssetInfo): string => {
     if (!selectedWallet) return "";
     const account = walletAccounts.find((a) => a.network === asset.chain);
-    return account?.address || selectedWallet.address;
+    return account?.address || "";
   };
 
   /** 地址截断显示 */
@@ -237,7 +237,7 @@ export default function RechargeScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={selectedWallet ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
-                  {selectedWallet ? `${selectedWallet.alias} · ${selectedWallet.address.slice(0, 8)}...${selectedWallet.address.slice(-4)}` : "请选择钱包"}
+                  {selectedWallet ? `${selectedWallet.alias}` : "请选择钱包"}
                 </Text>
                 <ChevronRightIcon size={18} color="#9CA3AF" />
               </TouchableOpacity>
@@ -338,9 +338,6 @@ export default function RechargeScreen() {
                 >
                   <View>
                     <Text style={styles.pickerItemName}>{item.alias}</Text>
-                    <Text style={styles.pickerItemAddr}>
-                      {item.address.slice(0, 14)}...{item.address.slice(-8)}
-                    </Text>
                   </View>
                 </TouchableOpacity>
               )}

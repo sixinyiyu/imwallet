@@ -83,12 +83,9 @@ router.get("/check-address", asyncHandler(async (req: Request, res: Response) =>
     return;
   }
 
-  // 查系统内：wallets 表（EVM 地址 0x...）+ accounts 表（TRX 地址 T... 等）
-  const [walletByAddress, account] = await Promise.all([
-    prisma.wallet.findUnique({ where: { address } }),
-    prisma.account.findFirst({ where: { address } }),
-  ]);
-  const inSystem = !!(walletByAddress || account);
+  // 查系统内：accounts 表（所有链地址）
+  const account = await prisma.account.findFirst({ where: { address } });
+  const inSystem = !!account;
 
   // 查用户地址本：contacts 表（按当前设备）
   const contact = await prisma.contact.findFirst({
@@ -103,7 +100,7 @@ router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   const txId = req.params.id as string;
   const tx = await transactionService.getTransactionDetail(txId);
 
-  // 权限校验：验证设备是否关联该交易的钱包（手动查找设备，不使用 relation filter）
+  // 权限校验：验证设备是否关联该交易涉及的地址
   const device = await prisma.device.findUnique({
     where: { device_id: req.device!.deviceId },
   });
@@ -112,12 +109,18 @@ router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
+  // 获取设备订阅的所有钱包的所有链地址
   const deviceSubs = await prisma.walletSubscription.findMany({
     where: { device_id: device.id },
     select: { wallet_id: true },
   });
-  const myWalletIds = deviceSubs.map((s: any) => s.wallet_id);
-  if (!myWalletIds.includes(tx.fromWalletId) && !(tx.toWalletId && myWalletIds.includes(tx.toWalletId))) {
+  const walletIds = deviceSubs.map((s: any) => s.wallet_id);
+
+  const accounts = await prisma.account.findMany({ where: { walletId: { in: walletIds } }, select: { address: true } });
+  const myAddresses = new Set<string>();
+  for (const a of accounts) myAddresses.add(a.address);
+
+  if (!myAddresses.has(tx.fromAddress) && !(tx.toAddress && myAddresses.has(tx.toAddress))) {
     res.status(403).json({ error: "You do not have permission to view this transaction" });
     return;
   }

@@ -29,7 +29,6 @@ export interface SimpleWallet {
   id: string;
   identifier: string;
   alias: string;
-  address: string;
   source: string;
   accountCount: number;
   createdAt: string;
@@ -117,8 +116,8 @@ export interface ChainInfo {
   id: number;
   name: string;
   displayName: string;
-  isAccountSupported: boolean;
-  derivationPath: string | null;
+  accountEnable: boolean;
+  derivationPath: string;
   /** 该链下可创建账户的资产列表 */
   assets: Array<{
     id: string;
@@ -134,9 +133,7 @@ export interface ChainInfo {
 export interface Transaction {
   id: string;
   txHash: string;
-  fromWalletId: string;
   fromAddress: string;  // 付款链地址（如 T.../0x...）
-  toWalletId: string;  // 默认空字符串，系统内用户时关联钱包ID
   toAddress: string;   // 收款链地址（始终记录）
   tokenSymbol: string; // 代币符号（如 USDT、TRX）
   tokenName: string;   // 代币名称

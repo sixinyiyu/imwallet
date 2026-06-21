@@ -27,6 +27,7 @@ export interface WalletTokenBalance {
   usdValue: string;
   cnyValue: string;
   decimals: number;
+  type: string;
   network: string;
   iconUrl?: string;
 }
@@ -36,7 +37,6 @@ export interface SimpleWallet {
   id: string;
   identifier: string;
   alias: string;
-  address: string;
   source: string;
   accountCount: number;
   createdAt: Date;
@@ -47,18 +47,30 @@ export interface AggregateWallet extends SimpleWallet {
   networks: string[];
 }
 
-/** 钱包余额详情（总余额+各代币余额，切换钱包时使用） */
+/** 钱包余额详情（总余额+各资产余额，切换钱包时使用） */
 export interface WalletBalanceDetail {
   totalBalanceUsd: string;
   totalBalanceCny: string;
-  tokens: WalletTokenBalance[];
+  assets: Array<{
+    id: string;
+    assetId: string;
+    symbol: string;
+    name: string;
+    balance: string;
+    usdValue: string;
+    cnyValue: string;
+    decimals: number;
+    type: string;
+    chain: string;
+    tokenId?: string | null;
+    iconUrl?: string;
+  }>;
 }
 
 export interface WalletSummary {
   id: string;
   identifier: string;
   alias: string;
-  address: string;
   source: string;
   accountCount: number;
   createdAt: Date;
@@ -68,15 +80,15 @@ export interface WalletSummary {
 
 export interface WalletDetail extends WalletSummary {
   updatedAt: Date;
-  passwordHint?: string | null;
+  passwordHint?: string;
 }
 
 /**
- * Generate a deterministic wallet address from a seed.
+ * Generate a deterministic mnemonic hash from a seed.
  * For CREATE wallets (no mnemonic), we use a hash-based derivation.
  * For IMPORT wallets, use BIP39/BIP44 deterministic derivation via derivationService.
  */
-export function deriveAddress(seed: string, index: number): string {
+export function deriveMnemonicHash(seed: string, index: number): string {
   const hash = createHash("sha256")
     .update(`${seed}-${index}`)
     .digest("hex");
@@ -149,6 +161,7 @@ async function computeTokenBalances(walletId: string): Promise<{
       usdValue,
       cnyValue,
       decimals: ast.decimals || 6,
+      type: ast.type || "NATIVE",
       network: ast.chain || "",
       iconUrl: ast.iconUrl || undefined,
     });
@@ -193,21 +206,13 @@ export async function createOrImportWallet(
   // bcrypt 哈希
   const passwordHash = await bcrypt.hash(rawPassword, 10);
 
-  // Derive wallet address
-  let address: string;
-  if (mnemonic) {
-    // Use BIP39/BIP44 deterministic derivation when mnemonic is provided
-    address = await deriveAddressFromMnemonic(mnemonic, "Ethereum", 0);
-  } else {
-    // Hash-based derivation for CREATE wallets without mnemonic
-    const seed = `device-${device.id}-${Date.now()}`;
-    address = deriveAddress(seed, 0);
-  }
+  // Derive mnemonic hash (mnemonic is always provided by the client)
+  const mnemonicHash = await deriveAddressFromMnemonic(mnemonic!, "Ethereum", 0);
   const identifier = generateIdentifier();
 
   // 检查地址是否已存在（同一助记词可能已被导入过）
-  const existingWallet = await prisma.wallet.findUnique({
-    where: { address },
+  const existingWallet = await prisma.wallet.findFirst({
+    where: { mnemonicHash },
   });
 
   if (existingWallet) {
@@ -240,7 +245,6 @@ export async function createOrImportWallet(
       id: existingWallet.id,
       identifier: existingWallet.identifier,
       alias: existingWallet.alias,
-      address: existingWallet.address,
       source: existingWallet.source as string,
       accountCount,
       createdAt: existingWallet.createdAt,
@@ -255,11 +259,10 @@ export async function createOrImportWallet(
     data: {
       identifier,
       alias,
-      address,
+      mnemonicHash,
       source,
       password: passwordHash,
-      passwordHint: passwordHint || null,
-    },
+       passwordHint: passwordHint || '',    },
   });
 
   // 创建钱包-设备订阅关系（不使用 nested create）
@@ -270,7 +273,7 @@ export async function createOrImportWallet(
     },
   });
 
-  logger.info("WALLET", `${source === "IMPORT" ? "导入" : "创建"}钱包成功: walletId=${wallet.id}, identifier=${identifier}, address=${address}`);
+  logger.info("WALLET", `${source === "IMPORT" ? "导入" : "创建"}钱包成功: walletId=${wallet.id}, identifier=${identifier}, mnemonicHash=${mnemonicHash}`);
 
   const { tokenBalances, totalBalanceCny } = await computeTokenBalances(wallet.id);
   const accountCount = await prisma.account.count({ where: { walletId: wallet.id } });
@@ -279,7 +282,6 @@ export async function createOrImportWallet(
     id: wallet.id,
     identifier: wallet.identifier,
     alias: wallet.alias,
-    address: wallet.address,
     source: wallet.source as string,
     accountCount,
     createdAt: wallet.createdAt,
@@ -305,9 +307,9 @@ export async function resetWalletPassword(
     throw createError(404, "钱包不存在");
   }
 
-  // Verify mnemonic matches the wallet address
-  const derivedAddress = await deriveAddressFromMnemonic(mnemonic, "Ethereum", 0);
-  if (derivedAddress !== wallet.address) {
+  // Verify mnemonic matches the wallet mnemonic hash
+  const derivedHash = await deriveAddressFromMnemonic(mnemonic, "Ethereum", 0);
+  if (derivedHash !== wallet.mnemonicHash) {
     throw createError(400, "助记词与当前钱包不匹配", "MNEMONIC_MISMATCH");
   }
 
@@ -329,7 +331,7 @@ export async function resetWalletPassword(
     where: { id: walletId },
     data: {
       password: passwordHash,
-      passwordHint: passwordHint || null,
+      passwordHint: passwordHint || '',
     },
   });
 
@@ -342,7 +344,6 @@ export async function resetWalletPassword(
     id: wallet.id,
     identifier: wallet.identifier,
     alias: wallet.alias,
-    address: wallet.address,
     source: wallet.source as string,
     accountCount,
     createdAt: wallet.createdAt,
@@ -391,7 +392,6 @@ export async function getDeviceWallets(deviceId: string): Promise<SimpleWallet[]
       id: wallet.id,
       identifier: wallet.identifier,
       alias: wallet.alias,
-      address: wallet.address,
       source: wallet.source as string,
       accountCount: accountCountMap.get(wallet.id) || 0,
       createdAt: wallet.createdAt,
@@ -453,7 +453,6 @@ export async function getDeviceWalletsAggregate(deviceId: string): Promise<Aggre
       id: wallet.id,
       identifier: wallet.identifier,
       alias: wallet.alias,
-      address: wallet.address,
       source: wallet.source as string,
       accountCount: accountCountMap.get(wallet.id) || 0,
       createdAt: wallet.createdAt,
@@ -486,7 +485,20 @@ export async function getWalletBalanceDetail(walletId: string): Promise<WalletBa
   return {
     totalBalanceUsd: totalUsd.toFixed(2),
     totalBalanceCny,
-    tokens: tokenBalances,
+    assets: tokenBalances.map((tb) => ({
+      id: tb.id,
+      assetId: tb.tokenId,
+      symbol: tb.symbol,
+      name: tb.name,
+      balance: tb.balance,
+      usdValue: tb.usdValue,
+      cnyValue: tb.cnyValue,
+      decimals: tb.decimals,
+      type: tb.type,
+      chain: tb.network,
+      tokenId: tb.tokenId,
+      iconUrl: tb.iconUrl,
+    })),
   };
 }
 
@@ -510,7 +522,6 @@ export async function getWalletDetail(
     id: wallet.id,
     identifier: wallet.identifier,
     alias: wallet.alias,
-    address: wallet.address,
     source: wallet.source as string,
     passwordHint: wallet.passwordHint,
     accountCount,
@@ -536,7 +547,6 @@ export async function updateWalletAlias(
     id: wallet.id,
     identifier: wallet.identifier,
     alias: wallet.alias,
-    address: wallet.address,
     source: wallet.source as string,
     accountCount,
     createdAt: wallet.createdAt,

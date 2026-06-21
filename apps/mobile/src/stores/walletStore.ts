@@ -259,6 +259,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // Store mnemonic per walletId
     await SecureStore.setItemAsync(mnemonicKey(wallet.id), mnemonic);
 
+    // 🔍 DIAG: log wallet.id and storage key
+    console.warn(`[createWallet] wallet.id=${wallet.id}, storageKey=${mnemonicKey(wallet.id)}, mnemonicPrefix=${mnemonic.slice(0, 20)}`);
+
     set({
       mnemonic,
       hasWallets: true,
@@ -355,7 +358,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const detail = await walletService.getWalletBalanceDetail(walletId);
       set({
         totalBalanceUsd: detail.totalBalanceUsd || "0",
-        assets: detail.assets,
+        assets: detail.assets || [],
       });
     } catch {
       // silent

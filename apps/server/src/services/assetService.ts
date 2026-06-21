@@ -157,7 +157,7 @@ export async function getWalletAssetBalances(walletId: string): Promise<AssetBal
  */
 export async function getWalletBalance(
   walletId: string
-): Promise<{ totalBalanceCny: string; totalBalanceUsd: string; address: string }> {
+): Promise<{ totalBalanceCny: string; totalBalanceUsd: string }> {
   const wallet = await prisma.wallet.findUnique({
     where: { id: walletId },
   });
@@ -174,7 +174,7 @@ export async function getWalletBalance(
   const accountIds = accounts.map((a: any) => a.id);
 
   if (accountIds.length === 0) {
-    return { totalBalanceCny: "0.00", totalBalanceUsd: "0.00", address: wallet.address };
+    return { totalBalanceCny: "0.00", totalBalanceUsd: "0.00" };
   }
 
   const accountAssets = await prisma.accountAsset.findMany({
@@ -199,6 +199,5 @@ export async function getWalletBalance(
   return {
     totalBalanceCny: totalCny.toFixed(2),
     totalBalanceUsd: totalUsd.toFixed(2),
-    address: wallet.address,
   };
 }

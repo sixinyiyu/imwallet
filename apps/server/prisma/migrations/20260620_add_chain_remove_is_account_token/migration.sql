@@ -7,8 +7,8 @@ CREATE TABLE IF NOT EXISTS "chains" (
     "id"                   SERIAL      NOT NULL,
     "name"                 VARCHAR(64) NOT NULL,
     "display_name"         VARCHAR(64) NOT NULL,
-    "is_account_supported" BOOLEAN     NOT NULL DEFAULT true,
-    "derivation_path"      VARCHAR(128),
+    "account_enable"        BOOLEAN     NOT NULL DEFAULT true,
+    "derivation_path"      VARCHAR(128) NOT NULL DEFAULT '',
     "created_at"           TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at"           TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS "chains" (
 CREATE UNIQUE INDEX IF NOT EXISTS "chains_name_key" ON "chains"("name");
 
 -- chains 种子数据
-INSERT INTO "chains" ("name", "display_name", "is_account_supported", "derivation_path")
+INSERT INTO "chains" ("name", "display_name", "account_enable", "derivation_path")
 VALUES
     ('Tron',     'Tron (TRX)',     true, 'm/44''/195''/0''/0'),
     ('Ethereum', 'Ethereum (ETH)', true, 'm/44''/60''/0''/0'),

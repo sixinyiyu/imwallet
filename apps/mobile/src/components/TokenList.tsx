@@ -44,9 +44,10 @@ function SkeletonRow() {
 
 export default function TokenList({ assets, onAssetPress, loading }: Props) {
   const { currency } = useFiatStore();
+  const safeAssets = assets || [];
 
   // 加载中：显示骨架屏
-  if (loading && assets.length === 0) {
+  if (loading && safeAssets.length === 0) {
     return (
       <View style={styles.container}>
         {[0, 1, 2].map((i) => (
@@ -59,7 +60,7 @@ export default function TokenList({ assets, onAssetPress, loading }: Props) {
     );
   }
 
-  if (assets.length === 0) {
+  if (safeAssets.length === 0) {
     return (
       <EmptyState message="暂无代币" />
     );
@@ -71,12 +72,12 @@ export default function TokenList({ assets, onAssetPress, loading }: Props) {
 
   return (
     <View style={styles.container}>
-      {assets.map((asset, index) => (
+      {safeAssets.map((asset, index) => (
         <TouchableOpacity
           key={asset.assetId || asset.symbol || index}
           style={[
             styles.item,
-            index < assets.length - 1 && styles.itemBorder,
+            index < safeAssets.length - 1 && styles.itemBorder,
           ]}
           onPress={() => onAssetPress(asset)}
         >

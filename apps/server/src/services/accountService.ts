@@ -222,8 +222,8 @@ export interface ChainWithAssets {
   id: number;
   name: string;
   displayName: string;
-  isAccountSupported: boolean;
-  derivationPath: string | null;
+  accountEnable: boolean;
+  derivationPath: string;
   assets: Array<{
     id: string;
     symbol: string;
@@ -237,11 +237,11 @@ export interface ChainWithAssets {
 
 /**
  * Get available chains for creating accounts.
- * Returns chains where isAccountSupported=true, along with their assets.
+ * Returns chains where accountEnable=true, along with their assets.
  */
 export async function getAvailableChains(): Promise<ChainWithAssets[]> {
   const chains = await prisma.chain.findMany({
-    where: { isAccountSupported: true },
+    where: { accountEnable: true },
     orderBy: { name: "asc" },
   });
 
@@ -256,7 +256,7 @@ export async function getAvailableChains(): Promise<ChainWithAssets[]> {
       id: chain.id,
       name: chain.name,
       displayName: chain.displayName,
-      isAccountSupported: chain.isAccountSupported,
+      accountEnable: chain.accountEnable,
       derivationPath: chain.derivationPath,
       assets: assets.map((a: any) => ({
         id: a.id,

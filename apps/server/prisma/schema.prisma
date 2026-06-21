@@ -34,13 +34,6 @@ enum Platform {
   web
 }
 
-/// 设备商店来源
-enum PlatformStore {
-  appStore
-  googlePlay
-  fdroid
-}
-
 /// 设备表：存储设备信息，设备标识 = Ed25519 公钥 hex
 model Device {
   id           Int       @id @default(autoincrement())
@@ -48,26 +41,26 @@ model Device {
   device_id    String    @unique @db.VarChar(64)
   /// 设备平台：ios/android/web
   platform     Platform
-  /// 商店来源：appStore/googlePlay/fdroid/null（web平台为null）
-  platform_store PlatformStore? @map("platform_store")
+  /// 商店来源：appStore/googlePlay/fdroid（web平台为空字符串）
+  platform_store String    @default("") @map("platform_store") @db.VarChar(16)
   /// 操作系统版本
-  os           String?   @db.VarChar(32)
+  os           String    @default("") @db.VarChar(32)
   /// 设备型号
-  model        String?   @db.VarChar(64)
+  model        String    @default("") @db.VarChar(64)
   /// 语言/地区设置
-  locale       String?   @db.VarChar(16)
+  locale       String    @default("") @db.VarChar(16)
   /// App 版本号
-  version      String?   @db.VarChar(32)
+  version      String    @default("") @db.VarChar(32)
   /// 法币货币代码
-  currency     String?   @db.VarChar(8)
+  currency     String    @default("") @db.VarChar(8)
   /// Push 推送 token
-  token        String?   @db.VarChar(256)
+  token        String    @default("") @db.VarChar(256)
   /// 是否启用推送通知
   is_push_enabled Boolean @default(false) @map("is_push_enabled")
   /// 是否启用价格提醒
   is_price_alerts_enabled Boolean @default(false) @map("is_price_alerts_enabled")
   /// 订阅版本号，用于增量同步
-  subscriptions_version Int? @default(0) @map("subscriptions_version")
+  subscriptions_version Int @default(0) @map("subscriptions_version")
   created_at   DateTime  @default(now()) @map("created_at")
   updated_at   DateTime  @updatedAt @map("updated_at")
 
@@ -82,9 +75,9 @@ model Chain {
   /// 显示名称
   displayName         String   @map("display_name") @db.VarChar(64)
   /// 是否支持创建账户（派生链地址）
-  isAccountSupported  Boolean  @default(true) @map("is_account_supported")
+  accountEnable      Boolean  @default(true) @map("account_enable")
   /// BIP44 派生路径前缀，如 m/44'/195'/0'/0
-  derivationPath      String?  @map("derivation_path") @db.VarChar(128)
+  derivationPath      String   @default("") @map("derivation_path") @db.VarChar(128)
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
@@ -104,10 +97,10 @@ model Asset {
   chain           String    @db.VarChar(64)
   /// 资产类型：NATIVE=原生主币, TOKEN=代币(ERC20/TRC20)
   type            String    @default("NATIVE") @db.VarChar(16)
-  /// 合约地址（NATIVE为空，TOKEN为合约地址）
-  tokenId         String?   @map("token_id") @db.VarChar(66)
-  /// 图标 URL（可选）
-  iconUrl         String?   @map("icon_url") @db.VarChar(512)
+  /// 合约地址（NATIVE为空字符串，TOKEN为合约地址）
+  tokenId         String   @default("") @map("token_id") @db.VarChar(66)
+  /// 图标 URL
+  iconUrl         String   @default("") @map("icon_url") @db.VarChar(512)
   /// 是否默认可见（NATIVE=true，常见代币=true，其他需手动添加）
   isDefault       Boolean   @default(true) @map("is_default")
   /// 是否启用
@@ -128,14 +121,14 @@ model Wallet {
   identifier   String        @unique @db.VarChar(36)
   /// 钱包别名，用户自定义名称
   alias        String        @db.VarChar(64)
-  /// 钱包地址，链上唯一标识（兼容旧数据，新钱包使用Account地址）
-  address      String        @unique @db.VarChar(64)
+  /// 助记词哈希（助记词的确定性派生，用于防重复导入和密码重置验证）
+  mnemonicHash String        @default("") @map("mnemonic_hash") @db.VarChar(128)
   /// 钱包来源
   source       WalletSource  @default(CREATE)
   /// 钱包密码（bcrypt hash），用于备份、删除等敏感操作的验证
-  password      String        @db.VarChar(128)
+  password      String        @default("") @db.VarChar(128)
   /// 密码提示，帮助用户回忆密码
-  passwordHint  String?       @map("password_hint") @db.VarChar(128)
+  passwordHint  String    @default("") @map("password_hint") @db.VarChar(128)
   /// 备注说明
   memo         String        @default("") @db.VarChar(256)
   createdAt    DateTime      @default(now()) @map("created_at")
@@ -187,9 +180,9 @@ model WalletSubscription {
   /// 设备 ID（devices 表的自增主键）
   device_id  Int
   /// 链标识（预留）
-  chain      String?  @db.VarChar(32)
+  chain      String   @default("") @db.VarChar(32)
   /// 地址标识（预留）
-  address_id String?  @db.VarChar(36)
+  address_id String   @default("") @db.VarChar(36)
   created_at DateTime @default(now()) @map("created_at")
 
   @@unique([wallet_id, device_id, chain, address_id])
@@ -219,12 +212,8 @@ model Transaction {
   id           String   @id @default(uuid())
   /// 交易哈希，链上唯一标识
   txHash       String   @unique @map("tx_hash") @db.VarChar(66)
-  /// 付款钱包 ID
-  fromWalletId String   @map("from_wallet_id") @db.VarChar(36)
   /// 付款链地址（Account.address，如 T.../0x...）
   fromAddress  String   @map("from_address") @db.VarChar(64)
-  /// 收款钱包 ID（系统内用户时关联，外部地址时为空字符串）
-  toWalletId   String   @default("") @map("to_wallet_id") @db.VarChar(36)
   /// 收款链地址（始终记录，如 T.../0x...）
   toAddress    String   @map("to_address") @db.VarChar(128)
   /// 代币符号（如 USDT、TRX），直接存储便于过滤和展示
@@ -253,7 +242,7 @@ model Contact {
   /// 链上地址（Account.address，如 T.../0x.../1...）
   address   String   @db.VarChar(64)
   /// 链类型（Tron/Ethereum/Bitcoin）
-  network   String   @db.VarChar(64)
+  network   String   @default("Tron") @db.VarChar(64)
   /// 备注
   memo      String   @default("") @db.VarChar(256)
   createdAt DateTime @default(now()) @map("created_at")
@@ -327,7 +316,7 @@ model Recharge {
   /// 操作设备平台（ios/android/web）
   platform      String   @db.VarChar(16)
   /// App 版本号
-  version       String?  @db.VarChar(32)
+  version       String   @default("") @db.VarChar(32)
   createdAt     DateTime @default(now()) @map("created_at")
 
   @@map("recharges")
@@ -336,12 +325,12 @@ model Recharge {
 /// App日志表：存储客户端崩溃日志和关键业务失败日志
 model AppLog {
   id         Int      @id @default(autoincrement())
-  /// 设备标识（Ed25519公钥hex，崩溃时可能为空）
-  device_id  String?  @db.VarChar(64)
+  /// 设备标识（Ed25519公钥hex，崩溃时为空字符串）
+  device_id  String   @default("") @db.VarChar(64)
   /// 平台：ios/android/web
-  platform   String?  @db.VarChar(16)
+  platform   String   @default("") @db.VarChar(16)
   /// App版本号
-  version    String?  @db.VarChar(32)
+  version    String   @default("") @db.VarChar(32)
   /// 日志类型：crash=崩溃, business=关键业务失败
   log_type   String   @db.VarChar(32)
   /// 日志内容（错误消息、堆栈等）

@@ -13,7 +13,7 @@ export interface RechargeInput {
 export interface RechargeDeviceInfo {
   deviceId: string;
   platform: string;
-  version?: string | null;
+  version?: string;
 }
 
 export interface RechargeResult {
@@ -27,7 +27,7 @@ export interface RechargeResult {
   memo: string;
   deviceId: string;
   platform: string;
-  version: string | null;
+  version: string;
   createdAt: Date;
 }
 
@@ -119,14 +119,14 @@ export async function recharge(
     data: {
       walletId,
       walletAlias: wallet.alias,
-      walletAddress: wallet.address,
+      walletAddress: account.address,
       tokenSymbol,
       tokenName: asset.name,
       amount: parseFloat(amount),
       memo: memo || "",
       deviceId: deviceInfo.deviceId,
       platform: deviceInfo.platform,
-      version: deviceInfo.version || null,
+      version: deviceInfo.version || '',
     },
   });
 

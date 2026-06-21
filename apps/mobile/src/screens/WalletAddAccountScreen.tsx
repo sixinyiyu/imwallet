@@ -109,8 +109,7 @@ export default function WalletAddAccountScreen() {
       // API 失败，使用预置链
       setChains([
         {
-          id: 1, name: "Tron", displayName: "Tron (TRX)", isAccountSupported: true,
-          derivationPath: "m/44'/195'/0'/0",
+           id: 1, name: "Tron", displayName: "Tron (TRX)", accountEnable: true,          derivationPath: "m/44'/195'/0'/0",
           assets: [
             { id: "trx-tron", symbol: "TRX", name: "Tron", type: "NATIVE", decimals: 6, isDefault: true },
             { id: "usdt-tron", symbol: "USDT", name: "Tether USD", type: "STABLECOIN", decimals: 6, isDefault: false },
@@ -259,7 +258,7 @@ export default function WalletAddAccountScreen() {
                             {TokenIcon ? <TokenIcon size={14} /> : null}
                             <Text style={drawerStyles.tokenBadgeText}>{asset.symbol}</Text>
                             <Text style={drawerStyles.tokenTypeLabel}>
-                              {asset.type === "NATIVE" ? "主币" : "稳定币"}
+                              {asset.type === "NATIVE" ? "原生币" : "合约代币"}
                             </Text>
                           </View>
                         );

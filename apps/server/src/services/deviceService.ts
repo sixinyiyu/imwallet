@@ -30,16 +30,16 @@ export interface DeviceResult {
   id: number;
   device_id: string;
   platform: string;
-  platform_store: string | null;
-  os: string | null;
-  model: string | null;
-  locale: string | null;
-  version: string | null;
-  currency: string | null;
-  token: string | null;
+  platform_store: string;
+  os: string;
+  model: string;
+  locale: string;
+  version: string;
+  currency: string;
+  token: string;
   is_push_enabled: boolean;
   is_price_alerts_enabled: boolean;
-  subscriptions_version: number | null;
+  subscriptions_version: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -59,7 +59,7 @@ export async function registerDevice(input: RegisterDeviceInput): Promise<Device
       id: existing.id,
       device_id: existing.device_id,
       platform: existing.platform as string,
-      platform_store: existing.platform_store as string | null,
+      platform_store: existing.platform_store as string,
       os: existing.os,
       model: existing.model,
       locale: existing.locale,
@@ -78,12 +78,12 @@ export async function registerDevice(input: RegisterDeviceInput): Promise<Device
     data: {
       device_id: input.device_id,
       platform: input.platform as any,
-      platform_store: input.platform_store as any || null,
-      os: input.os || null,
-      model: input.model || null,
-      locale: input.locale || null,
-      version: input.version || null,
-      currency: input.currency || null,
+      platform_store: input.platform_store as any || '',
+      os: input.os || '',
+      model: input.model || '',
+      locale: input.locale || '',
+      version: input.version || '',
+      currency: input.currency || '',
     },
   });
 
@@ -93,7 +93,7 @@ export async function registerDevice(input: RegisterDeviceInput): Promise<Device
     id: device.id,
     device_id: device.device_id,
     platform: device.platform as string,
-    platform_store: device.platform_store as string | null,
+    platform_store: device.platform_store as string,
     os: device.os,
     model: device.model,
     locale: device.locale,
@@ -143,7 +143,7 @@ export async function updateDevice(deviceId: string, input: UpdateDeviceInput): 
     id: updated.id,
     device_id: updated.device_id,
     platform: updated.platform as string,
-    platform_store: updated.platform_store as string | null,
+    platform_store: updated.platform_store as string,
     os: updated.os,
     model: updated.model,
     locale: updated.locale,
@@ -172,7 +172,7 @@ export async function getDevice(deviceId: string): Promise<DeviceResult> {
     id: device.id,
     device_id: device.device_id,
     platform: device.platform as string,
-    platform_store: device.platform_store as string | null,
+    platform_store: device.platform_store as string,
     os: device.os,
     model: device.model,
     locale: device.locale,
@@ -193,7 +193,7 @@ export async function subscribeWallet(
   walletId: string,
   chain?: string,
   addressId?: string
-): Promise<{ id: number; wallet_id: string; device_id: number; chain: string | null; address_id: string | null }> {
+): Promise<{ id: number; wallet_id: string; device_id: number; chain: string; address_id: string }> {
   logger.info("DEVICE", `订阅钱包: device_id=${deviceId.slice(0, 8)}..., wallet_id=${walletId}`);
 
   // 查找设备
@@ -217,8 +217,8 @@ export async function subscribeWallet(
     where: {
       wallet_id: walletId,
       device_id: device.id,
-      chain: chain || null,
-      address_id: addressId || null,
+      chain: chain || '',
+      address_id: addressId || '',
     },
   });
 
@@ -230,8 +230,8 @@ export async function subscribeWallet(
     data: {
       wallet_id: walletId,
       device_id: device.id,
-      chain: chain || null,
-      address_id: addressId || null,
+      chain: chain || '',
+      address_id: addressId || '',
     },
   });
 
@@ -292,24 +292,34 @@ export async function getDeviceWallets(deviceId: string): Promise<any[]> {
 
   const walletIds = subscriptions.map((sub: any) => sub.wallet_id);
 
-  // Fetch wallets, walletTokens, tokens, and accounts separately
+  // Fetch wallets, accounts, accountAssets, and assets separately
   const wallets = await prisma.wallet.findMany({ where: { id: { in: walletIds } } });
   const walletMap = new Map<string, any>(wallets.map((w: any) => [w.id, w]));
 
-  const walletTokens = await prisma.walletToken.findMany({ where: { walletId: { in: walletIds } } });
-  const tokenIds = [...new Set(walletTokens.map((wt: any) => wt.tokenId))];
-  const tokens = await prisma.token.findMany({ where: { id: { in: tokenIds } } });
-  const tokenMap = new Map<string, any>(tokens.map((t: any) => [t.id, t]));
+  const accounts = await prisma.account.findMany({ where: { walletId: { in: walletIds } } });
+  const accountIds = accounts.map((a: any) => a.id);
 
-  // Group walletTokens by walletId
-  const walletTokensByWallet = new Map<string, any[]>();
-  for (const wt of walletTokens) {
-    const list = walletTokensByWallet.get(wt.walletId) || [];
-    list.push(wt);
-    walletTokensByWallet.set(wt.walletId, list);
+  const accountAssets = await prisma.accountAsset.findMany({ where: { accountId: { in: accountIds } } });
+  const assetIds = [...new Set(accountAssets.map((aa: any) => aa.assetId))];
+  const assets = await prisma.asset.findMany({ where: { id: { in: assetIds } } });
+  const assetMap = new Map<string, any>(assets.map((a: any) => [a.id, a]));
+
+  // Build account → wallet mapping
+  const accountToWallet = new Map<string, string>();
+  for (const acc of accounts) {
+    accountToWallet.set(acc.id, acc.walletId);
   }
 
-  const accounts = await prisma.account.findMany({ where: { walletId: { in: walletIds } } });
+  // Group accountAssets by walletId
+  const accountAssetsByWallet = new Map<string, any[]>();
+  for (const aa of accountAssets) {
+    const wid = accountToWallet.get(aa.accountId);
+    if (!wid) continue;
+    const list = accountAssetsByWallet.get(wid) || [];
+    list.push(aa);
+    accountAssetsByWallet.set(wid, list);
+  }
+
   const accountsByWallet = new Map<string, number>();
   for (const acc of accounts) {
     accountsByWallet.set(acc.walletId, (accountsByWallet.get(acc.walletId) || 0) + 1);
@@ -318,7 +328,7 @@ export async function getDeviceWallets(deviceId: string): Promise<any[]> {
   return subscriptions.map((sub: any) => {
     const wallet = walletMap.get(sub.wallet_id);
     if (!wallet) return null;
-    const wts = walletTokensByWallet.get(wallet.id) || [];
+    const aas = accountAssetsByWallet.get(wallet.id) || [];
     return {
       subscription_id: sub.id,
       chain: sub.chain,
@@ -327,20 +337,19 @@ export async function getDeviceWallets(deviceId: string): Promise<any[]> {
         id: wallet.id,
         identifier: wallet.identifier,
         alias: wallet.alias,
-        address: wallet.address,
         source: wallet.source,
         memo: wallet.memo,
         createdAt: wallet.createdAt,
         updatedAt: wallet.updatedAt,
-        tokenBalances: wts.map((tb: any) => {
-          const tk = tokenMap.get(tb.tokenId);
+        tokenBalances: aas.map((ab: any) => {
+          const ast = assetMap.get(ab.assetId);
           return {
-            id: tb.id,
-            symbol: tk?.symbol || "",
-            name: tk?.name || "",
-            balance: tb.balance.toString(),
-            decimals: tk?.decimals || 6,
-            network: tk?.network || "",
+            id: ab.id,
+            symbol: ast?.symbol || "",
+            name: ast?.name || "",
+            balance: ab.balance.toString(),
+            decimals: ast?.decimals || 6,
+            network: ast?.chain || "",
           };
         }),
         accountCount: accountsByWallet.get(wallet.id) || 0,

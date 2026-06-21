@@ -148,10 +148,10 @@ export default function WalletDetailScreen() {
   }, [walletId]);
 
   const handleCopyAddress = async () => {
-    if (!wallet?.address) return;
+    if (!accounts[0]?.address) return;
     try {
       const Clipboard = require("expo-clipboard");
-      await Clipboard.setStringAsync(wallet.address);
+      await Clipboard.setStringAsync(accounts[0].address);
       showToast("复制成功");
     } catch (err: any) {
       saveLogToLocal("crash", `[WalletDetail] handleCopyAddress failed: ${err?.message || String(err)}`);
@@ -250,7 +250,7 @@ export default function WalletDetailScreen() {
                 onPress={handleCopyAddress}
                 activeOpacity={0.6}
               >
-                <Text style={styles.identifierText}>{wallet.address}</Text>
+                <Text style={styles.identifierText}>{accounts[0]?.address || '暂无账户'}</Text>
               </TouchableOpacity>
           </View>
           <View style={styles.infoDivider} />

@@ -62,6 +62,10 @@ export async function generateMnemonic(): Promise<string> {
     throw new Error(`RNG failed: ${err?.message || String(err)}`);
   }
 
+  // 🔍 DIAG: log entropy hex to verify RNG uniqueness
+  const entropyHex = Array.from(entropy).map(b => b.toString(16).padStart(2, "0")).join("");
+  console.warn(`[generateMnemonic] entropy=${entropyHex}`);
+
   // Step 2: SHA-256 checksum
   let hashArray: Uint8Array;
   try {
@@ -98,6 +102,9 @@ export async function generateMnemonic(): Promise<string> {
   if (wordCount !== 12) {
     saveLogToLocal("mnemonic", `[generateMnemonic] unexpected wordCount=${wordCount}, prefix=${result.slice(0, 20)}`);
   }
+
+  // 🔍 DIAG: log generated mnemonic prefix
+  console.warn(`[generateMnemonic] mnemonic prefix=${result.slice(0, 30)}`);
 
   return result;
 }

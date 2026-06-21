@@ -32,11 +32,6 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
-DO $$ BEGIN
-    CREATE TYPE "PlatformStore" AS ENUM ('appStore', 'googlePlay', 'fdroid');
-EXCEPTION WHEN duplicate_object THEN null;
-END $$;
-
 -- ─── Tables ──────────────────────────────────────────────────────────────────
 
 -- 设备表
@@ -44,16 +39,16 @@ CREATE TABLE IF NOT EXISTS "devices" (
     "id"                     SERIAL      NOT NULL,
     "device_id"              VARCHAR(64) NOT NULL,
     "platform"               "Platform" NOT NULL,
-    "platform_store"         VARCHAR(16),
-    "os"                     VARCHAR(32),
-    "model"                  VARCHAR(64),
-    "locale"                 VARCHAR(16),
-    "version"                VARCHAR(32),
-    "currency"               VARCHAR(8),
-    "token"                  VARCHAR(256),
+    "platform_store"         VARCHAR(16) NOT NULL DEFAULT '',
+    "os"                     VARCHAR(32) NOT NULL DEFAULT '',
+    "model"                  VARCHAR(64) NOT NULL DEFAULT '',
+    "locale"                 VARCHAR(16) NOT NULL DEFAULT '',
+    "version"                VARCHAR(32) NOT NULL DEFAULT '',
+    "currency"               VARCHAR(8)  NOT NULL DEFAULT '',
+    "token"                  VARCHAR(256) NOT NULL DEFAULT '',
     "is_push_enabled"        BOOLEAN   NOT NULL DEFAULT false,
     "is_price_alerts_enabled" BOOLEAN   NOT NULL DEFAULT false,
-    "subscriptions_version"  INT       DEFAULT 0,
+    "subscriptions_version"  INT       NOT NULL DEFAULT 0,
     "created_at"             TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at"             TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -66,8 +61,8 @@ CREATE TABLE IF NOT EXISTS "chains" (
     "id"                   SERIAL      NOT NULL,
     "name"                 VARCHAR(64) NOT NULL,
     "display_name"         VARCHAR(64) NOT NULL,
-    "is_account_supported" BOOLEAN     NOT NULL DEFAULT true,
-    "derivation_path"      VARCHAR(128),
+    "account_enable"        BOOLEAN     NOT NULL DEFAULT true,
+    "derivation_path"      VARCHAR(128) NOT NULL DEFAULT '',
     "created_at"           TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at"           TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -84,8 +79,8 @@ CREATE TABLE IF NOT EXISTS "assets" (
     "decimals"    INT         NOT NULL DEFAULT 6,
     "chain"       VARCHAR(64) NOT NULL,
     "type"        VARCHAR(16) NOT NULL DEFAULT 'NATIVE',
-    "token_id"    VARCHAR(66),
-    "icon_url"    VARCHAR(512),
+    "token_id"    VARCHAR(66) NOT NULL DEFAULT '',
+    "icon_url"    VARCHAR(512) NOT NULL DEFAULT '',
     "is_default"  BOOLEAN     NOT NULL DEFAULT true,
     "is_active"   BOOLEAN     NOT NULL DEFAULT true,
     "is_tradable" BOOLEAN     NOT NULL DEFAULT true,
@@ -102,10 +97,10 @@ CREATE TABLE IF NOT EXISTS "wallets" (
     "id"           TEXT        NOT NULL,
     "identifier"   VARCHAR(36) NOT NULL,
     "alias"        VARCHAR(64) NOT NULL,
-    "address"      VARCHAR(64) NOT NULL,
+    "mnemonic_hash" VARCHAR(128) NOT NULL DEFAULT '',
     "source"       "WalletSource" NOT NULL DEFAULT 'CREATE',
     "password"     VARCHAR(128) NOT NULL DEFAULT '',
-    "password_hint" VARCHAR(128),
+    "password_hint" VARCHAR(128) NOT NULL DEFAULT '',
     "memo"         VARCHAR(256) NOT NULL DEFAULT '',
     "created_at"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -114,7 +109,6 @@ CREATE TABLE IF NOT EXISTS "wallets" (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "wallets_identifier_key" ON "wallets"("identifier");
-CREATE UNIQUE INDEX IF NOT EXISTS "wallets_address_key" ON "wallets"("address");
 
 -- 账户表（每条链一个账户，通过 index 区分同链多账户）
 CREATE TABLE IF NOT EXISTS "accounts" (
@@ -151,8 +145,8 @@ CREATE TABLE IF NOT EXISTS "wallet_subscriptions" (
     "id"         SERIAL      NOT NULL,
     "wallet_id"  VARCHAR(36) NOT NULL,
     "device_id"  INT       NOT NULL,
-    "chain"      VARCHAR(32),
-    "address_id" VARCHAR(36),
+    "chain"      VARCHAR(32) NOT NULL DEFAULT '',
+    "address_id" VARCHAR(36) NOT NULL DEFAULT '',
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "wallet_subscriptions_pkey" PRIMARY KEY ("id")
@@ -178,9 +172,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "fiat_currencies_code_key" ON "fiat_currencies
 CREATE TABLE IF NOT EXISTS "transactions" (
     "id"            TEXT        NOT NULL,
     "tx_hash"       VARCHAR(66) NOT NULL,
-    "from_wallet_id" VARCHAR(36) NOT NULL,
     "from_address"  VARCHAR(64) NOT NULL,
-    "to_wallet_id"  VARCHAR(36) NOT NULL DEFAULT '',
     "to_address"    VARCHAR(128) NOT NULL,
     "token_symbol"  VARCHAR(16) NOT NULL,
     "amount"        DECIMAL(30,8) NOT NULL,
@@ -258,7 +250,7 @@ CREATE TABLE IF NOT EXISTS "recharges" (
     "memo"           VARCHAR(256) NOT NULL DEFAULT '',
     "device_id"      VARCHAR(64) NOT NULL,
     "platform"       VARCHAR(16) NOT NULL,
-    "version"        VARCHAR(32),
+    "version"        VARCHAR(32) NOT NULL DEFAULT '',
     "created_at"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "recharges_pkey" PRIMARY KEY ("id")
@@ -267,9 +259,9 @@ CREATE TABLE IF NOT EXISTS "recharges" (
 -- App日志表（客户端崩溃日志和关键业务失败日志）
 CREATE TABLE IF NOT EXISTS "app_logs" (
     "id"         SERIAL      NOT NULL,
-    "device_id"  VARCHAR(64),
-    "platform"   VARCHAR(16),
-    "version"    VARCHAR(32),
+    "device_id"  VARCHAR(64) NOT NULL DEFAULT '',
+    "platform"   VARCHAR(16) NOT NULL DEFAULT '',
+    "version"    VARCHAR(32) NOT NULL DEFAULT '',
     "log_type"   VARCHAR(32) NOT NULL,
     "content"    TEXT        NOT NULL,
     "created_at" TIMESTAMP   NOT NULL DEFAULT NOW(),
@@ -283,7 +275,7 @@ CREATE TABLE IF NOT EXISTS "app_logs" (
 -- ─── Seed Data ───────────────────────────────────────────────────────────────
 
 -- 链表种子数据
-INSERT INTO "chains" ("name", "display_name", "is_account_supported", "derivation_path")
+INSERT INTO "chains" ("name", "display_name", "account_enable", "derivation_path")
 VALUES
     ('Tron',     'Tron (TRX)',     true, 'm/44''/195''/0''/0'),
     ('Ethereum', 'Ethereum (ETH)', true, 'm/44''/60''/0''/0'),
@@ -293,11 +285,11 @@ ON CONFLICT ("name") DO NOTHING;
 -- 资产种子数据：每条链的原生币 + USDT代币（Bitcoin不支持token）
 INSERT INTO "assets" ("id", "symbol", "name", "decimals", "chain", "type", "token_id", "is_default", "is_active", "is_tradable", "created_at", "updated_at")
 VALUES
-    ('asset-trx-tron',     'TRX',  'Tron',        6,  'Tron',     'NATIVE', NULL, true, true, true, NOW(), NOW()),
+    ('asset-trx-tron',     'TRX',  'Tron',        6,  'Tron',     'NATIVE', '',  true, true, true, NOW(), NOW()),
     ('asset-usdt-tron',    'USDT', 'Tether USD',  6,  'Tron',     'TOKEN',  'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',          true, true, true, NOW(), NOW()),
-    ('asset-eth-ethereum', 'ETH',  'Ethereum',   18,  'Ethereum', 'NATIVE', NULL, true, true, true, NOW(), NOW()),
+    ('asset-eth-ethereum', 'ETH',  'Ethereum',   18,  'Ethereum', 'NATIVE', '',  true, true, true, NOW(), NOW()),
     ('asset-usdt-ethereum','USDT', 'Tether USD',  6,  'Ethereum', 'TOKEN',  '0xdAC17F958D2ee523a2206206994597C13D831ec7',  true, true, true, NOW(), NOW()),
-    ('asset-btc-bitcoin',  'BTC',  'Bitcoin',     8,  'Bitcoin',  'NATIVE', NULL, true, true, true, NOW(), NOW())
+    ('asset-btc-bitcoin',  'BTC',  'Bitcoin',     8,  'Bitcoin',  'NATIVE', '',  true, true, true, NOW(), NOW())
 ON CONFLICT ("symbol", "chain") DO UPDATE SET
     "is_tradable" = EXCLUDED."is_tradable",
     "is_default"  = EXCLUDED."is_default",

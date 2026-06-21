@@ -25,7 +25,7 @@ export default function TokenDetailScreen() {
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
   const { tokenSymbol } = route.params;
-  const { activeWallet, assets } = useWalletStore();
+  const { activeWallet, activeAccount, assets } = useWalletStore();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -111,7 +111,7 @@ export default function TokenDetailScreen() {
             <TransactionCard
               key={tx.id}
               transaction={tx}
-              currentAddress={activeWallet?.address ?? ""}
+              currentAddress={activeAccount?.address ?? ""}
               onPress={(t) => navigation.navigate("TradeDetail", { tradeId: t.id })}
             />
           ))}

@@ -57,11 +57,11 @@ function renderTokenIcon(symbol: string, size: number) {
 export default function RecordsScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RecordsRoute>();
-  const { activeWallet } = useWalletStore();
+  const { activeWallet, activeAccount } = useWalletStore();
   // 支持路由传入 walletId（管理员查看其他用户交易记录时使用）和 tokenSymbol（从代币详情页进入时过滤当前代币）
   const currentWalletId = route.params?.walletId || activeWallet?.id;
   const currentTokenSymbol = route.params?.tokenSymbol;
-  const currentWalletAddress = activeWallet?.address || "";
+  const currentWalletAddress = activeAccount?.address || "";
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

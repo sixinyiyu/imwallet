@@ -55,7 +55,7 @@ export default function TradeDetailScreen() {
   const alert = useAlert();
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
-  const { activeWallet } = useWalletStore();
+  const { activeWallet, activeAccount } = useWalletStore();
   const [tx, setTx] = useState<Transaction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -128,7 +128,7 @@ export default function TradeDetailScreen() {
   const toName = tx.toContactName || tx.toWallet.alias;
 
   // 判断当前用户是否是发送方或接收方
-  const currentAddress = activeWallet?.address || "";
+  const currentAddress = activeAccount?.address || "";
   const isSender = tx.fromAddress === currentAddress;
   const isReceiver = tx.toAddress === currentAddress;
 

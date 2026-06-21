@@ -24,7 +24,7 @@ router.post(
     const result = await rechargeService.recharge(req.body, {
       deviceId: req.device!.deviceId,
       platform: req.device!.platform,
-      version: null,
+      version: "",
     });
     res.status(201).json(result);
   })
