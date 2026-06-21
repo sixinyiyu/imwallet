@@ -22,7 +22,22 @@ import { transactionService } from "../services/transactionService";
 import { localAddressService } from "../services/localAddressService";
 import { configService } from "../services/configService";
 import type { FeeConfig } from "../services/configService";
-import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
+import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, TronIcon, EthIcon, BtcIcon, USDTIcon } from "../components/icons";
+
+/** 代币图标映射：根据 symbol 渲染对应代币 icon */
+const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
+  TRX: TronIcon,
+  USDT: USDTIcon,
+  ETH: EthIcon,
+  BTC: BtcIcon,
+};
+
+/** 根据代币 symbol 渲染图标，未知代币回退为 null */
+function renderTokenIcon(symbol: string | undefined, size: number) {
+  if (!symbol) return null;
+  const Icon = TOKEN_ICONS[symbol];
+  return Icon ? React.createElement(Icon, { size }) : null;
+}
 import type { AddressEntry, AssetBalance } from "../types";
 import { detectNetwork, isValidAddressFormat } from "../utils/address";
 import { useAlert } from "../hooks/useAlert";
@@ -74,17 +89,17 @@ export default function TransferScreen() {
     }
   }, [assets, route.params?.tokenSymbol, route.params?.tokenId]);
 
-  // 根据链上地址自动推断网络类型并切换代币
+  // 根据链上地址自动推断网络类型
   const detectedNetwork = useMemo(() => detectNetwork(toAddress), [toAddress]);
 
-  useEffect(() => {
-    if (!detectedNetwork || assets.length === 0) return;
-    // 根据网络类型匹配代币：TRON→TRX/USDT, EVM→ETH/USDT, BTC→BTC
-    const matched = assets.find((a) => a.chain === detectedNetwork);
-    if (matched && matched.symbol !== selectedToken?.symbol) {
-      setSelectedToken(matched);
+  // 跨网络检测：收款地址网络与选中代币网络不一致时提示
+  const crossNetworkWarning = useMemo(() => {
+    if (!detectedNetwork || !selectedToken) return null;
+    if (selectedToken.chain !== detectedNetwork) {
+      return `当前代币 ${selectedToken.symbol} 属于 ${selectedToken.chain} 网络，收款地址属于 ${detectedNetwork} 网络，暂不支持跨网络转账`;
     }
-  }, [detectedNetwork, assets]);
+    return null;
+  }, [detectedNetwork, selectedToken]);
 
 
 
@@ -224,7 +239,7 @@ export default function TransferScreen() {
   }
 
   const insufficientBalance = amountNum > requiredBalance;
-  const canProceed = addressValid && amountValid && !insufficientBalance && !!activeWallet;
+  const canProceed = addressValid && amountValid && !insufficientBalance && !!activeWallet && !crossNetworkWarning;
 
   /** 点击"添加到地址本"快捷链接 */
   const handleAddToContacts = async () => {
@@ -388,9 +403,7 @@ export default function TransferScreen() {
           {fromAccount ? (
             <>
               <View style={z.fromAccountIconWrap}>
-                {fromAccount.chain === "Tron" && <TronIcon size={20} />}
-                {fromAccount.chain === "Ethereum" && <EthIcon size={20} />}
-                {fromAccount.chain === "Bitcoin" && <BtcIcon size={20} />}
+                {renderTokenIcon(selectedToken?.symbol, 20)}
               </View>
               <Text style={z.fromAccountAddress} numberOfLines={1} ellipsizeMode="middle">
                 {fromAccount.address}
@@ -466,15 +479,20 @@ export default function TransferScreen() {
           </View>
         )}
 
+        {/* 跨网络提示 */}
+        {crossNetworkWarning && (
+          <View style={z.crossNetworkWarn}>
+            <Text style={z.crossNetworkWarnText}>⚠ {crossNetworkWarning}</Text>
+          </View>
+        )}
+
         {/* ── 代币 ── */}
         <View style={z.sectionLabel}>
           <Text style={z.sectionTitle}>代币</Text>
         </View>
         <View style={z.tokenCard}>
           <View style={z.tokenHeader}>
-            {detectedNetwork === "Tron" && <View style={{ paddingLeft: 14 }}><TronIcon size={20} /></View>}
-            {detectedNetwork === "Ethereum" && <View style={{ paddingLeft: 14 }}><EthIcon size={20} /></View>}
-            {detectedNetwork === "Bitcoin" && <View style={{ paddingLeft: 14 }}><BtcIcon size={20} /></View>}
+            <View style={{ paddingLeft: 14 }}>{renderTokenIcon(selectedToken?.symbol, 20)}</View>
             <View style={z.modeSwitch}>
               <TouchableOpacity
                 style={[z.modeBtn, mode === "amount" && z.modeBtnActive]}
@@ -822,6 +840,14 @@ const z = StyleSheet.create({
   nextBtnSubmitting: { opacity: 0.7 },
   nextBtnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   warning: { fontSize: 13, color: "#F59E0B", textAlign: "center", marginTop: 20 },
+  crossNetworkWarn: {
+    backgroundColor: "#FEF3C7",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  crossNetworkWarnText: { fontSize: 13, color: "#92400E", lineHeight: 18 },
   // Modal
   modalOverlay: {
     flex: 1,

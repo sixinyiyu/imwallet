@@ -16,9 +16,9 @@ import { useWalletStore } from "../stores/walletStore";
 import { TransactionListSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import { transactionService, type TransactionFilter } from "../services/transactionService";
-import type { Transaction } from "../types";
-import { SearchIcon, USDTIcon } from "../components/icons";
-import TronIcon from "../components/icons/TronIcon";
+import { localAddressService } from "../services/localAddressService";
+import type { Transaction, AddressEntry } from "../types";
+import { SearchIcon, USDTIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type RecordsRoute = RouteProp<RootStackParamList, "Records">;
@@ -45,13 +45,16 @@ function formatTime(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function shortenAddress(addr: string): string {
-  return `${addr.slice(0, 8)}...${addr.slice(-6)}`;
-}
+const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
+  TRX: TronIcon,
+  USDT: USDTIcon,
+  ETH: EthIcon,
+  BTC: BtcIcon,
+};
 
 function renderTokenIcon(symbol: string, size: number) {
-  if (symbol === "TRX") return <TronIcon size={size} />;
-  return <USDTIcon size={size} />;
+  const Icon = TOKEN_ICONS[symbol];
+  return Icon ? <Icon size={size} /> : null;
 }
 
 export default function RecordsScreen() {
@@ -103,7 +106,24 @@ export default function RecordsScreen() {
           tokenSymbol: currentTokenSymbol || undefined,
         };
         const data = await transactionService.getTransactions(filter);
-        setTransactions((prev) => (append ? [...prev, ...data.transactions] : data.transactions));
+
+        // 服务端不存储联系人名，客户端用本地地址本匹配对方地址
+        const allContacts = await localAddressService.getAllContacts();
+        const contactMap = new Map<string, AddressEntry>();
+        for (const c of allContacts) {
+          contactMap.set(c.address, c);
+        }
+        const enriched = data.transactions.map((tx) => {
+          const fromContact = contactMap.get(tx.fromAddress);
+          const toContact = contactMap.get(tx.toAddress);
+          return {
+            ...tx,
+            fromContactName: fromContact ? (fromContact.memo || fromContact.name) : "",
+            toContactName: toContact ? (toContact.memo || toContact.name) : "",
+          };
+        });
+
+        setTransactions((prev) => (append ? [...prev, ...enriched] : enriched));
         setTotal(data.total);
         setPage(p);
       } catch {
@@ -273,10 +293,8 @@ export function TransactionCard({
   const iconBgColor = isReceive ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)";
 
   // 对方信息
-  const counterpartyWallet = isReceive ? transaction.fromWallet : transaction.toWallet;
   const counterpartyContactName = isReceive ? transaction.fromContactName : transaction.toContactName;
-  // 优先级：联系人名 > 钱包别名 > 缩略地址
-  const displayName = counterpartyContactName || counterpartyWallet.alias || shortenAddress(counterpartyWallet.address);
+  const counterpartyAddress = isReceive ? transaction.fromAddress : transaction.toAddress;
 
   const feeNum = parseFloat(transaction.fee) || 0;
 
@@ -301,16 +319,18 @@ export function TransactionCard({
         </Text>
       </View>
 
-      {/* 第二行：方向箭头 + 代币icon + 对方信息 */}
+      {/* 第二行：方向箭头 + 代币icon + 对方地址 + 联系人名称 */}
       <View style={card.middleRow}>
         <Text style={card.directionSymbol}>{isReceive ? "←" : "→"}</Text>
         <View style={card.tokenIconWrap}>
           {renderTokenIcon(transaction.tokenSymbol, 14)}
         </View>
         <Text style={card.counterpartyAddr} numberOfLines={1}>
-          {shortenAddress(counterpartyWallet.address)}
+          {counterpartyAddress.slice(0, 8)}...{counterpartyAddress.slice(-6)}
         </Text>
-        <Text style={card.counterpartyName}>{displayName}</Text>
+        {counterpartyContactName ? (
+          <Text style={card.counterpartyName}>{counterpartyContactName}</Text>
+        ) : null}
       </View>
 
       {/* 第三行：时间 + 手续费 */}
@@ -396,7 +416,7 @@ const card = StyleSheet.create({
   middleRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   directionSymbol: { fontSize: 13, color: "#9CA3AF", marginRight: 4 },
   tokenIconWrap: { marginRight: 6, alignItems: "center", justifyContent: "center" },
-  counterpartyAddr: { fontSize: 12, color: "#6B7280", fontFamily: "monospace", marginRight: 8 },
+  counterpartyAddr: { fontSize: 12, color: "#6B7280", fontFamily: "monospace", marginRight: 8, flexShrink: 1 },
   counterpartyName: { fontSize: 13, color: "#374151", fontWeight: "500" },
   // 第三行
   bottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 },

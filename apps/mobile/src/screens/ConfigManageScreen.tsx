@@ -14,6 +14,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { configService, type FeeConfig } from "../services/configService";
 import { EditIcon, ChevronRightIcon } from "../components/icons";
 import { GreenToggle } from "../components/GreenToggle";
+import { ConfigManageSkeleton } from "../components/Skeleton";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
@@ -107,8 +108,8 @@ export default function ConfigManageScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#287220" />
+      <View style={styles.container}>
+        <ConfigManageSkeleton />
       </View>
     );
   }
@@ -244,7 +245,6 @@ export default function ConfigManageScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F8", padding: 16 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F5F6F8" },
   // Info card (参考钱包详情页样式)
   infoCard: {
     backgroundColor: "#FFFFFF",

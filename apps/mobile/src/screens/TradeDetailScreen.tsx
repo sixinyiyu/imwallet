@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,24 +13,32 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import type { Transaction } from "../types";
 import { transactionService } from "../services/transactionService";
+import { localAddressService } from "../services/localAddressService";
 import { useWalletStore } from "../stores/walletStore";
-import { ShareIcon } from "../components/icons";
+import { ShareIcon, CopyIcon } from "../components/icons";
 import { TradeDetailSkeleton } from "../components/Skeleton";
 import { useAlert } from "../hooks/useAlert";
 import SuccessIcon from "../components/icons/SuccessIcon";
 import FailureIcon from "../components/icons/FailureIcon";
 import PendingIcon from "../components/icons/PendingIcon";
-import USDTIcon from "../components/icons/USDTIcon";
-import TronIcon from "../components/icons/TronIcon";
+import { USDTIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
+import type { AddressEntry } from "../types";
 import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 
 type Route = RouteProp<RootStackParamList, "TradeDetail">;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
+  TRX: TronIcon,
+  USDT: USDTIcon,
+  ETH: EthIcon,
+  BTC: BtcIcon,
+};
+
 function renderTokenIcon(symbol: string, size: number) {
-  if (symbol === "TRX") return <TronIcon size={size} />;
-  return <USDTIcon size={size} />;
+  const Icon = TOKEN_ICONS[symbol];
+  return Icon ? <Icon size={size} /> : null;
 }
 
 function formatFullTime(iso: string): string {
@@ -55,11 +63,26 @@ export default function TradeDetailScreen() {
   const alert = useAlert();
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
-  const { activeWallet, activeAccount } = useWalletStore();
+  const { accounts } = useWalletStore();
   const [tx, setTx] = useState<Transaction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [contactMap, setContactMap] = useState<Map<string, AddressEntry>>(new Map());
   const detailRef = useRef<ScrollView>(null);
+
+  // 当前钱包的所有地址集合（用于判断“我的地址”）
+  const myAddresses = useMemo(() => new Set(accounts.map((a) => a.address)), [accounts]);
+
+  // 加载本地地址本，构建 address → AddressEntry 映射
+  useEffect(() => {
+    localAddressService.getAllContacts().then((contacts) => {
+      const map = new Map<string, AddressEntry>();
+      for (const c of contacts) {
+        map.set(c.address, c);
+      }
+      setContactMap(map);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!route.params?.tradeId) return;
@@ -70,6 +93,24 @@ export default function TradeDetailScreen() {
       .catch((e) => setError(e.message || "加载失败"))
       .finally(() => setLoading(false));
   }, [route.params?.tradeId]);
+
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMsg, setToastMsg] = useState("");
+  const showToast = useCallback((msg: string) => {
+    setToastMsg(msg);
+    setToastVisible(true);
+    setTimeout(() => setToastVisible(false), 2000);
+  }, []);
+
+  const handleCopyAddress = async (address: string) => {
+    try {
+      const Clipboard = require("expo-clipboard");
+      await Clipboard.setStringAsync(address);
+      showToast("地址已复制");
+    } catch {
+      showToast("复制失败");
+    }
+  };
 
   const handleShare = async () => {
     try {
@@ -123,14 +164,20 @@ export default function TradeDetailScreen() {
 
   const feeNum = parseFloat(tx.fee) || 0;
   const amountNum = parseFloat(tx.amount) || 0;
-  // 优先级：联系人名 > 钱包别名
-  const fromName = tx.fromContactName || tx.fromWallet.alias;
-  const toName = tx.toContactName || tx.toWallet.alias;
 
-  // 判断当前用户是否是发送方或接收方
-  const currentAddress = activeAccount?.address || "";
-  const isSender = tx.fromAddress === currentAddress;
-  const isReceiver = tx.toAddress === currentAddress;
+  // 判断当前用户是否是发送方或接收方（用当前钱包的所有地址判断）
+  const isSender = myAddresses.has(tx.fromAddress);
+  const isReceiver = myAddresses.has(tx.toAddress);
+
+  // 获取地址的友好名称：我的地址→“我”，匹配到联系人→备注/名称，未匹配→null
+  const getDisplayName = (address: string, isMe: boolean): string | null => {
+    if (isMe) return "我";
+    const contact = contactMap.get(address);
+    if (contact) return contact.memo || contact.name;
+    return null;
+  };
+  const fromName = getDisplayName(tx.fromAddress, isSender);
+  const toName = getDisplayName(tx.toAddress, isReceiver);
 
   // 根据 FEE_MODE 计算实际到账和总计
   const isFeeDeducted = tx.feeMode === "DEDUCTED";
@@ -138,7 +185,8 @@ export default function TradeDetailScreen() {
   const senderTotal = isFeeDeducted ? amountNum : amountNum + feeNum;
 
   return (
-    <ScrollView ref={detailRef} style={styles.container} contentContainerStyle={styles.scroll} collapsable={false}>
+    <View style={styles.container}>
+    <ScrollView ref={detailRef} contentContainerStyle={styles.scroll} collapsable={false}>
       {/* 状态区 */}
       <View style={styles.statusSection}>
         {tx.status === "CONFIRMED" && <SuccessIcon size={72} />}
@@ -159,8 +207,13 @@ export default function TradeDetailScreen() {
             <Text style={[styles.partyIconEmoji, isSender && styles.partyIconEmojiHighlight]}>👤</Text>
           </View>
           <View style={styles.partyTextWrap}>
-            <Text style={styles.partyName}>{fromName}</Text>
-            <Text style={styles.partyAddr}>{shortenAddress(tx.fromAddress)}</Text>
+            {fromName ? <Text style={styles.partyName}>{fromName}</Text> : null}
+            <View style={styles.partyAddrRow}>
+              <Text style={styles.partyAddr}>{shortenAddress(tx.fromAddress)}</Text>
+              <TouchableOpacity style={styles.copyBtn} onPress={() => handleCopyAddress(tx.fromAddress)} activeOpacity={0.6}>
+                <CopyIcon size={14} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -180,8 +233,13 @@ export default function TradeDetailScreen() {
             <Text style={[styles.partyIconEmoji, isReceiver && styles.partyIconEmojiHighlight]}>👤</Text>
           </View>
           <View style={styles.partyTextWrap}>
-            <Text style={styles.partyName}>{toName}</Text>
-            <Text style={styles.partyAddr}>{shortenAddress(tx.toAddress)}</Text>
+            {toName ? <Text style={styles.partyName}>{toName}</Text> : null}
+            <View style={styles.partyAddrRow}>
+              <Text style={styles.partyAddr}>{shortenAddress(tx.toAddress)}</Text>
+              <TouchableOpacity style={styles.copyBtn} onPress={() => handleCopyAddress(tx.toAddress)} activeOpacity={0.6}>
+                <CopyIcon size={14} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </View>
@@ -191,7 +249,7 @@ export default function TradeDetailScreen() {
       <View style={styles.card}>
         <TokenTransferRow
           address={tx.fromAddress}
-          alias={tx.fromWallet.alias}
+          alias={fromName}
           token={tx.tokenSymbol}
           amount={`-${tx.amount}`}
           isOut
@@ -238,6 +296,16 @@ export default function TradeDetailScreen() {
 
       <View style={{ height: 40 }} />
     </ScrollView>
+
+      {/* Toast */}
+      {toastVisible && (
+        <View style={styles.toastWrap} pointerEvents="none">
+          <View style={styles.toast}>
+            <Text style={styles.toastText}>{toastMsg}</Text>
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -251,7 +319,7 @@ function TokenTransferRow({
   isCurrentUser,
 }: {
   address: string;
-  alias: string;
+  alias: string | null;
   token: string;
   amount: string;
   isOut: boolean;
@@ -264,7 +332,9 @@ function TokenTransferRow({
         <Text style={[ttr.addr, isCurrentUser && ttr.addrHighlight]} numberOfLines={1}>
           {shortenAddress(address)}
         </Text>
-        <Text style={[ttr.alias, isCurrentUser && ttr.aliasHighlight]}>{alias}</Text>
+        {alias ? (
+          <Text style={[ttr.alias, isCurrentUser && ttr.aliasHighlight]}>{alias}</Text>
+        ) : null}
       </View>
       {/* 下方：左侧代币icon+名称，右侧金额 */}
       <View style={ttr.bottomRow}>
@@ -340,12 +410,19 @@ const styles = StyleSheet.create({
   partyIconEmojiHighlight: { color: HIGHLIGHT_TEXT },
   partyTextWrap: { flex: 1 },
   partyName: { fontSize: 15, fontWeight: "600", color: "#1F2937" },
-  partyAddr: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
+  partyAddrRow: { flexDirection: "row", alignItems: "center", marginTop: 2, gap: 6 },
+  partyAddr: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace" },
+  copyBtn: { padding: 2, flexShrink: 0 },
 
   // Flow amount
   flowAmountRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 },
   flowLabel: { fontSize: 14, color: "#6B7280" },
   flowAmount: { fontSize: 16, fontWeight: "700", color: "#EF4444" },
+
+  // Toast
+  toastWrap: { position: "absolute", bottom: 80, left: 0, right: 0, alignItems: "center" },
+  toast: { backgroundColor: "rgba(0,0,0,0.75)", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
+  toastText: { color: "#FFFFFF", fontSize: 14 },
 });
 
 // TokenTransferRow styles - 上下布局

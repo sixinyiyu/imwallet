@@ -50,8 +50,10 @@ export default function ScanScreen() {
       if (data.startsWith("aquad://")) {
         const url = new URL(data);
         const address = url.searchParams.get("address");
+        const token = url.searchParams.get("token") || undefined;
+        const network = url.searchParams.get("network") || undefined;
         if (address) {
-          navigation.replace("Transfer", { toAddress: address });
+          navigation.replace("Transfer", { toAddress: address, tokenSymbol: token });
           return;
         }
       }

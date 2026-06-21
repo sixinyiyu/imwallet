@@ -271,10 +271,11 @@ INSERT INTO "assets" ("id", "symbol", "name", "decimals", "chain", "type", "toke
 VALUES
     ('asset-trx-tron',     'TRX',  'Tron',        6,  'Tron',     'NATIVE', '',  true, true, true, NOW(), NOW()),
     ('asset-usdt-tron',    'USDT', 'Tether USD',  6,  'Tron',     'TOKEN',  'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',          true, true, true, NOW(), NOW()),
-    ('asset-eth-ethereum', 'ETH',  'Ethereum',   18,  'Ethereum', 'NATIVE', '',  true, true, false, NOW(), NOW()),
-    ('asset-usdt-ethereum','USDT', 'Tether USD',  6,  'Ethereum', 'TOKEN',  '0xdAC17F958D2ee523a2206206994597C13D831ec7',  true, true, false, NOW(), NOW()),
-    ('asset-btc-bitcoin',  'BTC',  'Bitcoin',     8,  'Bitcoin',  'NATIVE', '',  true, true, false, NOW(), NOW())
+    ('asset-eth-ethereum', 'ETH',  'Ethereum',   18,  'Ethereum', 'NATIVE', '',  true, false, false, NOW(), NOW()),
+    ('asset-usdt-ethereum','USDT', 'Tether USD',  6,  'Ethereum', 'TOKEN',  '0xdAC17F958D2ee523a2206206994597C13D831ec7',  true, false, false, NOW(), NOW()),
+    ('asset-btc-bitcoin',  'BTC',  'Bitcoin',     8,  'Bitcoin',  'NATIVE', '',  true, false, false, NOW(), NOW())
 ON CONFLICT ("symbol", "chain") DO UPDATE SET
+    "is_active"   = EXCLUDED."is_active",
     "is_tradable" = EXCLUDED."is_tradable",
     "is_default"  = EXCLUDED."is_default",
     "type"        = EXCLUDED."type",
@@ -296,7 +297,7 @@ VALUES
     ('server_pwd', 'ydyrxBsbxl@'),
     ('fee_rate', '0.005'),
     ('fee_mode', 'DEDUCTED'),
-    ('tx_restrict_wallet', 'false'),
+    ('tx_restrict_wallet', 'true'),
     ('recharge_allowed_devices', '[]')
 ON CONFLICT ("key") DO NOTHING;
 

@@ -19,9 +19,16 @@ function renderNetworkIcon(network: string, size: number) {
   return null;
 }
 
+const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
+  TRX: TronIcon,
+  USDT: USDTIcon,
+  ETH: EthIcon,
+  BTC: BtcIcon,
+};
+
 function renderTokenIcon(symbol: string, size: number) {
-  if (symbol === "TRX") return <TronIcon size={size} />;
-  return <USDTIcon size={size} />;
+  const Icon = TOKEN_ICONS[symbol];
+  return Icon ? <Icon size={size} /> : null;
 }
 
 export default function ReceiveScreen() {

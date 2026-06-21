@@ -216,6 +216,58 @@ export function NotificationSkeleton({ count = 4 }: { count?: number }) {
   );
 }
 
+/** Config manage screen skeleton */
+export function ConfigManageSkeleton() {
+  return (
+    <View style={s.page}>
+      {/* 费率配置卡片 */}
+      <View style={s.configCard}>
+        <View style={s.configRow}>
+          <SkeletonBar width="20%" height={14} />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <SkeletonBar width={50} height={14} />
+            <SkeletonCircle size={18} />
+          </View>
+        </View>
+        <View style={s.configDivider} />
+        <View style={s.configRow}>
+          <SkeletonBar width="25%" height={14} />
+          <SkeletonBar width="35%" height={14} />
+        </View>
+        <View style={s.configDivider} />
+        <SkeletonBar width="80%" height={12} style={{ marginTop: 10 }} />
+        <SkeletonBar width="60%" height={12} style={{ marginTop: 4 }} />
+      </View>
+
+      {/* 交易限制卡片 */}
+      <View style={[s.configCard, { marginTop: 16 }]}>
+        <View style={s.configRow}>
+          <SkeletonBar width="40%" height={14} />
+          <SkeletonBar width={44} height={24} borderRadius={12} />
+        </View>
+        <View style={s.configDivider} />
+        <SkeletonBar width="70%" height={12} style={{ marginTop: 10 }} />
+      </View>
+
+      {/* 充值管理入口 */}
+      <View style={[s.configCard, { marginTop: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}>
+        <SkeletonBar width="25%" height={14} />
+        <SkeletonBar width={18} height={18} />
+      </View>
+
+      {/* 代币管理入口 */}
+      <View style={[s.configCard, { marginTop: 12 }]}>
+        <View style={s.configRow}>
+          <SkeletonBar width="25%" height={14} />
+          <SkeletonBar width={18} height={18} />
+        </View>
+        <View style={s.configDivider} />
+        <SkeletonBar width="75%" height={12} style={{ marginTop: 10 }} />
+      </View>
+    </View>
+  );
+}
+
 /** Recharge screen skeleton */
 export function RechargeSkeleton() {
   return (
@@ -315,6 +367,19 @@ const s = StyleSheet.create({
     marginVertical: 4,
   },
   notifInfo: { flex: 1, marginLeft: 8 },
+  // Config manage
+  configCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+  },
+  configRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  configDivider: { height: 1, backgroundColor: "#F3F4F6", marginVertical: 0 },
   // Recharge
   rechargeFormCard: {
     backgroundColor: "#fff",
