@@ -89,55 +89,6 @@ router.get("/check-address", asyncHandler(async (req: Request, res: Response) =>
 router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   const txId = req.params.id as string;
   const tx = await transactionService.getTransactionDetail(txId);
-
-  // 权限校验：查找交易双方地址关联的钱包，验证设备是否有权访问
-  // 与 checkWalletOwnership 保持一致：有设备订阅或钱包存在即允许
-  const addressList: string[] = [tx.fromAddress];
-  if (tx.toAddress) addressList.push(tx.toAddress);
-
-  const walletAddresses = await prisma.walletAddress.findMany({
-    where: { address: { in: addressList } },
-    select: { id: true },
-  });
-  const waIds = walletAddresses.map((wa: any) => wa.id);
-
-  let hasPermission = false;
-
-  if (waIds.length > 0) {
-    // 查找地址关联的钱包
-    const subs = await prisma.walletSubscription.findMany({
-      where: { address_id: { in: waIds } },
-      select: { wallet_id: true },
-      distinct: ["wallet_id"],
-    });
-    const walletIds = subs.map((s: any) => s.wallet_id);
-
-    for (const walletId of walletIds) {
-      // 与 checkWalletOwnership 一致：有设备订阅或钱包存在即允许
-      const deviceSub = await prisma.walletSubscription.findFirst({
-        where: { wallet_id: walletId, device_id: req.device!.deviceId },
-      });
-      if (deviceSub) {
-        hasPermission = true;
-        break;
-      }
-      // 兜底：钱包存在即允许（与 checkWalletOwnership 一致）
-      const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
-      if (wallet) {
-        hasPermission = true;
-        break;
-      }
-    }
-  } else {
-    // 地址不在系统中（外部地址交易），允许查看
-    hasPermission = true;
-  }
-
-  if (!hasPermission) {
-    res.status(403).json({ error: "You do not have permission to view this transaction" });
-    return;
-  }
-
   res.json(tx);
 }));
 
