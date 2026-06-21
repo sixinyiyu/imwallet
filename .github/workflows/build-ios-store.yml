@@ -177,6 +177,16 @@ jobs:
       # ============================================================
       - name: Submit to App Store Connect
         run: |
+          # 动态将 APPLE_ID 环境变量写入 eas.json，使 EAS 使用 Apple ID 认证
+          node -e "
+          const fs = require('fs');
+          const eas = JSON.parse(fs.readFileSync('eas.json', 'utf8'));
+          eas.submit['app-store'].ios.appleId = process.env.APPLE_ID;
+          eas.submit['app-store'].ios.appleTeamId = process.env.APPLE_TEAM_ID;
+          fs.writeFileSync('eas.json', JSON.stringify(eas, null, 2));
+          console.log('✅ eas.json updated with Apple ID:', process.env.APPLE_ID);
+          "
+
           eas submit \
             --platform ios \
             --profile app-store \
