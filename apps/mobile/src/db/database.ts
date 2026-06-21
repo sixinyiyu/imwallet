@@ -61,36 +61,20 @@ const SQLITE_INIT_SQL = `
   CREATE INDEX IF NOT EXISTS idx_accounts_wallet_id ON accounts(wallet_id);
 
   CREATE TABLE IF NOT EXISTS addresses (
-    id TEXT PRIMARY KEY,
+    id TEXT NOT NULL DEFAULT '',
     chain TEXT NOT NULL,
     address TEXT NOT NULL,
-    wallet_id TEXT NOT NULL,
+    wallet_id TEXT NOT NULL DEFAULT '',
     name TEXT NOT NULL DEFAULT '',
-    type TEXT NOT NULL DEFAULT 'account',
-    created_at TEXT NOT NULL
+    type TEXT NOT NULL DEFAULT 'address',
+    status TEXT NOT NULL DEFAULT 'unverified',
+    memo TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (chain, address)
   );
   CREATE INDEX IF NOT EXISTS idx_addresses_wallet_id ON addresses(wallet_id);
   CREATE INDEX IF NOT EXISTS idx_addresses_address ON addresses(address);
-
-  CREATE TABLE IF NOT EXISTS contacts (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    avatar TEXT NOT NULL DEFAULT '',
-    memo TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS contacts_addresses (
-    id TEXT PRIMARY KEY,
-    contact_id TEXT NOT NULL,
-    chain TEXT NOT NULL,
-    address TEXT NOT NULL,
-    memo TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS idx_contacts_addresses_contact_id ON contacts_addresses(contact_id);
-  CREATE INDEX IF NOT EXISTS idx_contacts_addresses_address ON contacts_addresses(address);
 `;
 
 // ─── 数据库单例 ──────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import { walletService } from "../services/walletService";
 import { syncService } from "../services/syncService";
 import { localWalletService, hashPassword } from "../services/localWalletService";
 import { localAccountService } from "../services/localAccountService";
+import { localAddressService } from "../services/localAddressService";
 import { generateMnemonic, cleanMnemonic, generateIdentifier } from "../utils/mnemonic";
 import { deriveAddressFromMnemonic, getDerivationPath } from "../utils/derivation";
 import { ensureDeviceKeys, ensureDeviceRegistered } from "../services/api";
@@ -55,6 +56,7 @@ interface WalletState {
   accountCount: number;
 
   loadLocalState: () => Promise<void>;
+  syncWalletsWithServer: () => Promise<void>;
   fetchWallets: () => Promise<void>;
   fetchWalletsAggregate: () => Promise<SimpleWallet[]>;
   fetchAccounts: (walletId: string) => Promise<void>;
@@ -111,10 +113,58 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       }
       set({ backedUpWallets: backedUpSet });
 
-      // 3. Fetch wallet state from local SQLite
+      // 3. Re-sync local wallets & addresses to server (recover from server data loss)
+      await get().syncWalletsWithServer();
+
+      // 4. Fetch wallet state from local SQLite
       await get().fetchWallets();
     } catch {
       set({ hasFetched: true, hasWallets: false });
+    }
+  },
+
+  /**
+   * Re-sync all local wallets and accounts to server.
+   * Idempotent: safe to call on every startup.
+   * Recovers from server data loss by re-registering wallets and re-syncing addresses.
+   */
+  syncWalletsWithServer: async () => {
+    try {
+      const localWallets = await localWalletService.getAllWallets();
+      for (const wallet of localWallets) {
+        try {
+          // Re-register wallet (idempotent: creates if missing, updates alias if exists)
+          await syncService.registerWallet(
+            wallet.source as "CREATE" | "IMPORT",
+            wallet.id,
+            wallet.name
+          );
+        } catch {
+          // Wallet might already exist or network error, continue
+        }
+
+        // Re-sync all accounts (addresses) for this wallet
+        const accounts = await localAccountService.getWalletAccounts(wallet.id);
+        for (const account of accounts) {
+          try {
+            const serverAddress = await syncService.syncAddress(
+              wallet.id,
+              account.chain,
+              account.address
+            );
+            // Update server_address_id if it changed (server was reset → new UUID)
+            if (serverAddress.id !== account.serverAddressId) {
+              await localAccountService.updateAccount(account.id, {
+                server_address_id: serverAddress.id,
+              });
+            }
+          } catch {
+            // Individual address sync failure, continue with next
+          }
+        }
+      }
+    } catch {
+      // silent — sync failure should not block app startup
     }
   },
 
@@ -389,6 +439,17 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         server_address_id: serverAddress.id,
       });
 
+      // 同步写入 addresses 表（type=internalWallet, status=verified）
+      // 用于交易列表显示钱包名称、转账确认页识别本钱包地址
+      await localAddressService.upsertAddress({
+        chain: network,
+        address: address,
+        walletId: walletId,
+        name: accountName,
+        type: "internalWallet",
+        status: "verified",
+      });
+
       await get().fetchAccounts(walletId);
     } catch (err: any) {
       throw err;
@@ -411,6 +472,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       // 删除本地账户
       await localAccountService.deleteAccount(accountId);
+
+      // 删除 addresses 表中对应的 internalWallet 记录（如果是联系人则保留）
+      const addrEntry = await localAddressService.getAddress(account.chain, account.address);
+      if (addrEntry && addrEntry.type === "internalWallet") {
+        await localAddressService.deleteAddress(account.chain, account.address);
+      }
 
       const walletId = get().activeWallet?.id;
       if (walletId) {

@@ -45,6 +45,15 @@ router.get("/aggregate", asyncHandler(async (req: Request, res: Response) => {
   res.json({ wallets });
 }));
 
+// 获取所有系统钱包（搜索+分页，供充值管理等场景使用）
+router.get("/all", asyncHandler(async (req: Request, res: Response) => {
+  const search = (req.query.search as string) || undefined;
+  const page = parseInt((req.query.page as string) || "1", 10);
+  const limit = parseInt((req.query.limit as string) || "20", 10);
+  const result = await walletService.getAllWallets({ search, page, limit });
+  res.json(result);
+}));
+
 // 创建/导入钱包（精简：服务端只创建 { id, source }，walletId 由客户端生成）
 router.post(
   "/",

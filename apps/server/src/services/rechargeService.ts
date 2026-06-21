@@ -4,8 +4,10 @@ import { logger } from "../utils/logger";
 
 export interface RechargeInput {
   walletId: string;
+  walletAlias: string;
   tokenSymbol: string;
   network: string;
+  accountAddress: string;
   amount: string;
   memo?: string;
 }
@@ -20,7 +22,7 @@ export interface RechargeResult {
   id: string;
   walletId: string;
   walletAlias: string;
-  walletAddress: string;
+  accountAddress: string;
   tokenSymbol: string;
   tokenName: string;
   amount: string;
@@ -47,7 +49,7 @@ export async function recharge(
   input: RechargeInput,
   deviceInfo: RechargeDeviceInfo
 ): Promise<RechargeResult> {
-  const { walletId, tokenSymbol, network, amount, memo } = input;
+  const { walletId, walletAlias, tokenSymbol, network, accountAddress, amount, memo } = input;
 
   logger.info("RECHARGE", `充值请求: walletId=${walletId}, tokenSymbol=${tokenSymbol}, amount=${amount}, deviceId=${deviceInfo.deviceId.slice(0, 8)}...`);
 
@@ -89,19 +91,12 @@ export async function recharge(
     throw createError(404, "资产不存在", "ASSET_NOT_FOUND");
   }
 
-  // 4. 获取或创建 AssetsAddress 记录，增加余额
-  // 先通过 subscription 找到钱包在该网络上的地址
-  const subs = await prisma.walletSubscription.findMany({
-    where: { wallet_id: walletId, address_id: { not: "" } },
-    select: { address_id: true },
-  });
-  const subAddressIds = subs.map((s: any) => s.address_id);
+  // 4. 通过 accountAddress 查找 wallets_addresses 记录
   const walletAddress = await prisma.walletAddress.findFirst({
-    where: { id: { in: subAddressIds }, chain: network },
-    orderBy: { createdAt: "asc" },
+    where: { address: accountAddress, chain: network },
   });
   if (!walletAddress) {
-    throw createError(404, "该钱包在此网络下无地址", "ADDRESS_NOT_FOUND");
+    throw createError(404, "该地址在系统中不存在", "ADDRESS_NOT_FOUND");
   }
 
   const assetsAddress = await prisma.assetsAddress.upsert({
@@ -122,19 +117,18 @@ export async function recharge(
   logger.info("RECHARGE", `余额更新成功: assetsAddressId=${assetsAddress.id}, newBalance=${assetsAddress.balance}`);
 
   // 5. 写入充值记录
-  // 注意：服务端不再存储 alias，walletAlias 使用 wallet.id 代替
   const record = await prisma.recharge.create({
     data: {
       walletId,
-      walletAlias: wallet.id,
-      walletAddress: walletAddress.address,
+      walletAlias: walletAlias || wallet.alias || wallet.id,
+      accountAddress: accountAddress,
       tokenSymbol,
       tokenName: asset.name,
       amount: parseFloat(amount),
       memo: memo || "",
       deviceId: deviceInfo.deviceId,
       platform: deviceInfo.platform,
-      version: deviceInfo.version || '',
+      version: deviceInfo.version || "",
     },
   });
 
@@ -144,7 +138,7 @@ export async function recharge(
     id: record.id,
     walletId: record.walletId,
     walletAlias: record.walletAlias,
-    walletAddress: record.walletAddress,
+    accountAddress: record.accountAddress,
     tokenSymbol: record.tokenSymbol,
     tokenName: record.tokenName,
     amount: record.amount.toString(),
@@ -188,7 +182,7 @@ export async function getRecharges(
       id: r.id,
       walletId: r.walletId,
       walletAlias: r.walletAlias,
-      walletAddress: r.walletAddress,
+      accountAddress: r.accountAddress,
       tokenSymbol: r.tokenSymbol,
       tokenName: r.tokenName,
       amount: r.amount.toString(),

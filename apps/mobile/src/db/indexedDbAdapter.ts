@@ -7,15 +7,13 @@ import type { DatabaseAdapter, SelectOptions, OrderByClause } from "./types";
  */
 
 const DB_NAME = "imwallet";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 /** 客户端所有表名 */
 const TABLES = [
   "wallets",
   "accounts",
   "addresses",
-  "contacts",
-  "contacts_addresses",
 ] as const;
 
 /** 布尔字段列表（需要 true/false ↔ 1/0 转换） */
@@ -116,6 +114,20 @@ export class IndexedDBAdapter implements DatabaseAdapter {
           didUpgrade = true;
           if (db.objectStoreNames.contains("wallets")) {
             db.deleteObjectStore("wallets");
+          }
+        }
+
+        // v3 → v4：删除 contacts/contacts_addresses，重建 addresses（新结构）
+        if (oldVersion < 4) {
+          didUpgrade = true;
+          if (db.objectStoreNames.contains("contacts")) {
+            db.deleteObjectStore("contacts");
+          }
+          if (db.objectStoreNames.contains("contacts_addresses")) {
+            db.deleteObjectStore("contacts_addresses");
+          }
+          if (db.objectStoreNames.contains("addresses")) {
+            db.deleteObjectStore("addresses");
           }
         }
 

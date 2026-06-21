@@ -9,13 +9,13 @@ import {
   ActivityIndicator,
   Modal,
 } from "react-native";
-import { contactService } from "../services/contactService";
+import { localAddressService } from "../services/localAddressService";
 import { useAlert } from "../hooks/useAlert";
 import { detectNetwork } from "../utils/address";
 import { TronIcon, EthIcon, BtcIcon, ContactIcon, CopyIcon } from "../components/icons";
 import { saveLogToLocal } from "../services/logService";
 import { AddressBookSkeleton } from "../components/Skeleton";
-import type { Contact } from "../types";
+import type { AddressEntry } from "../types";
 import EmptyState from "../components/EmptyState";
 
 /** 联系人表单模式：新增 / 编辑 */
@@ -34,7 +34,7 @@ function NetworkIcon({ network, size = 20 }: { network: string; size?: number })
 
 export default function AddressBookScreen() {
   const alert = useAlert();
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contacts, setContacts] = useState<AddressEntry[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Toast state
@@ -51,7 +51,7 @@ export default function AddressBookScreen() {
   // 表单状态
   const [formVisible, setFormVisible] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>("add");
-  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [editingEntry, setEditingEntry] = useState<AddressEntry | null>(null);
   const [formName, setFormName] = useState("");
   const [formAddress, setFormAddress] = useState("");
   const [formMemo, setFormMemo] = useState("");
@@ -59,7 +59,7 @@ export default function AddressBookScreen() {
 
   // 删除确认弹窗
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deletingContact, setDeletingContact] = useState<Contact | null>(null);
+  const [deletingEntry, setDeletingEntry] = useState<AddressEntry | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   // 根据地址自动推导网络类型
@@ -72,7 +72,7 @@ export default function AddressBookScreen() {
   const loadContacts = async () => {
     setLoading(true);
     try {
-      const data = await contactService.getContacts();
+      const data = await localAddressService.getAllContacts();
       setContacts(data);
     } catch (err) {
       saveLogToLocal("crash", `[AddressBook] loadContacts failed: ${(err as Error)?.message || String(err)}`);
@@ -83,7 +83,7 @@ export default function AddressBookScreen() {
   /** 打开新增表单 */
   const openAddForm = () => {
     setFormMode("add");
-    setEditingContact(null);
+    setEditingEntry(null);
     setFormName("");
     setFormAddress("");
     setFormMemo("");
@@ -91,12 +91,12 @@ export default function AddressBookScreen() {
   };
 
   /** 打开编辑表单 */
-  const openEditForm = (contact: Contact) => {
+  const openEditForm = (entry: AddressEntry) => {
     setFormMode("edit");
-    setEditingContact(contact);
-    setFormName(contact.name);
-    setFormAddress(contact.addresses[0]?.address || "");
-    setFormMemo(contact.memo || "");
+    setEditingEntry(entry);
+    setFormName(entry.name);
+    setFormAddress(entry.address);
+    setFormMemo(entry.memo || "");
     setFormVisible(true);
   };
 
@@ -106,7 +106,7 @@ export default function AddressBookScreen() {
     setFormName("");
     setFormAddress("");
     setFormMemo("");
-    setEditingContact(null);
+    setEditingEntry(null);
   };
 
   /** 提交表单（新增或编辑） */
@@ -121,34 +121,16 @@ export default function AddressBookScreen() {
     }
     setSubmitting(true);
     try {
-      if (formMode === "add") {
-        const contact = await contactService.createContact({
-          name: formName.trim(),
-          memo: formMemo.trim() || undefined,
-        });
-        if (detectedNetwork) {
-          await contactService.addContactAddress(contact.id, {
-            chain: detectedNetwork,
-            address: formAddress.trim(),
-          });
-        }
-        showToast("联系人已添加");
-      } else if (formMode === "edit" && editingContact) {
-        await contactService.updateContact(editingContact.id, {
-          name: formName.trim(),
-          memo: formMemo.trim() || undefined,
-        });
-        if (detectedNetwork) {
-          for (const addr of editingContact.addresses) {
-            await contactService.deleteContactAddress(addr.id);
-          }
-          await contactService.addContactAddress(editingContact.id, {
-            chain: detectedNetwork,
-            address: formAddress.trim(),
-          });
-        }
-        showToast("联系人已更新");
-      }
+      // upsertAddress 天然支持新增和编辑（REPLACE 策略）
+      await localAddressService.upsertAddress({
+        chain: detectedNetwork,
+        address: formAddress.trim(),
+        name: formName.trim(),
+        type: "contact",
+        status: "unverified",
+        memo: formMemo.trim(),
+      });
+      showToast(formMode === "add" ? "联系人已添加" : "联系人已更新");
       closeForm();
       loadContacts();
     } catch (err: any) {
@@ -159,8 +141,8 @@ export default function AddressBookScreen() {
   };
 
   /** 删除联系人 */
-  const handleDelete = (contact: Contact) => {
-    setDeletingContact(contact);
+  const handleDelete = (entry: AddressEntry) => {
+    setDeletingEntry(entry);
     setShowDeleteConfirm(true);
   };
 
@@ -190,14 +172,14 @@ export default function AddressBookScreen() {
       {/* 联系人列表 */}
       <FlatList
         data={contacts}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => `${item.chain}_${item.address}`}
         refreshing={loading}
         onRefresh={loadContacts}
         renderItem={({ item }) => (
           <View style={styles.contactItem}>
             {/* 左侧：网络icon */}
             <View style={styles.contactIconWrap}>
-              <NetworkIcon network={item.addresses[0]?.chain} size={28} />
+              <NetworkIcon network={item.chain} size={28} />
             </View>
 
             {/* 右侧：名称 + 地址 + 操作链接 */}
@@ -208,17 +190,17 @@ export default function AddressBookScreen() {
                   {item.name}
                 </Text>
                 <View style={styles.networkBadge}>
-                  <Text style={styles.networkBadgeText}>{item.addresses[0]?.chain || "未知"}</Text>
+                  <Text style={styles.networkBadgeText}>{item.chain || "未知"}</Text>
                 </View>
               </View>
 
               {/* 第二行：地址 + 复制icon */}
               <View style={styles.contactAddressRow}>
                   <Text style={styles.contactAddress} numberOfLines={1} ellipsizeMode="middle">
-                    {item.addresses[0]?.address}
+                    {item.address}
                   </Text>                <TouchableOpacity
                   style={styles.copyBtn}
-                  onPress={() => handleCopyAddress(item.addresses[0]?.address || "")}
+                  onPress={() => handleCopyAddress(item.address)}
                   activeOpacity={0.6}
                 >
                   <CopyIcon size={14} color="#9CA3AF" />
@@ -352,12 +334,12 @@ export default function AddressBookScreen() {
           <View style={modalStyles.card}>
             <Text style={modalStyles.title}>确认删除</Text>
             <Text style={modalStyles.desc}>
-              确定要删除联系人 "{deletingContact?.name}" 吗？
+              确定要删除联系人 "{deletingEntry?.name}" 吗？
             </Text>
             <View style={modalStyles.buttonRow}>
               <TouchableOpacity
                 style={modalStyles.cancelBtn}
-                onPress={() => { setShowDeleteConfirm(false); setDeletingContact(null); }}
+                onPress={() => { setShowDeleteConfirm(false); setDeletingEntry(null); }}
                 activeOpacity={0.7}
               >
                 <Text style={modalStyles.cancelBtnText}>取消</Text>
@@ -365,18 +347,18 @@ export default function AddressBookScreen() {
               <TouchableOpacity
                 style={[modalStyles.submitBtn, { backgroundColor: "#EF4444" }, deleting && modalStyles.submitBtnDisabled]}
                 onPress={async () => {
-                  if (!deletingContact) return;
+                  if (!deletingEntry) return;
                   setDeleting(true);
                   try {
-                    await contactService.deleteContact(deletingContact.id);
+                    await localAddressService.deleteAddress(deletingEntry.chain, deletingEntry.address);
                     showToast("联系人已删除");
                     setShowDeleteConfirm(false);
-                    setDeletingContact(null);
+                    setDeletingEntry(null);
                     loadContacts();
                   } catch (err: any) {
                     showToast("删除失败: " + (err.message || "未知错误"));
                     setShowDeleteConfirm(false);
-                    setDeletingContact(null);
+                    setDeletingEntry(null);
                   }
                   setDeleting(false);
                 }}

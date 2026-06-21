@@ -160,27 +160,27 @@ export interface Transaction {
   toContactName: string;
 }
 
-/** 联系人（支持多链地址） */
-export interface Contact {
-  id: string;
+/** 地址簿条目（全局地址通讯录，PK = chain + address） */
+export interface AddressEntry {
+  chain: string;
+  address: string;
+  walletId: string;
+  /** 友好名称/标签 */
   name: string;
-  avatar: string;
+  /** 地址类型：address/contract/validator/contact/internalWallet */
+  type: string;
+  /** 验证状态：verified/unverified/suspicious */
+  status: string;
   memo: string;
   createdAt: string;
   updatedAt: string;
-  /** 联系人的多链地址列表 */
-  addresses: ContactAddress[];
 }
 
-/** 联系人多链地址 */
-export interface ContactAddress {
-  id: string;
-  contactId: string;
-  chain: string;
-  address: string;
-  memo: string;
-  createdAt: string;
-}
+/** 地址类型枚举 */
+export type AddressType = "address" | "contract" | "validator" | "contact" | "internalWallet";
+
+/** 验证状态枚举 */
+export type VerificationStatus = "verified" | "unverified" | "suspicious";
 
 export interface Notification {
   id: string;

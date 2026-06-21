@@ -2,8 +2,10 @@ import { z } from "zod";
 
 export const rechargeSchema = z.object({
   walletId: z.string().min(1, "请选择钱包"),
+  walletAlias: z.string().optional(),
   tokenSymbol: z.string().min(1, "请选择代币"),
   network: z.string().min(1, "请选择网络"),
+  accountAddress: z.string().min(1, "请选择账户地址"),
   amount: z
     .string()
     .refine(

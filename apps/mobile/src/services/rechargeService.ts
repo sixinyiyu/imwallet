@@ -1,17 +1,18 @@
 import api from "./api";
+import Constants from "expo-constants";
 
 export interface RechargeRecord {
   id: string;
   walletId: string;
   walletAlias: string;
-  walletAddress: string;
+  accountAddress: string;
   tokenSymbol: string;
   tokenName: string;
   amount: string;
   memo: string;
   deviceId: string;
   platform: string;
-  version: string | null;
+  version: string;
   createdAt: string;
 }
 
@@ -26,12 +27,16 @@ export const rechargeService = {
   /** 充值 */
   async recharge(input: {
     walletId: string;
+    walletAlias: string;
     tokenSymbol: string;
     network: string;
+    accountAddress: string;
     amount: string;
     memo?: string;
   }): Promise<RechargeRecord> {
-    const { data } = await api.post("/recharges", input);
+    const { data } = await api.post("/recharges", input, {
+      headers: { "x-app-version": Constants.expoConfig?.version || "unknown" },
+    });
     return data;
   },
 

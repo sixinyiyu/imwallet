@@ -19,11 +19,11 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { transactionService } from "../services/transactionService";
-import { contactService } from "../services/contactService";
+import { localAddressService } from "../services/localAddressService";
 import { configService } from "../services/configService";
 import type { FeeConfig } from "../services/configService";
 import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
-import type { Contact, AssetBalance } from "../types";
+import type { AddressEntry, AssetBalance } from "../types";
 import { detectNetwork, isValidAddressFormat } from "../utils/address";
 import { useAlert } from "../hooks/useAlert";
 
@@ -104,7 +104,7 @@ export default function TransferScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showContactPicker, setShowContactPicker] = useState(false);
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contacts, setContacts] = useState<AddressEntry[]>([]);
   const [addressInContacts, setAddressInContacts] = useState(false);
   const [addingToContacts, setAddingToContacts] = useState(false);
   const [txRestrictWallet, setTxRestrictWallet] = useState(false);
@@ -150,20 +150,20 @@ export default function TransferScreen() {
 
   const openContactPicker = useCallback(async () => {
     try {
-      const data = await contactService.getContacts();
+      const data = await localAddressService.getAllContacts();
       setContacts(data);
       setShowContactPicker(true);
     } catch { /* ignore */ }
   }, []);
 
-  const selectContact = (c: Contact) => {
-    setToAddress(c.addresses[0]?.address || "");
+  const selectContact = (c: AddressEntry) => {
+    setToAddress(c.address);
     setShowContactPicker(false);
   };
 
   const addressFormatValid = useMemo(() => isValidAddressFormat(toAddress), [toAddress]);
 
-  // 地址格式正确时，调用后端接口检查地址是否在系统中 + 是否在用户地址本中
+  // 地址格式正确时，调用后端接口检查地址是否在系统中 + 本地检查是否在地址本中
   useEffect(() => {
     if (!addressFormatValid || !toAddress.trim()) {
       setAddressCheckResult(null);
@@ -172,10 +172,20 @@ export default function TransferScreen() {
     }
     let cancelled = false;
     setCheckingAddress(true);
-    transactionService.checkAddress(toAddress.trim()).then((result) => {
+
+    // 本地检查：地址是否已在地址本中（type=contact）
+    const network = detectNetwork(toAddress.trim());
+    const localCheck = network
+      ? localAddressService.isContact(network, toAddress.trim())
+      : Promise.resolve(false);
+
+    // 服务端检查：地址是否在系统内
+    const serverCheck = transactionService.checkAddress(toAddress.trim());
+
+    Promise.all([serverCheck, localCheck]).then(([result, inContacts]) => {
       if (cancelled) return;
       setAddressCheckResult(result);
-      setAddressInContacts(result.inContacts);
+      setAddressInContacts(inContacts);
     }).catch(() => {
       if (cancelled) return;
       setAddressCheckResult(null);
@@ -222,15 +232,13 @@ export default function TransferScreen() {
     setAddingToContacts(true);
     try {
       const contactName = toAddress.trim().slice(0, 10);
-      const contact = await contactService.createContact({
+      await localAddressService.upsertAddress({
+        chain: detectedNetwork || "Tron",
+        address: toAddress.trim(),
         name: contactName,
+        type: "contact",
+        status: "unverified",
       });
-      if (detectedNetwork) {
-        await contactService.addContactAddress(contact.id, {
-          chain: detectedNetwork,
-          address: toAddress.trim(),
-        });
-      }
       setAddressInContacts(true);
       setAddressCheckResult((prev) => prev ? { ...prev, inContacts: true } : prev);
       showToast("已添加到地址本");
@@ -567,9 +575,9 @@ export default function TransferScreen() {
             <Text style={z.pickerTitle}>选择联系人</Text>
             <FlatList
               data={contacts}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => `${item.chain}_${item.address}`}
               renderItem={({ item }) => (
-                <TouchableOpacity style={[z.contactItem, (item.addresses[0]?.address || "").toLowerCase() === toAddress.trim().toLowerCase() && z.contactItemActive]} onPress={() => selectContact(item)}>
+                <TouchableOpacity style={[z.contactItem, item.address.toLowerCase() === toAddress.trim().toLowerCase() && z.contactItemActive]} onPress={() => selectContact(item)}>
                   <View style={z.contactAvatar}>
                     <Text style={z.contactAvatarText}>👤</Text>
                   </View>
@@ -577,11 +585,11 @@ export default function TransferScreen() {
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                       <Text style={z.contactName}>{item.name}</Text>
                       <View style={{ backgroundColor: "#DBEAFE", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
-                        <Text style={{ fontSize: 10, color: "#3B82F6", fontWeight: "500" }}>{item.addresses[0]?.chain}</Text>
+                        <Text style={{ fontSize: 10, color: "#3B82F6", fontWeight: "500" }}>{item.chain}</Text>
                       </View>
                     </View>
                     <Text style={z.contactAddr}>
-                      {(item.addresses[0]?.address || "").slice(0, 14)}...{(item.addresses[0]?.address || "").slice(-8)}
+                      {item.address.slice(0, 14)}...{item.address.slice(-8)}
                     </Text>
                   </View>
                 </TouchableOpacity>

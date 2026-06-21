@@ -1,11 +1,25 @@
 -- ============================================================
--- IMWallet Database Init (Single File)
--- 幂等脚本：所有语句可安全重复执行
+-- IMWallet Database Init Script (v1.0 — 2026-06-21)
+-- ============================================================
+-- 这是项目唯一的数据库初始化脚本，包含：
+--   1. 扩展安装 (pgcrypto)
+--   2. 枚举类型定义 (WalletSource / TxStatus / NotificationType / Platform)
+--   3. 全部 14 张数据表建表语句
+--   4. 种子数据 (chains / assets / fiat_currencies / app_configs)
+--   5. 迁移追踪记录 (_migrations)
+--
+-- 部署新环境只需执行此一个文件即可：
+--   psql -U <user> -d <database> -f init.sql
+--
+-- 幂等设计：所有语句可安全重复执行
 --   CREATE TYPE → DO $$ BEGIN ... EXCEPTION WHEN duplicate_object
 --   CREATE TABLE → IF NOT EXISTS
 --   CREATE UNIQUE INDEX → IF NOT EXISTS
 --   INSERT → ON CONFLICT DO NOTHING / DO UPDATE
 --   不建立数据库外键约束，数据完整性和级联删除由业务代码保证
+--
+-- 对应 Prisma schema: apps/server/prisma/schema.prisma
+-- 重置数据库请使用: drop-all.sql
 -- ============================================================
 
 -- ─── Extensions ──────────────────────────────────────────────────────────────
@@ -213,7 +227,7 @@ CREATE TABLE IF NOT EXISTS "recharges" (
     "id"             TEXT        NOT NULL,
     "wallet_id"      VARCHAR(36) NOT NULL,
     "wallet_alias"   VARCHAR(64) NOT NULL,
-    "wallet_address" VARCHAR(64) NOT NULL,
+    "account_address" VARCHAR(64) NOT NULL,
     "token_symbol"   VARCHAR(16) NOT NULL,
     "token_name"     VARCHAR(64) NOT NULL,
     "amount"         DECIMAL(30,8) NOT NULL,
@@ -257,9 +271,9 @@ INSERT INTO "assets" ("id", "symbol", "name", "decimals", "chain", "type", "toke
 VALUES
     ('asset-trx-tron',     'TRX',  'Tron',        6,  'Tron',     'NATIVE', '',  true, true, true, NOW(), NOW()),
     ('asset-usdt-tron',    'USDT', 'Tether USD',  6,  'Tron',     'TOKEN',  'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',          true, true, true, NOW(), NOW()),
-    ('asset-eth-ethereum', 'ETH',  'Ethereum',   18,  'Ethereum', 'NATIVE', '',  true, true, true, NOW(), NOW()),
-    ('asset-usdt-ethereum','USDT', 'Tether USD',  6,  'Ethereum', 'TOKEN',  '0xdAC17F958D2ee523a2206206994597C13D831ec7',  true, true, true, NOW(), NOW()),
-    ('asset-btc-bitcoin',  'BTC',  'Bitcoin',     8,  'Bitcoin',  'NATIVE', '',  true, true, true, NOW(), NOW())
+    ('asset-eth-ethereum', 'ETH',  'Ethereum',   18,  'Ethereum', 'NATIVE', '',  true, true, false, NOW(), NOW()),
+    ('asset-usdt-ethereum','USDT', 'Tether USD',  6,  'Ethereum', 'TOKEN',  '0xdAC17F958D2ee523a2206206994597C13D831ec7',  true, true, false, NOW(), NOW()),
+    ('asset-btc-bitcoin',  'BTC',  'Bitcoin',     8,  'Bitcoin',  'NATIVE', '',  true, true, false, NOW(), NOW())
 ON CONFLICT ("symbol", "chain") DO UPDATE SET
     "is_tradable" = EXCLUDED."is_tradable",
     "is_default"  = EXCLUDED."is_default",

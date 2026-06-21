@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -14,10 +14,10 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { walletService } from "../services/walletService";
 import { assetService } from "../services/assetService";
-import { localAccountService } from "../services/localAccountService";
+import { localAddressService } from "../services/localAddressService";
 import { rechargeService, type RechargeRecord } from "../services/rechargeService";
-import type { SimpleWallet, AssetInfo, Account } from "../types";
-import { TronIcon, USDTIcon, ChevronRightIcon } from "../components/icons";
+import type { SimpleWallet, AssetInfo, AddressEntry, ServerWalletAddress } from "../types";
+import { TronIcon, USDTIcon, ChevronRightIcon, CopyIcon } from "../components/icons";
 import { RechargeSkeleton } from "../components/Skeleton";
 
 /** 预置代币图标映射 */
@@ -27,10 +27,8 @@ const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
 };
 
 export default function RechargeScreen() {
-  const [wallets, setWallets] = useState<SimpleWallet[]>([]);
   const [assets, setAssets] = useState<AssetInfo[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<SimpleWallet | null>(null);
-  const [walletAccounts, setWalletAccounts] = useState<Account[]>([]);
   const [selectedToken, setSelectedToken] = useState<AssetInfo | null>(null);
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
@@ -38,12 +36,24 @@ export default function RechargeScreen() {
   const [loading, setLoading] = useState(true);
   const [formCollapsed, setFormCollapsed] = useState(true);
 
+  // 服务端钱包列表（搜索+分页）
+  const [serverWallets, setServerWallets] = useState<SimpleWallet[]>([]);
+  const [serverWalletsTotal, setServerWalletsTotal] = useState(0);
+  const [serverWalletsPage, setServerWalletsPage] = useState(1);
+  const [serverWalletsLoading, setServerWalletsLoading] = useState(false);
+  const [walletSearch, setWalletSearch] = useState("");
+  // 选中钱包的链上地址（从服务端获取）
+  const [serverAddresses, setServerAddresses] = useState<ServerWalletAddress[]>([]);
+
   // 充值记录
   const [records, setRecords] = useState<RechargeRecord[]>([]);
   const [recordsTotal, setRecordsTotal] = useState(0);
   const [recordsPage, setRecordsPage] = useState(1);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // 地址本缓存（用于充值记录中匹配联系人名称）
+  const [addressMap, setAddressMap] = useState<Map<string, AddressEntry>>(new Map());
 
   // 选择器弹窗
   const [showWalletPicker, setShowWalletPicker] = useState(false);
@@ -61,12 +71,17 @@ export default function RechargeScreen() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [walletsRes, assetsRes] = await Promise.all([
-        walletService.getWallets(),
+      const [assetsRes, contacts] = await Promise.all([
         assetService.getAssets(),
+        localAddressService.getAllContacts(),
       ]);
-      setWallets(walletsRes.wallets);
       setAssets(assetsRes.assets);
+      // 构建 address → AddressEntry 映射（用于充值记录匹配联系人名称）
+      const map = new Map<string, AddressEntry>();
+      for (const c of contacts) {
+        map.set(c.address, c);
+      }
+      setAddressMap(map);
     } catch {
       showToast("加载数据失败");
     }
@@ -76,8 +91,8 @@ export default function RechargeScreen() {
   /** 根据代币网络获取钱包在该网络上的链地址 */
   const getAssetAddress = (asset: AssetInfo): string => {
     if (!selectedWallet) return "";
-    const account = walletAccounts.find((a) => a.chain === asset.chain);
-    return account?.address || "";
+    const addr = serverAddresses.find((a) => a.chain === asset.chain);
+    return addr?.address || "";
   };
 
   /** 地址截断显示 */
@@ -86,15 +101,68 @@ export default function RechargeScreen() {
     return `${addr.slice(0, 8)}...${addr.slice(-4)}`;
   };
 
-  /** 选择钱包后加载该钱包的账户列表 */
+  /** 选择钱包后从服务端获取该钱包的链上地址列表 */
   const handleSelectWallet = async (wallet: SimpleWallet) => {
     setSelectedWallet(wallet);
     setShowWalletPicker(false);
     try {
-      const accounts = await localAccountService.getWalletAccounts(wallet.id);
-      setWalletAccounts(accounts);
+      const { addresses } = await walletService.getWalletAddresses(wallet.id);
+      setServerAddresses(addresses);
+      // 清空已选代币（如果新钱包没有对应链的地址）
+      if (selectedToken && !addresses.some((a) => a.chain === selectedToken.chain)) {
+        setSelectedToken(null);
+      }
     } catch {
-      setWalletAccounts([]);
+      setServerAddresses([]);
+      setSelectedToken(null);
+      showToast("获取钱包地址失败");
+    }
+  };
+
+  // ── 服务端钱包列表（搜索+分页） ──────────────────────────────────────────
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** 从服务端加载钱包列表（支持搜索+分页） */
+  const loadServerWallets = async (page = 1, search = "", append = false) => {
+    if (serverWalletsLoading) return;
+    setServerWalletsLoading(true);
+    try {
+      const res = await walletService.getAllWallets({
+        search: search || undefined,
+        page,
+        limit: 20,
+      });
+      setServerWallets((prev) => (append ? [...prev, ...res.wallets] : res.wallets));
+      setServerWalletsTotal(res.total);
+      setServerWalletsPage(page);
+    } catch {
+      if (!append) setServerWallets([]);
+    }
+    setServerWalletsLoading(false);
+  };
+
+  /** 打开钱包选择器：重置搜索并加载第一页 */
+  const openWalletPicker = () => {
+    setShowWalletPicker(true);
+    setWalletSearch("");
+    setServerWallets([]);
+    setServerWalletsPage(1);
+    loadServerWallets(1, "");
+  };
+
+  /** 搜索输入（防抖 300ms） */
+  const handleWalletSearch = (text: string) => {
+    setWalletSearch(text);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      loadServerWallets(1, text);
+    }, 300);
+  };
+
+  /** 钱包列表加载更多 */
+  const handleWalletLoadMore = () => {
+    if (serverWallets.length < serverWalletsTotal && !serverWalletsLoading) {
+      loadServerWallets(serverWalletsPage + 1, walletSearch, true);
     }
   };
 
@@ -103,7 +171,7 @@ export default function RechargeScreen() {
     setRecordsLoading(true);
     try {
       const res = await rechargeService.getRecharges({ page, limit: 20 });
-      setRecords(append ? [...records, ...res.recharges] : res.recharges);
+      setRecords((prev) => (append ? [...prev, ...res.recharges] : res.recharges));
       setRecordsTotal(res.total);
       setRecordsPage(page);
     } catch {
@@ -152,10 +220,18 @@ export default function RechargeScreen() {
     }
     setSubmitting(true);
     try {
+      const accountAddress = getAssetAddress(selectedToken);
+      if (!accountAddress) {
+        showToast("该钱包在此网络下无地址");
+        setSubmitting(false);
+        return;
+      }
       await rechargeService.recharge({
         walletId: selectedWallet.id,
+        walletAlias: selectedWallet.name,
         tokenSymbol: selectedToken.symbol,
         network: selectedToken.chain,
+        accountAddress,
         amount: trimmed,
         memo: memo.trim() || undefined,
       });
@@ -172,7 +248,23 @@ export default function RechargeScreen() {
 
   const canSubmit = !!selectedWallet && !!selectedToken && !!amount.trim() && !submitting;
 
-  const renderRecord = ({ item }: { item: RechargeRecord }) => (
+  /** 复制地址到剪贴板 */
+  const handleCopyAddress = useCallback(async (address: string) => {
+    try {
+      const Clipboard = require("expo-clipboard");
+      await Clipboard.setStringAsync(address);
+      showToast("地址已复制");
+    } catch {
+      showToast("复制失败");
+    }
+  }, [showToast]);
+
+  const renderRecord = ({ item }: { item: RechargeRecord }) => {
+    // 匹配地址本：优先显示备注，没有备注用名称
+    const contact = addressMap.get(item.accountAddress);
+    const contactLabel = contact ? (contact.memo || contact.name) : null;
+
+    return (
     <View style={styles.recordCard}>
       <View style={styles.recordHeader}>
         <View style={styles.recordTokenWrap}>
@@ -186,16 +278,37 @@ export default function RechargeScreen() {
         <Text style={styles.recordAmount}>+{parseFloat(item.amount).toFixed(6)}</Text>
       </View>
       <View style={styles.recordBody}>
-        <Text style={styles.recordWallet} numberOfLines={1}>
-          {item.walletAlias} · {item.walletAddress.slice(0, 8)}...{item.walletAddress.slice(-4)}
-        </Text>
-        {item.memo ? <Text style={styles.recordMemo} numberOfLines={1}>{item.memo}</Text> : null}
-        <Text style={styles.recordMeta}>
-          {item.platform} · {item.deviceId.slice(0, 8)}... · {formatDate(item.createdAt)}
-        </Text>
+        {/* 账户地址行：联系人名称 + 地址 + 复制icon */}
+        <View style={styles.recordAddressRow}>
+          {contactLabel ? (
+            <Text style={styles.recordContactName} numberOfLines={1}>
+              {contactLabel}
+            </Text>
+          ) : null}
+          <Text style={styles.recordAddress} numberOfLines={1} ellipsizeMode="middle">
+            {item.accountAddress}
+          </Text>
+          <TouchableOpacity
+            style={styles.copyBtn}
+            onPress={() => handleCopyAddress(item.accountAddress)}
+            activeOpacity={0.6}
+          >
+            <CopyIcon size={14} color="#9CA3AF" />
+          </TouchableOpacity>
+        </View>
+        {/* 备注行：左侧备注 + 右侧充值时间 */}
+        <View style={styles.recordFooterRow}>
+          <Text style={styles.recordMemo} numberOfLines={1}>
+            {item.memo ? `备注: ${item.memo}` : ""}
+          </Text>
+          <Text style={styles.recordMeta}>
+            {formatDate(item.createdAt)}
+          </Text>
+        </View>
       </View>
     </View>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -233,7 +346,7 @@ export default function RechargeScreen() {
               <Text style={styles.fieldLabel}>选择钱包</Text>
               <TouchableOpacity
                 style={styles.pickerBtn}
-                onPress={() => setShowWalletPicker(true)}
+                onPress={openWalletPicker}
                 activeOpacity={0.7}
               >
                 <Text style={selectedWallet ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
@@ -324,12 +437,21 @@ export default function RechargeScreen() {
       />
 
       {/* 钱包选择器 */}
+      {/* 钱包选择器（服务端搜索+分页） */}
       <Modal visible={showWalletPicker} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowWalletPicker(false)}>
-          <View style={styles.pickerCard}>
+          <Pressable style={styles.pickerCard} onPress={() => {}}>
             <Text style={styles.pickerTitle}>选择钱包</Text>
+            {/* 搜索框 */}
+            <TextInput
+              style={styles.walletSearchInput}
+              value={walletSearch}
+              onChangeText={handleWalletSearch}
+              placeholder="搜索钱包名称或ID"
+              placeholderTextColor="#C8C9CC"
+            />
             <FlatList
-              data={wallets}
+              data={serverWallets}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
                 <TouchableOpacity
@@ -341,12 +463,28 @@ export default function RechargeScreen() {
                   </View>
                 </TouchableOpacity>
               )}
+              onEndReached={handleWalletLoadMore}
+              onEndReachedThreshold={0.3}
+              ListEmptyComponent={
+                serverWalletsLoading ? null : (
+                  <View style={styles.pickerEmpty}>
+                    <Text style={styles.pickerEmptyText}>无匹配钱包</Text>
+                  </View>
+                )
+              }
+              ListFooterComponent={
+                serverWalletsLoading ? (
+                  <View style={styles.pickerLoading}>
+                    <ActivityIndicator size="small" color="#9CA3AF" />
+                  </View>
+                ) : null
+              }
               style={{ maxHeight: 350 }}
             />
             <TouchableOpacity style={styles.pickerCancelBtn} onPress={() => setShowWalletPicker(false)}>
               <Text style={styles.pickerCancelText}>取消</Text>
             </TouchableOpacity>
-          </View>
+          </Pressable>
         </Pressable>
       </Modal>
 
@@ -356,7 +494,7 @@ export default function RechargeScreen() {
           <View style={styles.pickerCard}>
             <Text style={styles.pickerTitle}>选择代币</Text>
             <FlatList
-              data={assets}
+              data={assets.filter((a) => serverAddresses.some((addr) => addr.chain === a.chain))}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
                 <TouchableOpacity
@@ -497,10 +635,28 @@ const styles = StyleSheet.create({
   recordToken: { fontSize: 15, fontWeight: "600", color: "#1F2937" },
   recordTokenEmoji: { fontSize: 16 },
   recordAmount: { fontSize: 16, fontWeight: "700", color: "#287220" },
-  recordBody: { gap: 2 },
-  recordWallet: { fontSize: 13, color: "#6B7280" },
-  recordMemo: { fontSize: 12, color: "#9CA3AF" },
-  recordMeta: { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  recordBody: { gap: 4 },
+  // 账户地址行
+  recordAddressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  recordContactName: {
+    fontSize: 13,
+    color: "#3B82F6",
+    fontWeight: "500",
+    marginRight: 8,
+  },
+  recordAddress: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", flex: 1 },
+  copyBtn: { padding: 4, flexShrink: 0, marginLeft: 4 },
+  // 备注行
+  recordFooterRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  recordMemo: { fontSize: 12, color: "#9CA3AF", flex: 1 },
+  recordMeta: { fontSize: 11, color: "#9CA3AF", flexShrink: 0, marginLeft: 8 },
   // Empty
   emptyWrap: { alignItems: "center", paddingVertical: 40 },
   emptyText: { fontSize: 14, color: "#9CA3AF" },
@@ -524,6 +680,20 @@ const styles = StyleSheet.create({
   pickerItemActive: { backgroundColor: "#E8F5E9", borderRadius: 8 },
   pickerItemName: { fontSize: 15, fontWeight: "500", color: "#1F2937" },
   pickerItemAddr: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
+  walletSearchInput: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: "#1F2937",
+    backgroundColor: "#F9FAFB",
+    marginBottom: 12,
+  },
+  pickerLoading: { paddingVertical: 12, alignItems: "center" },
+  pickerEmpty: { paddingVertical: 24, alignItems: "center" },
+  pickerEmptyText: { fontSize: 14, color: "#9CA3AF" },
   pickerCancelBtn: {
     padding: 14,
     marginTop: 12,

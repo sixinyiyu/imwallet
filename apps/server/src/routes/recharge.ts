@@ -16,6 +16,7 @@ router.use(deviceAuthMiddleware);
 /**
  * POST /recharges — 对系统内钱包充值代币
  * 仅 recharge_allowed_devices 配置中的设备可操作。
+ * 客户端通过 x-app-version 请求头传递版本号。
  */
 router.post(
   "/",
@@ -24,7 +25,7 @@ router.post(
     const result = await rechargeService.recharge(req.body, {
       deviceId: req.device!.deviceId,
       platform: req.device!.platform,
-      version: "",
+      version: (req.headers["x-app-version"] as string) || "",
     });
     res.status(201).json(result);
   })

@@ -228,6 +228,43 @@ export async function getDeviceWallets(deviceId: string): Promise<SimpleWallet[]
   return simpleWallets;
 }
 
+/** 获取所有系统钱包（搜索+分页，供充值管理等场景使用） */
+export async function getAllWallets(
+  filter: { search?: string; page?: number; limit?: number }
+): Promise<{ wallets: SimpleWallet[]; total: number }> {
+  const page = filter.page || 1;
+  const limit = Math.min(filter.limit || 20, 100);
+  const search = filter.search || "";
+
+  const where: any = {};
+  if (search) {
+    where.OR = [
+      { id: { contains: search, mode: "insensitive" } },
+      { alias: { contains: search, mode: "insensitive" } },
+    ];
+  }
+
+  const [wallets, total] = await Promise.all([
+    prisma.wallet.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.wallet.count({ where }),
+  ]);
+
+  return {
+    wallets: wallets.map((w: any) => ({
+      id: w.id,
+      name: w.alias,
+      source: w.source as string,
+      createdAt: w.createdAt,
+    })),
+    total,
+  };
+}
+
 /** 获取设备关联的所有钱包（聚合数据：含网络列表，不含代币余额） */
 export async function getDeviceWalletsAggregate(deviceId: string): Promise<AggregateWallet[]> {
   // Fetch subscriptions and wallets separately (no relation include)

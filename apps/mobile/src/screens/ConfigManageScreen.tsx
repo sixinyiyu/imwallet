@@ -175,12 +175,18 @@ export default function ConfigManageScreen() {
 
       {/* 代币管理入口 */}
       <TouchableOpacity
-        style={[styles.infoCard, { marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}
+        style={[styles.infoCard, { marginTop: 12 }]}
         onPress={() => navigation.navigate("TokenManage")}
         activeOpacity={0.7}
       >
-        <Text style={styles.infoLabel}>代币管理</Text>
-        <ChevronRightIcon size={18} color="#8899B8" />
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>代币管理</Text>
+          <ChevronRightIcon size={18} color="#8899B8" />
+        </View>
+        <View style={styles.infoDivider} />
+        <Text style={styles.cardHint}>
+          可以配置钱包可管理哪些区块链网络，开启后可以创建对应区块链账户。
+        </Text>
       </TouchableOpacity>
 
       {/* Toast */}

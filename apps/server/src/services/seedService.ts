@@ -31,9 +31,9 @@ export async function runSeed(): Promise<void> {
     const assetsData = [
       { id: "asset-trx-tron",      symbol: "TRX",  name: "Tron",       decimals: 6,  chain: ChainType.Tron,     type: TokenType.NATIVE,     tokenId: "",                                              isDefault: true, isActive: true, isTradable: true },
       { id: "asset-usdt-tron",     symbol: "USDT", name: "Tether USD", decimals: 6,  chain: ChainType.Tron,     type: TokenType.TOKEN,      tokenId: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",              isDefault: true, isActive: true, isTradable: true },
-      { id: "asset-eth-ethereum",  symbol: "ETH",  name: "Ethereum",   decimals: 18, chain: ChainType.Ethereum, type: TokenType.NATIVE,     tokenId: "",                                              isDefault: true, isActive: true, isTradable: true },
-      { id: "asset-usdt-ethereum", symbol: "USDT", name: "Tether USD", decimals: 6,  chain: ChainType.Ethereum, type: TokenType.TOKEN,      tokenId: "0xdAC17F958D2ee523a2206206994597C13D831ec7",      isDefault: true, isActive: true, isTradable: true },
-      { id: "asset-btc-bitcoin",   symbol: "BTC",  name: "Bitcoin",    decimals: 8,  chain: ChainType.Bitcoin,  type: TokenType.NATIVE,     tokenId: "",                                              isDefault: true, isActive: true, isTradable: true },
+      { id: "asset-eth-ethereum",  symbol: "ETH",  name: "Ethereum",   decimals: 18, chain: ChainType.Ethereum, type: TokenType.NATIVE,     tokenId: "",                                              isDefault: true, isActive: true, isTradable: false },
+      { id: "asset-usdt-ethereum", symbol: "USDT", name: "Tether USD", decimals: 6,  chain: ChainType.Ethereum, type: TokenType.TOKEN,      tokenId: "0xdAC17F958D2ee523a2206206994597C13D831ec7",      isDefault: true, isActive: true, isTradable: false },
+      { id: "asset-btc-bitcoin",   symbol: "BTC",  name: "Bitcoin",    decimals: 8,  chain: ChainType.Bitcoin,  type: TokenType.NATIVE,     tokenId: "",                                              isDefault: true, isActive: true, isTradable: false },
     ];
     for (const asset of assetsData) {
       const existing = await prisma.asset.findFirst({ where: { symbol: asset.symbol, chain: asset.chain } });

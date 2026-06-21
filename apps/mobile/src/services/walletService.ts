@@ -1,5 +1,5 @@
 import api from "./api";
-import type { Wallet, SimpleWallet, AggregateWallet, WalletBalanceDetail } from "../types";
+import type { Wallet, SimpleWallet, AggregateWallet, WalletBalanceDetail, ServerWalletAddress } from "../types";
 
 /**
  * 钱包服务（服务端 API 部分）。
@@ -10,6 +10,16 @@ export const walletService = {
   /** 获取简单钱包列表（服务端视角，不含本地字段） */
   async getWallets(): Promise<{ wallets: SimpleWallet[] }> {
     const { data } = await api.get("/wallets");
+    return data;
+  },
+
+  /** 获取所有系统钱包（搜索+分页，供充值管理等场景使用） */
+  async getAllWallets(params: { search?: string; page?: number; limit?: number }): Promise<{ wallets: SimpleWallet[]; total: number }> {
+    const query: Record<string, string> = {};
+    if (params.search) query.search = params.search;
+    if (params.page) query.page = String(params.page);
+    if (params.limit) query.limit = String(params.limit);
+    const { data } = await api.get("/wallets/all", { params: query });
     return data;
   },
 
@@ -28,6 +38,12 @@ export const walletService = {
   /** 获取钱包详情（含余额信息） */
   async getWalletDetail(walletId: string): Promise<Wallet> {
     const { data } = await api.get(`/wallets/${walletId}`);
+    return data;
+  },
+
+  /** 获取钱包的所有链上地址（服务端视角，供充值管理等场景使用） */
+  async getWalletAddresses(walletId: string): Promise<{ addresses: ServerWalletAddress[] }> {
+    const { data } = await api.get(`/wallets/${walletId}/addresses`);
     return data;
   },
 

@@ -250,8 +250,8 @@ model Recharge {
   walletId      String   @map("wallet_id") @db.VarChar(36)
   /// 钱包别名（快照）
   walletAlias   String   @map("wallet_alias") @db.VarChar(64)
-  /// 钱包地址（快照）
-  walletAddress String   @map("wallet_address") @db.VarChar(64)
+  /// 账户地址（快照，充值时的链上地址）
+  accountAddress String   @map("account_address") @db.VarChar(64)
   /// 代币符号
   tokenSymbol   String   @map("token_symbol") @db.VarChar(16)
   /// 代币名称

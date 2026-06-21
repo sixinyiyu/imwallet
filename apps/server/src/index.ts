@@ -30,7 +30,7 @@ app.use(cors({
     "http://localhost:3000",
   ],
   methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization", "x-device-id", "x-signature", "x-timestamp", "x-nonce"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-device-id", "x-signature", "x-timestamp", "x-nonce", "x-app-version"],
   credentials: true,
 }));
 app.use(express.json({ limit: "100kb" }));
