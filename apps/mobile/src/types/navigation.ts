@@ -14,7 +14,6 @@ export type RootStackParamList = {
   Records: { walletId?: string; tokenSymbol?: string };
   WalletManage: undefined;
   WalletDetail: { walletId: string };
-  AccountManage: { walletId: string };
   AddressBook: { selectMode?: boolean; onSelectAddress?: string } | undefined;
   Settings: undefined;
   ServiceConfig: undefined;
