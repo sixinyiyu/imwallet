@@ -184,6 +184,7 @@ export type VerificationStatus = "verified" | "unverified" | "suspicious";
 
 export interface Notification {
   id: string;
+  walletId: string;   // 关联钱包 ID
   title: string;
   content: string;
   type: string;

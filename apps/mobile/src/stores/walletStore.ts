@@ -5,6 +5,8 @@ import { syncService } from "../services/syncService";
 import { localWalletService, hashPassword } from "../services/localWalletService";
 import { localAccountService } from "../services/localAccountService";
 import { localAddressService } from "../services/localAddressService";
+import { notificationSyncService } from "../services/notificationSyncService";
+import { localNotificationService } from "../services/localNotificationService";
 import { generateMnemonic, cleanMnemonic, generateIdentifier } from "../utils/mnemonic";
 import { deriveAddressFromMnemonic, getDerivationPath } from "../utils/derivation";
 import { ensureDeviceKeys, ensureDeviceRegistered } from "../services/api";
@@ -118,6 +120,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       // 4. Fetch wallet state from local SQLite
       await get().fetchWallets();
+
+      // 5. 启动时同步通知到本地
+      try {
+        await notificationSyncService.syncNotifications();
+      } catch {
+        // 同步失败不阻塞启动
+      }
     } catch {
       set({ hasFetched: true, hasWallets: false });
     }
@@ -383,6 +392,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       // 删除服务端钱包（取消订阅）
       await syncService.deleteWallet(walletId);
+
+      // 删除钱包关联的本地通知
+      await localNotificationService.deleteWalletNotifications(walletId);
 
       await get().fetchWallets();
     } catch {

@@ -4,7 +4,8 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
-import { notificationService } from "../services/authService";
+import { localNotificationService } from "../services/localNotificationService";
+import { notificationSyncService } from "../services/notificationSyncService";
 import { configService } from "../services/configService";
 import { WalletIcon, AboutIcon, CopyIcon } from "../components/icons";
 import BellIcon from "../components/icons/BellIcon";
@@ -27,8 +28,7 @@ export default function ProfileScreen() {
 
   const fetchUnreadCount = async () => {
     try {
-      const notifications = await notificationService.getNotifications();
-      const count = notifications.filter((n: any) => !n.isRead).length;
+      const count = await localNotificationService.getUnreadCount();
       setUnreadCount(count);
     } catch {
       // silent
@@ -37,15 +37,8 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchUnreadCount();
-      const interval = setInterval(fetchUnreadCount, 30000);
-      return () => clearInterval(interval);
-    }, [])
-  );
-
-  // 检查服务配置开关状态，决定是否显示「配置管理」子菜单
-  useFocusEffect(
-    useCallback(() => {
+      // 先同步通知，再刷新未读数
+      notificationSyncService.syncNotifications().then(() => fetchUnreadCount());
       configService.getServiceConfigEnabled().then(setServiceConfigEnabled);
     }, [])
   );
@@ -54,7 +47,6 @@ export default function ProfileScreen() {
     { icon: <WalletIcon size={22} color="#3B82F6" />, label: "钱包管理", screen: "WalletManage", badge: `${totalAccountCount} 个钱包` },
     { icon: <CopyIcon size={22} color="#10B981" />, label: "地址本", screen: "AddressBook" },
     { icon: <Text style={styles.emojiIcon}>⚙️</Text>, label: "通用设置", screen: "Settings" },
-    // 服务配置开启时显示「配置管理」子菜单
     ...(serviceConfigEnabled
       ? [{ icon: <Text style={styles.emojiIcon}>🔧</Text>, label: "配置管理", screen: "ConfigManage" as keyof RootStackParamList }]
       : []),

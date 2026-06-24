@@ -17,18 +17,3 @@ export const authService = {
     return data;
   },
 };
-
-export const notificationService = {
-  async getNotifications() {
-    const { data } = await api.get("/notifications");
-    return data.notifications;
-  },
-
-  async markAsRead(id: string) {
-    await api.put(`/notifications/${id}/read`);
-  },
-
-  async markAllAsRead() {
-    await api.put("/notifications/read-all");
-  },
-};

@@ -8,12 +8,14 @@ import {
   RefreshControl,
   Modal,
   Pressable,
+  AppState,
 } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useWalletStore } from "../stores/walletStore";
+import { notificationSyncService } from "../services/notificationSyncService";
 import BalanceCard from "../components/BalanceCard";
 import TokenList from "../components/TokenList";
 import ActionButtons from "../components/ActionButtons";
@@ -24,6 +26,17 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function WalletScreen() {
   const navigation = useNavigation<Nav>();
+
+  // 前后台切换时触发通知同步
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "active") {
+        notificationSyncService.syncNotifications();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
   const {
     wallets,
     activeWallet,

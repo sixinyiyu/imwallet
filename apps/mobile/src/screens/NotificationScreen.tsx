@@ -1,56 +1,75 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   RefreshControl,
 } from "react-native";
-import { notificationService } from "../services/authService";
-import type { Notification } from "../types";
+import { localNotificationService } from "../services/localNotificationService";
+import { notificationSyncService } from "../services/notificationSyncService";
+import { useAlert } from "../hooks/useAlert";
+import { detectNetwork } from "../utils/address";
+import { TronIcon, EthIcon, BtcIcon, ContactIcon } from "../components/icons";
 import { NotificationSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
+import type { Notification } from "../types";
+
+function NetworkIcon({ network, size = 20 }: { network: string; size?: number }) {
+  if (!network) return <ContactIcon size={size} color="#6B7280" />;
+  switch (network) {
+    case "Tron": return <TronIcon size={size} />;
+    case "Ethereum":  return <EthIcon size={size} />;
+    case "Bitcoin":  return <BtcIcon size={size} />;
+    default:     return <ContactIcon size={size} color="#6B7280" />;
+  }
+}
+
+function getTypeIcon(type: string) {
+  switch (type) {
+    case "TRANSFER_IN": return "📥";
+    case "TRANSFER_OUT": return "📤";
+    case "ACCOUNT_ACTIVATED": return "✅";
+    case "ACCOUNT_REJECTED": return "❌";
+    default: return "🔔";
+  }
+}
 
 export default function NotificationScreen() {
+  const alert = useAlert();
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const fetchNotifications = async (p: number = 1) => {
+  const loadLocal = async () => {
     try {
-      const result = await notificationService.getNotifications();
-      const list = Array.isArray(result) ? result : [];
-      if (p === 1) {
-        setNotifications(list);
-      } else {
-        setNotifications(prev => [...prev, ...list]);
-      }
-      setTotal(result.total);
-      setPage(p);
-    } catch (err: any) {
+      const data = await localNotificationService.getAllNotifications();
+      setNotifications(data);
+    } catch {
       // silent
-    } finally {
-      setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchNotifications();
-  }, []);
-
   const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchNotifications(1);
-    setRefreshing(false);
+    setLoading(true);
+    try {
+      await notificationSyncService.syncNotifications();
+      await loadLocal();
+    } catch {
+      // silent
+    }
+    setLoading(false);
   };
+
+  useEffect(() => {
+    (async () => {
+      await onRefresh();
+    })();
+  }, []);
 
   const handleMarkRead = async (id: string) => {
     try {
-      await notificationService.markAsRead(id);
+      await localNotificationService.markAsRead(id);
       setNotifications(prev =>
         prev.map(n => n.id === id ? { ...n, isRead: true } : n)
       );
@@ -61,20 +80,10 @@ export default function NotificationScreen() {
 
   const handleMarkAllRead = async () => {
     try {
-      await notificationService.markAllAsRead();
+      await localNotificationService.markAllAsRead();
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     } catch {
       // silent
-    }
-  };
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case "TRANSFER_IN": return "📥";
-      case "TRANSFER_OUT": return "📤";
-      case "ACCOUNT_ACTIVATED": return "✅";
-      case "ACCOUNT_REJECTED": return "❌";
-      default: return "🔔";
     }
   };
 
@@ -107,6 +116,10 @@ export default function NotificationScreen() {
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
+  if (loading && notifications.length === 0) {
+    return <NotificationSkeleton count={4} />;
+  }
+
   return (
     <View style={styles.container}>
       {unreadCount > 0 && (
@@ -115,28 +128,18 @@ export default function NotificationScreen() {
         </TouchableOpacity>
       )}
 
-      {loading ? (
-        <NotificationSkeleton count={4} />
-      ) : (
       <FlatList
         data={notifications}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={loading} onRefresh={onRefresh} />
         }
         ListEmptyComponent={
           <EmptyState message="暂无通知" />
         }
         contentContainerStyle={notifications.length === 0 ? styles.emptyList : undefined}
-        onEndReached={() => {
-          if (notifications.length < total) {
-            fetchNotifications(page + 1);
-          }
-        }}
-        onEndReachedThreshold={0.5}
       />
-      )}
     </View>
   );
 }
@@ -184,7 +187,5 @@ const styles = StyleSheet.create({
   titleUnread: { fontWeight: "700", color: "#1F2937" },
   contentText: { fontSize: 13, color: "#6B7280", marginTop: 4, lineHeight: 18 },
   dateText: { fontSize: 12, color: "#9CA3AF", marginTop: 6 },
-  empty: { alignItems: "center", padding: 32 },
-  emptyText: { fontSize: 14, color: "#9CA3AF" },
   emptyList: { flexGrow: 1, justifyContent: "center" },
 });

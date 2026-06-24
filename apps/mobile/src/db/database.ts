@@ -75,6 +75,20 @@ const SQLITE_INIT_SQL = `
   );
   CREATE INDEX IF NOT EXISTS idx_addresses_wallet_id ON addresses(wallet_id);
   CREATE INDEX IF NOT EXISTS idx_addresses_address ON addresses(address);
+
+  CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    wallet_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    type TEXT NOT NULL,
+    is_read INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    synced_at TEXT NOT NULL DEFAULT ''
+  );
+  CREATE INDEX IF NOT EXISTS idx_notifications_wallet_id ON notifications(wallet_id);
+  CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
+  CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
 `;
 
 // ─── 数据库单例 ──────────────────────────────────────────────────────────────
