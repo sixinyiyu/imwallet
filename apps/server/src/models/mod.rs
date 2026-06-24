@@ -25,9 +25,9 @@ pub use wallet_address::WalletAddress;
 pub use wallet_subscription::WalletSubscription;
 // NotificationType 枚举值常量用字符串替代，见 transaction_service.rs
 pub use app_config::AppConfigEntity;
-pub use fiat_currency::FiatCurrency;
-pub use recharge::Recharge;
 #[allow(unused_imports)]
 pub use app_log::AppLog;
+pub use fiat_currency::FiatCurrency;
 #[allow(unused_imports)]
 pub use notification::Notification;
+pub use recharge::Recharge;

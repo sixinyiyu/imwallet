@@ -35,8 +35,11 @@ async fn sync_notifications(
         .since
         .and_then(|s| chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S").ok());
 
-    let notifications =
-        notification_service::get_notifications_by_device(state.db.clone(), &device.device_id, since)
-            .await?;
+    let notifications = notification_service::get_notifications_by_device(
+        state.db.clone(),
+        &device.device_id,
+        since,
+    )
+    .await?;
     Ok(Json(SyncResponse { notifications }))
 }
