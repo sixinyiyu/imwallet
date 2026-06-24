@@ -1,0 +1,286 @@
+//! 钱包服务
+//! 迁移自 IMWallet services/walletService.ts
+
+use crate::chain::address_validator;
+use crate::db::query::{exec, query, query_one, vals};
+use crate::errors::AppError;
+use crate::models::{Wallet, WalletAddress};
+use rbatis::RBatis;
+use rust_decimal::Decimal;
+use serde::Serialize;
+use std::sync::Arc;
+
+/// 创建钱包并自动订阅 — 事务保护，避免中间失败导致数据不一致
+pub async fn create_wallet_and_subscribe(
+    rb: Arc<RBatis>,
+    wallet_id: &str,
+    source: &str,
+    device_id: &str,
+) -> Result<Wallet, AppError> {
+    let src = if source == "IMPORT" {
+        "IMPORT"
+    } else {
+        "CREATE"
+    };
+    let tx = rb.acquire_begin().await?;
+
+    // 1. 创建钱包
+    let inserted: Option<Wallet> = crate::db::query::tx_query_one(
+        &tx,
+        "INSERT INTO wallets (id, source) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING RETURNING *",
+        vals![wallet_id, src],
+    )
+    .await?;
+    let wallet = if let Some(w) = inserted {
+        w
+    } else {
+        // ON CONFLICT 触发，钱包已存在
+        crate::db::query::tx_query_one(&tx, "SELECT * FROM wallets WHERE id = $1", vals![wallet_id])
+            .await?
+            .ok_or_else(|| AppError::Conflict("钱包已存在".into()))?
+    };
+
+    // 2. 创建设备订阅
+    crate::db::query::tx_exec(
+        &tx,
+        "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES ($1, $2, '', '') ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
+        vals![&wallet.id, device_id, "", ""],
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok(wallet)
+}
+
+pub async fn get_wallet(rb: Arc<RBatis>, wallet_id: &str) -> Result<Option<Wallet>, AppError> {
+    query_one(&rb, "SELECT * FROM wallets WHERE id = $1", vals![wallet_id])
+        .await
+        .map_err(AppError::from)
+}
+
+/// 删除钱包（事务内同时删除订阅和钱包，保证原子性）
+pub async fn delete_wallet_with_subs(
+    rb: Arc<RBatis>,
+    wallet_id: &str,
+    device_id: &str,
+) -> Result<(), AppError> {
+    let tx = rb.acquire_begin().await?;
+    crate::db::query::tx_exec(
+        &tx,
+        "DELETE FROM wallet_subscriptions WHERE wallet_id = $1 AND device_id = $2",
+        vals![wallet_id, device_id],
+    )
+    .await?;
+    crate::db::query::tx_exec(&tx, "DELETE FROM wallets WHERE id = $1", vals![wallet_id]).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// 同步地址 — INSERT ON CONFLICT 原子操作
+/// 并发下不会重复插入同一链上地址，已存在时返回已有记录
+pub async fn sync_address(
+    rb: Arc<RBatis>,
+    chain: &str,
+    address: &str,
+) -> Result<WalletAddress, AppError> {
+    let v = address_validator::validate_address_for_chain(address, chain);
+    if !v.is_valid {
+        return Err(AppError::BadRequest(
+            v.error.unwrap_or_else(|| "地址格式无效".into()),
+        ));
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    let inserted: Option<WalletAddress> = query_one(
+        &rb,
+        "INSERT INTO wallets_addresses (id, chain, address) VALUES ($1, $2, $3) ON CONFLICT (chain, address) DO NOTHING RETURNING *",
+        vals![&id, chain, address],
+    )
+    .await?;
+    if let Some(wa) = inserted {
+        return Ok(wa);
+    }
+    // ON CONFLICT 触发，地址已存在
+    query_one(
+        &rb,
+        "SELECT * FROM wallets_addresses WHERE chain = $1 AND address = $2",
+        vals![chain, address],
+    )
+    .await?
+    .ok_or_else(|| AppError::Internal("地址同步失败".into()))
+}
+
+pub async fn get_wallet_addresses(
+    rb: Arc<RBatis>,
+    wallet_id: &str,
+) -> Result<Vec<WalletAddress>, AppError> {
+    query(&rb, "SELECT wa.* FROM wallets_addresses wa JOIN wallet_subscriptions ws ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.address_id != ''", vals![wallet_id]).await.map_err(AppError::from)
+}
+
+pub async fn delete_address(rb: Arc<RBatis>, address_id: &str) -> Result<(), AppError> {
+    exec(
+        &rb,
+        "DELETE FROM wallets_addresses WHERE id = $1",
+        vals![address_id],
+    )
+    .await?;
+    Ok(())
+}
+
+/// 批量获取设备订阅的钱包列表（解决 N+1 查询）
+pub async fn get_wallets_by_device(
+    rb: Arc<RBatis>,
+    device_id: &str,
+) -> Result<Vec<Wallet>, AppError> {
+    query(
+        &rb,
+        "SELECT w.* FROM wallets w JOIN wallet_subscriptions ws ON ws.wallet_id = w.id WHERE ws.device_id = $1 ORDER BY w.created_at DESC",
+        vals![device_id],
+    )
+    .await
+    .map_err(AppError::from)
+}
+
+/// 批量获取钱包聚合数据（钱包 + 网络）（解决 N+1 查询）
+#[derive(Debug, Serialize)]
+pub struct WalletAggregate {
+    pub wallet_id: String,
+    pub alias: Option<String>,
+    pub source: Option<String>,
+    pub networks: Vec<String>,
+}
+
+pub async fn get_wallets_aggregate_by_device(
+    rb: Arc<RBatis>,
+    device_id: &str,
+) -> Result<Vec<WalletAggregate>, AppError> {
+    #[derive(serde::Deserialize)]
+    struct R {
+        wallet_id: String,
+        alias: Option<String>,
+        source: Option<String>,
+        chain: String,
+    }
+    let rows: Vec<R> = query(
+        &rb,
+        "SELECT ws.wallet_id, w.alias, w.source, wa.chain FROM wallet_subscriptions ws JOIN wallets w ON w.id = ws.wallet_id JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.device_id = $1 AND ws.address_id != '' ORDER BY ws.wallet_id, wa.chain",
+        vals![device_id],
+    )
+    .await?;
+
+    // 按钱包分组
+    let mut result = Vec::new();
+    let mut current_id = String::new();
+    let mut networks = Vec::new();
+    let mut current_alias: Option<String> = None;
+    let mut current_source: Option<String> = None;
+    for r in rows {
+        if r.wallet_id != current_id {
+            if !current_id.is_empty() {
+                networks.dedup();
+                result.push(WalletAggregate {
+                    wallet_id: current_id,
+                    alias: current_alias,
+                    source: current_source,
+                    networks,
+                });
+            }
+            current_id = r.wallet_id;
+            current_alias = r.alias;
+            current_source = r.source;
+            networks = vec![r.chain];
+        } else {
+            networks.push(r.chain);
+        }
+    }
+    if !current_id.is_empty() {
+        networks.dedup();
+        result.push(WalletAggregate {
+            wallet_id: current_id,
+            alias: current_alias,
+            source: current_source,
+            networks,
+        });
+    }
+    Ok(result)
+}
+
+#[derive(Debug, Serialize)]
+pub struct WalletBalance {
+    pub total_balance_usd: Decimal,
+    pub total_balance_cny: Decimal,
+    pub assets: Vec<AssetBalanceItem>,
+}
+#[derive(Debug, Serialize)]
+pub struct AssetBalanceItem {
+    pub asset_id: String,
+    pub symbol: String,
+    pub chain: String,
+    pub balance: Decimal,
+    pub usd_value: Decimal,
+    pub cny_value: Decimal,
+}
+
+pub async fn get_wallet_balance(
+    rb: Arc<RBatis>,
+    wallet_id: &str,
+    cny_rate: Decimal,
+) -> Result<WalletBalance, AppError> {
+    #[derive(serde::Deserialize)]
+    struct R {
+        asset_id: String,
+        symbol: String,
+        chain: String,
+        total_balance: Decimal,
+    }
+    let rows: Vec<R> = query(&rb, "SELECT aa.asset_id, a.symbol, aa.chain, SUM(aa.balance) as total_balance FROM assets_addresses aa JOIN assets a ON a.id = aa.asset_id JOIN wallet_subscriptions ws ON ws.address_id = aa.address_id WHERE ws.wallet_id = $1 AND ws.address_id != '' GROUP BY aa.asset_id, a.symbol, aa.chain", vals![wallet_id]).await?;
+    let cny = cny_rate;
+    let assets: Vec<AssetBalanceItem> = rows
+        .into_iter()
+        .map(|r| AssetBalanceItem {
+            usd_value: r.total_balance,
+            cny_value: r.total_balance * cny,
+            asset_id: r.asset_id,
+            symbol: r.symbol,
+            chain: r.chain,
+            balance: r.total_balance,
+        })
+        .collect();
+    Ok(WalletBalance {
+        total_balance_usd: assets.iter().map(|a| a.usd_value).sum(),
+        total_balance_cny: assets.iter().map(|a| a.cny_value).sum(),
+        assets,
+    })
+}
+
+pub async fn get_all_wallets(
+    rb: Arc<RBatis>,
+    search: Option<&str>,
+    page: u64,
+    limit: u64,
+) -> Result<(Vec<Wallet>, u64), AppError> {
+    let o = ((page - 1) * limit) as i64;
+    let l = limit as i64;
+    let (rows, total) = if let Some(kw) = search {
+        let p = format!("%{}%", kw.replace('%', "\\%").replace('_', "\\_"));
+        let total = crate::db::query::query_count(
+            &rb,
+            "SELECT COUNT(*) as cnt FROM wallets WHERE alias ILIKE $1 OR id ILIKE $1",
+            vals![&p],
+        )
+        .await?;
+        let rows: Vec<Wallet> = query(&rb, "SELECT * FROM wallets WHERE alias ILIKE $1 OR id ILIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3", vals![&p, l, o]).await?;
+        (rows, total)
+    } else {
+        let total =
+            crate::db::query::query_count(&rb, "SELECT COUNT(*) as cnt FROM wallets", vals![])
+                .await?;
+        let rows: Vec<Wallet> = query(
+            &rb,
+            "SELECT * FROM wallets ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+            vals![l, o],
+        )
+        .await?;
+        (rows, total)
+    };
+    Ok((rows, total))
+}

@@ -1,0 +1,27 @@
+# rs-wallet 主配置文件
+# 环境相关配置可通过环境变量覆盖（DATABASE_URL, PORT 等）
+
+[server]
+port = 3000
+
+[database]
+url = "postgresql://imwallet:CHANGE_ME@localhost:5432/imwallet"
+
+[fee]
+rate = 0.005
+mode = "DEDUCTED"               # DEDUCTED | EXTRA
+tx_restrict_wallet = true
+
+[service]
+password = "CHANGE_ME"        # 服务配置密码（请通过环境变量 SERVER_PWD 覆盖，勿提交真实密码）
+
+[logging]
+default_level = "info"           # trace | debug | info | warn | error
+
+[security]
+timestamp_window_secs = 300      # Ed25519 签名时间窗口
+nonce_cache_capacity = 100000    # 防重放缓存大小
+
+[rsa]
+private_key_path = "keys/rsa_private.pem"   # RSA 私钥文件路径（不存在时自动生成）
+public_key_path  = "keys/rsa_public.pem"    # RSA 公钥文件路径（不存在时自动生成）

@@ -1,0 +1,9 @@
+/target
+.env
+*.log
+*.swp
+*.swo
+*~
+.DS_Store
+output/
+.clinerules

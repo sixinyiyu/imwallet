@@ -1,0 +1,59 @@
+[package]
+name = "rs-wallet"
+version = "0.1.0"
+edition = "2021"
+description = "Multi-chain decentralized private chain wallet backend — Rust migration of IMWallet server"
+authors = ["IMWallet Team"]
+license = "MIT"
+
+[dependencies]
+# ── Web Framework ──
+axum = { version = "0.7", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "request-id"] }
+
+# ── Database ORM ──
+rbdc = { version = "4", features = ["tls-rustls"] }
+rbdc-pg = "4"
+rbatis = { version = "4", features = ["default"] }
+rbdc-pool-fast = "4"
+rbs = "4"
+
+# ── Serialization ──
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+flyway = "0.7"
+async-trait = "0.1"
+
+# ── Cryptography ──
+ed25519-dalek = "2"
+sha2 = "0.10"
+rsa = { version = "0.9", features = ["sha2"] }
+rand = "0.8"
+hex = "0.4"
+
+# ── Utilities ──
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+rust_decimal = { version = "1", features = ["serde", "db-postgres"] }
+dotenvy = "0.15"
+log = "0.4"
+simple_logger = "5"
+thiserror = "2"
+anyhow = "1"
+lru = "0.14"
+
+# ── Blockchain ──
+# tronic = { version = "0.5", features = ["tonic-tls"] }  # Uncomment when Tron interaction is needed
+
+[dev-dependencies]
+axum-test = "16"
+pretty_assertions = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

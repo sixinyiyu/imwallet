@@ -1,0 +1,134 @@
+name: Build Release Binary
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version tag (e.g. v0.1.0)"
+        required: true
+        default: "v0.1.0"
+
+jobs:
+  build-linux:
+    name: Build Linux x86_64 (musl static)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install musl tools
+        run: sudo apt-get install -y musl-tools
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: linux-musl-cargo-release-${{ hashFiles('Cargo.lock') }}
+          restore-keys: linux-musl-cargo-release-
+
+      - name: Build release binary (musl)
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: Strip binary
+        run: strip target/x86_64-unknown-linux-musl/release/rs-wallet
+
+      - name: Create release archive
+        run: |
+          mkdir -p dist
+          cp target/x86_64-unknown-linux-musl/release/rs-wallet dist/
+          cp migrations/V1_init.sql dist/
+          cp deploy/rs-wallet.service dist/
+          cp deploy/install.sh dist/
+          cp config.toml dist/config.toml.example
+          tar czf rs-wallet-${{ inputs.version }}-x86_64-linux-musl.tar.gz -C dist .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binary
+          path: rs-wallet-${{ inputs.version }}-x86_64-linux-musl.tar.gz
+
+  build-windows:
+    name: Build Windows x86_64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: windows-cargo-release-${{ hashFiles('Cargo.lock') }}
+          restore-keys: windows-cargo-release-
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Create release archive
+        shell: pwsh
+        run: |
+          mkdir dist
+          Copy-Item target/release/rs-wallet.exe dist/
+          Copy-Item migrations/V1_init.sql dist/
+          Copy-Item config.toml dist/config.toml.example
+          Compress-Archive -Path dist/* -DestinationPath rs-wallet-${{ inputs.version }}-x86_64-windows.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: rs-wallet-${{ inputs.version }}-x86_64-windows.zip
+
+  publish:
+    name: Publish Release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: ${{ inputs.version }}
+          files: |
+            artifacts/rs-wallet-${{ inputs.version }}-x86_64-linux-musl.tar.gz
+            artifacts/rs-wallet-${{ inputs.version }}-x86_64-windows.zip
+          body: |
+            ## rs-wallet ${version}
+
+            ### Downloads
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | Linux x86_64 (static) | `rs-wallet-${version}-x86_64-linux-musl.tar.gz` | 零动态依赖，适用于所有 Linux 发行版 |
+            | Windows x86_64 | `rs-wallet-${version}-x86_64-windows.zip` | |
+
+            ### Linux (systemd)
+            ```bash
+            curl -sL https://github.com/${{ github.repository }}/releases/download/${version}/rs-wallet-${version}-x86_64-linux-musl.tar.gz | tar xz
+            sudo bash install.sh ${version}
+            ```
+
+            ### Windows
+            ```powershell
+            Expand-Archive rs-wallet-${version}-x86_64-windows.zip -DestinationPath rs-wallet
+            cd rs-wallet
+            .\rs-wallet.exe
+            ```

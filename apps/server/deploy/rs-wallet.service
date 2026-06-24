@@ -1,0 +1,28 @@
+[Unit]
+Description=rs-wallet service
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=rs-wallet
+Group=rs-wallet
+WorkingDirectory=/opt/rs-wallet
+ExecStart=/opt/rs-wallet/rs-wallet
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+# Environment overrides — adjust as needed
+Environment=RUST_BACKTRACE=1
+EnvironmentFile=-/opt/rs-wallet/env
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/rs-wallet/keys
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
