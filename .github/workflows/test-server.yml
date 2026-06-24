@@ -18,62 +18,36 @@ permissions:
 
 jobs:
   test:
+    name: Lint & Test
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_pass
-          POSTGRES_DB: test_db
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          node-version: 22
-          cache: "npm"
-          cache-dependency-path: package-lock.json
+          components: rustfmt, clippy
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/server/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('apps/server/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Lint (if configured)
-        run: npm run lint
+      - name: fmt check
         working-directory: apps/server
-        continue-on-error: true
+        run: cargo fmt -- --check
 
-      - name: Type check
-        run: npx tsc --noEmit
+      - name: clippy
         working-directory: apps/server
+        run: cargo clippy -- -D warnings
 
-      - name: Generate Prisma client
-        run: npx prisma@6 generate
+      - name: build
         working-directory: apps/server
-        env:
-          DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/test_db
+        run: cargo build --release
 
-      - name: Run database migrations
-        run: npx prisma@6 db push --skip-generate
+      - name: test
         working-directory: apps/server
-        env:
-          DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/test_db
-
-      - name: Run tests
-        run: npx vitest run --reporter=verbose
-        working-directory: apps/server
-        env:
-          DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/test_db
-          JWT_SECRET: ci_test_secret_only
-          NODE_ENV: test
+        run: cargo test --bin rs-wallet
