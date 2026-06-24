@@ -109,26 +109,49 @@ export async function markAllAsRead(deviceId: string): Promise<void> {
     return;
   }
 
-  // 获取这些钱包的所有未读通知 ID
+  // 获取这些钱包的所有通知 ID
   const notifications = await prisma.notification.findMany({
     where: { wallet_id: { in: walletIds } },
     select: { id: true },
   });
   const notificationIds = notifications.map((n: any) => n.id);
 
-  // 为每条通知创建阅读状态（如果不存在）
-  for (const nid of notificationIds) {
-    await prisma.notificationRead.upsert({
+  if (notificationIds.length === 0) {
+    return;
+  }
+
+  // 批量创建阅读状态：先查已存在的，再批量创建缺失的
+  const existingReads = await prisma.notificationRead.findMany({
+    where: {
+      notification_id: { in: notificationIds },
+      device_id: deviceId,
+    },
+    select: { notification_id: true },
+  });
+  const existingIds = new Set(existingReads.map((r: any) => r.notification_id));
+
+  const toCreate = notificationIds.filter((nid: string) => !existingIds.has(nid));
+
+  // 批量更新已存在的为已读
+  if (existingIds.size > 0) {
+    await prisma.notificationRead.updateMany({
       where: {
-        notification_id_device_id: { notification_id: nid, device_id: deviceId },
+        notification_id: { in: Array.from(existingIds) },
+        device_id: deviceId,
       },
-      update: { isRead: true, readAt: new Date() },
-      create: {
+      data: { isRead: true, readAt: new Date() },
+    });
+  }
+
+  // 批量创建未存在的阅读状态
+  if (toCreate.length > 0) {
+    await prisma.notificationRead.createMany({
+      data: toCreate.map((nid: string) => ({
         notification_id: nid,
         device_id: deviceId,
         isRead: true,
         readAt: new Date(),
-      },
+      })),
     });
   }
 

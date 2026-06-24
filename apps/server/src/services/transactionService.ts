@@ -5,6 +5,7 @@ import { createError } from "../middleware/errorHandler";
 import { config } from "../config";
 import type { FeeMode } from "../config";
 import { logger } from "../utils/logger";
+import { escapeLikeWildcards } from "../utils/likeEscape";
 
 /**
  * 从 app_configs 表动态读取费率配置，不存在则回退到 config 文件默认值。
@@ -377,7 +378,7 @@ export async function getTransactions(
 
   // 联系人搜索已移除（contacts 在客户端），仅支持地址搜索
   if (filter.search && filter.search.trim()) {
-    const keyword = filter.search.trim();
+    const keyword = escapeLikeWildcards(filter.search.trim());
     // 直接在 fromAddress / toAddress 上搜索
     where.OR = [
       ...where.OR,

@@ -1,6 +1,7 @@
 import prisma from "../config/prisma";
 import { createError } from "../middleware/errorHandler";
 import { logger } from "../utils/logger";
+import { escapeLikeWildcards } from "../utils/likeEscape";
 
 export interface WalletTokenBalance {
   id: string;
@@ -238,9 +239,10 @@ export async function getAllWallets(
 
   const where: any = {};
   if (search) {
+    const escaped = escapeLikeWildcards(search);
     where.OR = [
-      { id: { contains: search, mode: "insensitive" } },
-      { alias: { contains: search, mode: "insensitive" } },
+      { id: { contains: escaped, mode: "insensitive" } },
+      { alias: { contains: escaped, mode: "insensitive" } },
     ];
   }
 

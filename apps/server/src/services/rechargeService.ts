@@ -99,40 +99,46 @@ export async function recharge(
     throw createError(404, "该地址在系统中不存在", "ADDRESS_NOT_FOUND");
   }
 
-  const assetsAddress = await prisma.assetsAddress.upsert({
-    where: {
-      addressId_assetId: { addressId: walletAddress.id, assetId: asset.id },
-    },
-    update: {
-      balance: { increment: parseFloat(amount) },
-    },
-    create: {
-      addressId: walletAddress.id,
-      assetId: asset.id,
-      chain: network,
-      balance: parseFloat(amount),
-    },
+  // 4-5. 余额更新 + 充值记录写入事务，防止并发充值导致余额不一致
+  const [assetsAddress, record] = await prisma.$transaction(async (tx: any) => {
+    // 4. 余额更新（upsert 在事务内）
+    const aa = await tx.assetsAddress.upsert({
+      where: {
+        addressId_assetId: { addressId: walletAddress.id, assetId: asset.id },
+      },
+      update: {
+        balance: { increment: parseFloat(amount) },
+      },
+      create: {
+        addressId: walletAddress.id,
+        assetId: asset.id,
+        chain: network,
+        balance: parseFloat(amount),
+      },
+    });
+
+    logger.info("RECHARGE", `余额更新成功: assetsAddressId=${aa.id}, newBalance=${aa.balance}`);
+
+    // 5. 写入充值记录
+    const rec = await tx.recharge.create({
+      data: {
+        walletId,
+        walletAlias: walletAlias || wallet.alias || wallet.id,
+        accountAddress: accountAddress,
+        tokenSymbol,
+        tokenName: asset.name,
+        amount: parseFloat(amount),
+        memo: memo || "",
+        deviceId: deviceInfo.deviceId,
+        platform: deviceInfo.platform,
+        version: deviceInfo.version || "",
+      },
+    });
+
+    logger.info("RECHARGE", `充值成功: recordId=${rec.id}, wallet=${wallet.id}, token=${tokenSymbol}, amount=${amount}`);
+
+    return [aa, rec];
   });
-
-  logger.info("RECHARGE", `余额更新成功: assetsAddressId=${assetsAddress.id}, newBalance=${assetsAddress.balance}`);
-
-  // 5. 写入充值记录
-  const record = await prisma.recharge.create({
-    data: {
-      walletId,
-      walletAlias: walletAlias || wallet.alias || wallet.id,
-      accountAddress: accountAddress,
-      tokenSymbol,
-      tokenName: asset.name,
-      amount: parseFloat(amount),
-      memo: memo || "",
-      deviceId: deviceInfo.deviceId,
-      platform: deviceInfo.platform,
-      version: deviceInfo.version || "",
-    },
-  });
-
-  logger.info("RECHARGE", `充值成功: recordId=${record.id}, wallet=${wallet.id}, token=${tokenSymbol}, amount=${amount}`);
 
   return {
     id: record.id,
