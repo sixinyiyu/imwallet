@@ -12,7 +12,7 @@ import { AppAlertProvider } from "./src/components/AppAlert";
 let lastGlobalError: { message: string; stack?: string } | null = null;
 
 if (Platform.OS !== "web") {
-  const g = global as any;
+  const g = globalThis as any;
   const originalHandler = g.ErrorUtils?.getGlobalHandler?.();
   if (g.ErrorUtils) {
     g.ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
