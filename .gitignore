@@ -30,3 +30,6 @@ apps/server/target/
 apps/server/.cache/
 apps/server/output/
 apps/server/.env
+
+# Docs (not for commit)
+docs/
