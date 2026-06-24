@@ -1,12 +1,12 @@
 name: Test Mobile
 
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches: [main, feature/server-rust]
     paths:
       - "apps/mobile/**"
       - ".github/workflows/test-mobile.yml"
-  push:
+  pull_request:
     branches: [main]
     paths:
       - "apps/mobile/**"
