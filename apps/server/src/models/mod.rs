@@ -8,7 +8,6 @@ pub mod chain_entity;
 pub mod device;
 pub mod fiat_currency;
 pub mod notification;
-pub mod notification_read;
 pub mod recharge;
 pub mod transaction;
 pub mod wallet;
@@ -28,10 +27,7 @@ pub use wallet_subscription::WalletSubscription;
 pub use app_config::AppConfigEntity;
 pub use fiat_currency::FiatCurrency;
 pub use recharge::Recharge;
-// 统一 re-export 策略：所有模型均 re-export，保持模块完整性
-#[allow(unused_imports)] // ORM 模型仅通过 query<T> 泛型反序列化使用
+#[allow(unused_imports)]
 pub use app_log::AppLog;
 #[allow(unused_imports)]
 pub use notification::Notification;
-#[allow(unused_imports)]
-pub use notification_read::NotificationRead;

@@ -7,32 +7,11 @@
 -- ─── Extensions ────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- ─── Enums ─────────────────────────────────────────────────────
-DO $$ BEGIN
-    CREATE TYPE "WalletSource" AS ENUM ('IMPORT', 'CREATE');
-EXCEPTION WHEN duplicate_object THEN null;
-END $$;
-
-DO $$ BEGIN
-    CREATE TYPE "TxStatus" AS ENUM ('PENDING', 'CONFIRMED', 'FAILED');
-EXCEPTION WHEN duplicate_object THEN null;
-END $$;
-
-DO $$ BEGIN
-    CREATE TYPE "NotificationType" AS ENUM ('TRANSFER_IN', 'TRANSFER_OUT');
-EXCEPTION WHEN duplicate_object THEN null;
-END $$;
-
-DO $$ BEGIN
-    CREATE TYPE "Platform" AS ENUM ('ios', 'android', 'web');
-EXCEPTION WHEN duplicate_object THEN null;
-END $$;
-
 -- ─── Tables ────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS "devices" (
     "id"                     VARCHAR(64) NOT NULL,
-    "platform"               "Platform" NOT NULL,
+    "platform"               VARCHAR(16) NOT NULL DEFAULT 'android',
     "created_at"             TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at"             TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "devices_pkey" PRIMARY KEY ("id")
@@ -71,7 +50,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "assets_symbol_chain_key" ON "assets"("symbol"
 CREATE TABLE IF NOT EXISTS "wallets" (
     "id"           TEXT        NOT NULL,
     "alias"        VARCHAR(64) NOT NULL DEFAULT '',
-    "source"       "WalletSource" NOT NULL DEFAULT 'CREATE',
+    "source"       VARCHAR(16) NOT NULL DEFAULT 'CREATE',
     "created_at"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "wallets_pkey" PRIMARY KEY ("id")
@@ -130,7 +109,7 @@ CREATE TABLE IF NOT EXISTS "transactions" (
     "token_symbol"  VARCHAR(16) NOT NULL,
     "amount"        DECIMAL(30,8) NOT NULL,
     "fee"           DECIMAL(30,8) NOT NULL DEFAULT 0,
-    "status"        "TxStatus" NOT NULL DEFAULT 'PENDING',
+    "status"        VARCHAR(16) NOT NULL DEFAULT 'PENDING',
     "memo"          VARCHAR(256) NOT NULL DEFAULT '',
     "created_at"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -143,22 +122,11 @@ CREATE TABLE IF NOT EXISTS "notifications" (
     "wallet_id"  VARCHAR(36) NOT NULL,
     "title"      VARCHAR(128) NOT NULL,
     "content"    TEXT        NOT NULL,
-    "type"       "NotificationType" NOT NULL,
+    "type"       VARCHAR(32) NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "notifications_pkey" PRIMARY KEY ("id")
 );
 CREATE INDEX IF NOT EXISTS "notifications_wallet_id_idx" ON "notifications"("wallet_id");
-
-CREATE TABLE IF NOT EXISTS "notification_reads" (
-    "id"              SERIAL      NOT NULL,
-    "notification_id" TEXT        NOT NULL,
-    "device_id"       VARCHAR(64) NOT NULL,
-    "is_read"         BOOLEAN     NOT NULL DEFAULT false,
-    "read_at"         TIMESTAMP(3),
-    "created_at"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "notification_reads_pkey" PRIMARY KEY ("id")
-);
-CREATE UNIQUE INDEX IF NOT EXISTS "notification_reads_notification_id_device_id_idx" ON "notification_reads"("notification_id", "device_id");
 
 CREATE TABLE IF NOT EXISTS "app_configs" (
     "id"         SERIAL      NOT NULL,
