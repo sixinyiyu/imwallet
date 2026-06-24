@@ -9,7 +9,7 @@
 set -euo pipefail
 
 VERSION="${1:-latest}"
-REPO="sixinyiyu/rs-wallet"
+REPO="sixinyiyu/imwallet"
 INSTALL_DIR="/opt/rs-wallet"
 BIN_NAME="rs-wallet"
 

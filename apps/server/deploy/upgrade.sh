@@ -16,7 +16,7 @@ if [ -z "${VERSION}" ]; then
     exit 1
 fi
 
-REPO="sixinyiyu/rs-wallet"
+REPO="sixinyiyu/imwallet"
 INSTALL_DIR="/opt/rs-wallet"
 BIN_NAME="rs-wallet"
 SERVICE_NAME="rs-wallet"
