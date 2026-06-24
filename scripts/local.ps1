@@ -87,13 +87,12 @@ function Start-Server {
 
   $envFile = Join-Path $ProjectRoot "apps\server\.env"
   if (!(Test-Path $envFile)) {
-    Write-Host "  ❌ 缺少 apps/server/.env，请先创建" -ForegroundColor Red
-    return
+    Write-Host "  ⚠️  缺少 apps/server/.env，将使用 config.toml 默认配置" -ForegroundColor Yellow
   }
 
-  # Start server in background
+  # Start Rust server in background
   $proc = Start-Process -FilePath "pwsh" `
-    -ArgumentList "-NoExit", "-Command", "cd '$ProjectRoot\apps\server'; npm run dev" `
+    -ArgumentList "-NoExit", "-Command", "cd '$ProjectRoot\apps\server'; cargo run" `
     -WindowStyle Hidden `
     -PassThru
 

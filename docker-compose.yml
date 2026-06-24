@@ -25,17 +25,18 @@ services:
     container_name: imwallet-server
     environment:
       DATABASE_URL: postgresql://imwallet:imwallet_dev@postgres:5432/imwallet
-      JWT_SECRET: dev_jwt_secret_change_in_production
       PORT: 3000
-      NODE_ENV: development
+      SERVER_PWD: dev_server_pwd
+      RUST_BACKTRACE: 1
     ports:
       - "3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
-      - ./apps/server/src:/app/src
-    command: npm run dev
+      - rs-wallet-keys:/opt/rs-wallet/keys
+    restart: unless-stopped
 
 volumes:
   pgdata:
+  rs-wallet-keys:

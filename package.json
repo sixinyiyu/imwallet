@@ -1,10 +1,9 @@
 {
   "name": "imwallet",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "多链去中心化钱包 - 私有链钱包应用",
   "workspaces": [
-    "apps/server",
     "apps/mobile"
   ],
   "scripts": {
@@ -13,14 +12,10 @@
     "local:mobile": "pwsh -File scripts/local.ps1 mobile",
     "local:stop": "pwsh -File scripts/local.ps1 stop",
     "local:status": "pwsh -File scripts/local.ps1 status",
-    "dev:server": "npm run dev --workspace=apps/server",
     "dev:mobile": "npm run start --workspace=apps/mobile",
-    "build:server": "npm run build --workspace=apps/server",
-    "test:server": "npm run test --workspace=apps/server",
-    "test:mobile": "npm run test --workspace=apps/mobile",
-    "lint": "npm run lint --workspaces --if-present",
-    "db:generate": "npm run db:generate --workspace=apps/server",
-    "db:init": "npm run db:init --workspace=apps/server",
+    "build:server": "cd apps/server && cargo build --release",
+    "test:server": "cd apps/server && cargo test --bin rs-wallet",
+    "lint:server": "cd apps/server && cargo fmt -- --check && cargo clippy -- -D warnings",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down"
   },
