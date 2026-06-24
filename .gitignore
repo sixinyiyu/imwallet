@@ -24,3 +24,9 @@ document.md
 
 # QAgent screenshots
 qagent_screenshot_*.png
+
+# Rust server (apps/server)
+apps/server/target/
+apps/server/.cache/
+apps/server/output/
+apps/server/.env
