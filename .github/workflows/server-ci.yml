@@ -1,10 +1,12 @@
-name: CI
+name: Server CI (Rust)
 
 on:
   push:
     branches: [main]
+    paths: ['apps/server/**']
   pull_request:
     branches: [main]
+    paths: ['apps/server/**']
 
 jobs:
   check:
@@ -22,18 +24,22 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+            apps/server/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('apps/server/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: fmt check
+        working-directory: apps/server
         run: cargo fmt -- --check
 
       - name: clippy
+        working-directory: apps/server
         run: cargo clippy -- -D warnings
 
       - name: build
+        working-directory: apps/server
         run: cargo build --release
 
       - name: test
+        working-directory: apps/server
         run: cargo test --bin rs-wallet

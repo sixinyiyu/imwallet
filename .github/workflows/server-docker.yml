@@ -1,10 +1,10 @@
-name: Build Docker Image
+name: Server Docker Image (Rust)
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Image tag (e.g. v0.1.0, latest)"
+        description: "Image tag (e.g. v0.2.0, latest)"
         required: true
         default: "latest"
 
@@ -28,7 +28,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/sixinyiyu/imwallet-server
           tags: |
             type=raw,value=${{ inputs.tag }}
             type=sha
@@ -36,7 +36,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: apps/server
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
