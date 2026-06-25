@@ -71,6 +71,7 @@ async fn main() -> anyhow::Result<()> {
                 axum::http::Method::POST,
                 axum::http::Method::PUT,
                 axum::http::Method::DELETE,
+                axum::http::Method::OPTIONS,
             ])
             .allow_headers(
                 ALLOWED_HEADERS
