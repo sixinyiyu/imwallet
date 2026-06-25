@@ -10,6 +10,7 @@ use axum::{
     routing::{delete, get},
     Extension, Json, Router,
 };
+use rbdc::DateTime;
 use serde::{Deserialize, Serialize};
 
 pub fn router() -> Router<AppState> {
@@ -36,8 +37,8 @@ struct WalletResponse {
     id: String,
     alias: String,
     source: String,
-    created_at: Option<fastdate::DateTime>,
-    updated_at: Option<fastdate::DateTime>,
+    created_at: Option<DateTime>,
+    updated_at: Option<DateTime>,
 }
 
 impl From<Wallet> for WalletResponse {
@@ -92,7 +93,7 @@ struct WalletAllItem {
     id: String,
     alias: String,
     source: String,
-    created_at: Option<fastdate::DateTime>,
+    created_at: Option<DateTime>,
 }
 
 impl From<Wallet> for WalletAllItem {
@@ -114,8 +115,8 @@ struct WalletDetailResponse {
     total_balance_usd: rust_decimal::Decimal,
     total_balance_cny: rust_decimal::Decimal,
     token_balances: Vec<wallet_service::AssetBalanceItem>,
-    created_at: Option<fastdate::DateTime>,
-    updated_at: Option<fastdate::DateTime>,
+    created_at: Option<DateTime>,
+    updated_at: Option<DateTime>,
 }
 
 #[derive(Debug, Serialize)]
@@ -130,7 +131,7 @@ struct AddressResponse {
     id: String,
     chain: String,
     address: String,
-    created_at: Option<fastdate::DateTime>,
+    created_at: Option<DateTime>,
 }
 
 impl From<WalletAddress> for AddressResponse {

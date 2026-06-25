@@ -9,6 +9,7 @@ use axum::{
     routing::get,
     Extension, Json, Router,
 };
+use rbdc::DateTime;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -32,9 +33,7 @@ async fn sync_notifications(
     Extension(device): Extension<DevicePayload>,
     Query(params): Query<SyncQuery>,
 ) -> Result<Json<SyncResponse>, AppError> {
-    let since = params
-        .since
-        .and_then(|s| fastdate::DateTime::from_str(&s).ok());
+    let since = params.since.and_then(|s| DateTime::from_str(&s).ok());
 
     let notifications = notification_service::get_notifications_by_device(
         state.db.clone(),

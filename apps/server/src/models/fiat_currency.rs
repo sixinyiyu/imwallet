@@ -1,6 +1,6 @@
 //! 法币汇率模型 — 对应 fiat_currencies 表
 
-use fastdate::DateTime;
+use rbdc::DateTime;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 

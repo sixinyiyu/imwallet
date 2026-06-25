@@ -1,6 +1,6 @@
 //! 钱包-设备订阅模型 — 对应 wallet_subscriptions 表
 
-use fastdate::DateTime;
+use rbdc::DateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

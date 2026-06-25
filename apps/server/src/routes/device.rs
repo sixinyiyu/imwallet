@@ -9,6 +9,7 @@ use axum::{
     routing::{delete, get, post},
     Extension, Json, Router,
 };
+use rbdc::DateTime;
 use serde::{Deserialize, Serialize};
 
 pub fn public_router() -> Router<AppState> {
@@ -35,8 +36,8 @@ struct RegisterDeviceRequest {
 struct DeviceResponse {
     id: String,
     platform: String,
-    created_at: Option<fastdate::DateTime>,
-    updated_at: Option<fastdate::DateTime>,
+    created_at: Option<DateTime>,
+    updated_at: Option<DateTime>,
 }
 
 impl From<Device> for DeviceResponse {
@@ -92,7 +93,7 @@ struct SubscriptionResponse {
     device_id: String,
     chain: String,
     address_id: String,
-    created_at: Option<fastdate::DateTime>,
+    created_at: Option<DateTime>,
 }
 
 impl From<WalletSubscription> for SubscriptionResponse {

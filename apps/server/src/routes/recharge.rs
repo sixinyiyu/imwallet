@@ -10,6 +10,7 @@ use axum::{
     routing::get,
     Extension, Json, Router,
 };
+use rbdc::DateTime;
 use serde::{Deserialize, Serialize};
 
 pub fn router() -> Router<AppState> {
@@ -69,7 +70,7 @@ struct RechargeItem {
     token_name: String,
     amount: rust_decimal::Decimal,
     memo: String,
-    created_at: Option<fastdate::DateTime>,
+    created_at: Option<DateTime>,
 }
 
 impl From<Recharge> for RechargeItem {

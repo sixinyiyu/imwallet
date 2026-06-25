@@ -1,8 +1,8 @@
 //! 应用配置模型 — 对应 app_configs 表
 //!
-//! rbdc_pg 返回 TIMESTAMP 为 fastdate::DateTime，统一使用 fastdate::DateTime 类型。
+//! rbdc_pg 返回 TIMESTAMP 为 rbdc::DateTime（包装 fastdate::DateTime），统一使用 rbdc::DateTime 类型。
 
-use fastdate::DateTime;
+use rbdc::DateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

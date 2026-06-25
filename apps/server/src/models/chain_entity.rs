@@ -1,6 +1,6 @@
 //! 链实体模型 — 对应 chains 表
 
-use fastdate::DateTime;
+use rbdc::DateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

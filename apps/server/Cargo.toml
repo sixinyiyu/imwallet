@@ -44,7 +44,6 @@ simple_logger = "5"
 thiserror = "2"
 anyhow = "1"
 lru = "0.18"
-fastdate = "0.3"
 
 # ── Blockchain ──
 # tronic = { version = "0.5", features = ["tonic-tls"] }  # Uncomment when Tron interaction is needed
@@ -52,4 +51,3 @@ fastdate = "0.3"
 [dev-dependencies]
 axum-test = "20"
 pretty_assertions = "1"
-fastdate = "0.3"

@@ -1,6 +1,6 @@
 //! 钱包模型 — 对应 wallets 表
 
-use fastdate::DateTime;
+use rbdc::DateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

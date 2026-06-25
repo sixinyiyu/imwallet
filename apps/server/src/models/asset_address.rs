@@ -1,6 +1,6 @@
 //! 资产地址余额模型 — 对应 assets_addresses 表
 
-use fastdate::DateTime;
+use rbdc::DateTime;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
