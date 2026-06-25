@@ -21,16 +21,76 @@ imwallet/
 
 - Node.js >= 18
 - Rust stable (rustup)
-- PostgreSQL (本地开发或 docker-compose)
+- Docker（用于本地 PostgreSQL）
 - Expo CLI (`npm install -g expo-cli`)
 
-### 本地开发
+### Server 本地启动（3 步）
+
+**只需修改 `config.toml` + 启动数据库 + 运行，无需其他手动操作。**
+
+#### 第 1 步：修改 `apps/server/config.toml`
+
+将 `database.url` 中的 `CHANGE_ME` 替换为本地 PostgreSQL 密码：
+
+```toml
+[database]
+url = "postgresql://imwallet:imwallet_dev@localhost:5432/imwallet"
+```
+
+> 对应 `docker-compose.yml` 中默认配置：`POSTGRES_USER=imwallet`, `POSTGRES_PASSWORD=imwallet_dev`, `POSTGRES_DB=imwallet`
+
+#### 第 2 步：启动 PostgreSQL
 
 ```bash
-# 启动 PostgreSQL
 docker-compose up -d
+```
 
-# 一键启动（server + mobile）
+#### 第 3 步：运行 Server
+
+```bash
+cd apps/server
+cargo run
+```
+
+**启动时自动完成以下操作，无需手动干预：**
+
+| 操作 | 说明 |
+|------|------|
+| RSA 密钥 | `keys/rsa_private.pem` 和 `keys/rsa_public.pem` 不存在时**自动生成** |
+| 数据库迁移 | 自动执行 `migrations/V1_init.sql`（建表 + 种子数据） |
+| 日志初始化 | 从 `config.toml [logging]` 读取级别 |
+
+> `.env` 文件不是必需的。`dotenvy::dotenv()` 只是可选加载，`config.toml` 是主配置源。
+
+#### 环境变量覆盖
+
+`config.toml` 中的值可被环境变量覆盖，无需修改文件：
+
+| 环境变量 | 覆盖字段 | 示例 |
+|----------|----------|------|
+| `DATABASE_URL` | `[database].url` | `postgresql://user:pass@host:5432/db` |
+| `PORT` | `[server].port` | `3000` |
+| `SERVER_PWD` | `[service].password` | `my_secret_pwd` |
+
+### Mobile 本地启动
+
+创建 `apps/mobile/.env`：
+
+```
+EXPO_PUBLIC_API_URL=http://localhost:3000/api/v1
+```
+
+然后运行：
+
+```bash
+cd apps/mobile
+npx expo start --clear
+```
+
+### 一键启动（PowerShell）
+
+```bash
+# 启动全部（server + mobile）
 npm run local
 
 # 仅启动 server
@@ -44,24 +104,6 @@ npm run local:stop
 
 # 查看运行状态
 npm run local:status
-```
-
-### Server 配置
-
-Server 使用 `config.toml` 配置文件（`apps/server/config.toml`），环境变量可覆盖：
-
-| 环境变量 | 说明 | 默认值 |
-|----------|------|--------|
-| `DATABASE_URL` | PostgreSQL 连接字符串 | config.toml 中的值 |
-| `PORT` | HTTP 服务端口 | 3000 |
-| `SERVER_PWD` | 服务配置密码 | config.toml 中的值 |
-
-### Mobile 配置
-
-Mobile 使用 `.env` 文件（`apps/mobile/.env`）：
-
-```
-EXPO_PUBLIC_API_URL=http://localhost:3000/api/v1
 ```
 
 ## Server 常用命令
@@ -101,12 +143,12 @@ npm run dev:mobile
 3. 签名请求获取设备信息（GET /devices/me）
 4. 签名请求创建钱包（POST /wallets）
 5. 签名请求获取设备钱包列表（GET /devices/wallets）
-6. 筳名请求获取钱包列表（GET /wallets）
+6. 签名请求获取钱包列表（GET /wallets）
 
 ### 运行方式
 
 ```bash
-# 默认连接 localhost:3000
+# 默认连接 localhost:3000（需先启动 server）
 cargo run -p test-device-auth
 
 # 指定 server 地址
