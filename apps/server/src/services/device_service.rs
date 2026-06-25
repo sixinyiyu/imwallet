@@ -38,7 +38,7 @@ pub async fn get_device(rb: Arc<RBatis>, device_id: &str) -> Result<Option<Devic
 
 /// 订阅钱包 — INSERT ON CONFLICT 原子操作
 /// ON CONFLICT 匹配 DDL 四列唯一索引 (wallet_id, device_id, chain, address_id)
-/// 同一设备同一钱包不同链/地址可多次订阅；完全重复时返回 Conflict
+/// 同一设备同一钱包不同链/地址可多次订阅；完全重复时忽略，返回已有记录
 pub async fn subscribe_wallet(
     rb: Arc<RBatis>,
     wallet_id: &str,
@@ -55,8 +55,15 @@ pub async fn subscribe_wallet(
     if let Some(sub) = inserted {
         return Ok(sub);
     }
-    // ON CONFLICT 触发，订阅已存在
-    Err(AppError::Conflict("订阅已存在".into()))
+    // ON CONFLICT 触发，订阅已存在 — 查询已有记录返回，不报错
+    let existing: WalletSubscription = query_one(
+        &rb,
+        "SELECT * FROM wallet_subscriptions WHERE wallet_id = $1 AND device_id = $2 AND chain = $3 AND address_id = $4",
+        vals![wallet_id, device_id, chain, address_id],
+    )
+    .await?
+    .ok_or_else(|| AppError::Internal("订阅查询失败".into()))?;
+    Ok(existing)
 }
 
 pub async fn unsubscribe_wallet(

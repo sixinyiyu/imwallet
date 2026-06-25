@@ -299,11 +299,11 @@ pub async fn get_all_wallets(
         let p = format!("%{}%", kw.replace('%', "\\%").replace('_', "\\_"));
         let total = crate::db::query::query_count(
             &rb,
-            "SELECT COUNT(*) as cnt FROM wallets WHERE alias ILIKE $1 OR id ILIKE $1",
+            "SELECT COUNT(*) as cnt FROM wallets WHERE alias ILIKE $1",
             vals![&p],
         )
         .await?;
-        let rows: Vec<Wallet> = query(&rb, "SELECT * FROM wallets WHERE alias ILIKE $1 OR id ILIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3", vals![&p, l, o]).await?;
+        let rows: Vec<Wallet> = query(&rb, "SELECT * FROM wallets WHERE alias ILIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3", vals![&p, l, o]).await?;
         (rows, total)
     } else {
         let total =

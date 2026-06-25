@@ -54,6 +54,7 @@ interface WalletState {
   totalBalanceUsd: string;
   assets: AssetBalance[];
   loading: boolean;
+  balanceLoading: boolean;
   hasFetched: boolean;
   accountCount: number;
 
@@ -87,6 +88,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   totalBalanceUsd: "0",
   assets: [],
   loading: false,
+  balanceLoading: false,
   hasFetched: false,
   accountCount: 0,
 
@@ -502,14 +504,16 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   /** Fetch balance for wallet (from server API) */
   fetchBalance: async (walletId: string) => {
+    set({ balanceLoading: true });
     try {
       const detail = await walletService.getWalletBalanceDetail(walletId);
       set({
         totalBalanceUsd: detail.totalBalanceUsd || "0",
         assets: detail.assets || [],
+        balanceLoading: false,
       });
     } catch {
-      // silent
+      set({ balanceLoading: false });
     }
   },
 

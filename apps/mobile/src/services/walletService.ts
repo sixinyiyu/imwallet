@@ -1,4 +1,5 @@
 import api from "./api";
+// WalletAllItem 的后端原始类型（alias 字段），仅用于 getAllWallets 内部映射
 import type { Wallet, SimpleWallet, AggregateWallet, WalletBalanceDetail, ServerWalletAddress } from "../types";
 
 /**
@@ -7,20 +8,45 @@ import type { Wallet, SimpleWallet, AggregateWallet, WalletBalanceDetail, Server
  * 钱包别名、排序等本地字段在 localWalletService 中管理。
  */
 export const walletService = {
-  /** 获取简单钱包列表（服务端视角，不含本地字段） */
+  /** 获取简单钱包列表（服务端视角，不含本地字段）
+   *  后端返回字段 alias，前端 SimpleWallet 用 name，此处做映射 */
   async getWallets(): Promise<{ wallets: SimpleWallet[] }> {
     const { data } = await api.get("/wallets");
-    return data;
+    const wallets: SimpleWallet[] = (data.wallets || []).map((w: any) => ({
+      id: w.id,
+      name: w.alias || "",
+      source: w.source || "",
+      type: "",
+      sortOrder: 0,
+      isPinned: false,
+      avatar: "",
+      passwordHint: "",
+      createdAt: "",
+    }));
+    return { wallets };
   },
 
-  /** 获取所有系统钱包（搜索+分页，供充值管理等场景使用） */
+  /** 获取所有系统钱包（搜索+分页，供充值管理等场景使用）
+   *  后端返回字段 alias，前端 SimpleWallet 用 name，此处做映射 */
   async getAllWallets(params: { search?: string; page?: number; limit?: number }): Promise<{ wallets: SimpleWallet[]; total: number }> {
     const query: Record<string, string> = {};
     if (params.search) query.search = params.search;
     if (params.page) query.page = String(params.page);
     if (params.limit) query.limit = String(params.limit);
     const { data } = await api.get("/wallets/all", { params: query });
-    return data;
+    // 后端 WalletAllItem 字段为 alias，映射为前端 SimpleWallet 的 name
+    const wallets: SimpleWallet[] = (data.wallets || []).map((w: any) => ({
+      id: w.id,
+      name: w.alias || "",
+      source: w.source || "",
+      type: "",
+      sortOrder: 0,
+      isPinned: false,
+      avatar: "",
+      passwordHint: "",
+      createdAt: w.created_at || "",
+    }));
+    return { wallets, total: data.total || 0 };
   },
 
   /** 获取钱包列表聚合数据（含网络列表） */
@@ -35,10 +61,25 @@ export const walletService = {
     return data;
   },
 
-  /** 获取钱包详情（含余额信息） */
+  /** 获取钱包详情（含余额信息）
+   *  后端返回字段 alias，前端 Wallet 用 name，此处做映射 */
   async getWalletDetail(walletId: string): Promise<Wallet> {
     const { data } = await api.get(`/wallets/${walletId}`);
-    return data;
+    // 后端 WalletDetailResponse 字段为 alias，映射为前端 Wallet 的 name
+    return {
+      id: data.id,
+      name: data.alias || "",
+      source: data.source || "",
+      type: "",
+      sortOrder: 0,
+      isPinned: false,
+      avatar: "",
+      passwordHint: "",
+      createdAt: "",
+      updatedAt: data.updated_at || "",
+      tokenBalances: data.token_balances || [],
+      totalBalanceCny: data.total_balance_cny || "0",
+    };
   },
 
   /** 获取钱包的所有链上地址（服务端视角，供充值管理等场景使用） */

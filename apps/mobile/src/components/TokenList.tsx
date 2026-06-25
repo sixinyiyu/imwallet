@@ -42,11 +42,16 @@ function SkeletonRow() {
   );
 }
 
+/** 格式化法币显示值 */
+const getDisplayValue = (asset: AssetBalance) => {
+  return asset.usdValue;
+};
+
 export default function TokenList({ assets, onAssetPress, loading }: Props) {
   const { currency } = useFiatStore();
   const safeAssets = assets || [];
 
-  // 加载中：显示骨架屏
+  // 加载中且无数据：显示骨架屏
   if (loading && safeAssets.length === 0) {
     return (
       <View style={styles.container}>
@@ -60,15 +65,42 @@ export default function TokenList({ assets, onAssetPress, loading }: Props) {
     );
   }
 
+  // 加载中但有旧数据：顶部显示刷新提示
+  if (loading && safeAssets.length > 0) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.refreshHint}>
+          <Text style={styles.refreshHintText}>刷新中...</Text>
+        </View>
+        {safeAssets.map((asset, index) => (
+          <TouchableOpacity
+            key={asset.assetId || asset.symbol || index}
+            style={[styles.item, index < safeAssets.length - 1 && styles.itemBorder]}
+            onPress={() => onAssetPress(asset)}
+          >
+            <View style={styles.iconContainer}>
+              {asset.symbol === "TRX" ? <TronIcon size={32} /> : <USDTIcon size={32} />}
+            </View>
+            <View style={styles.info}>
+              <Text style={styles.symbol}>{asset.symbol}</Text>
+              <Text style={styles.name}>{asset.name}</Text>
+            </View>
+            <View style={styles.balance}>
+              <Text style={styles.balanceText}>{asset.balance}</Text>
+              <Text style={styles.fiatValue}>≈ {currency.symbol}{getDisplayValue(asset)}</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  }
   if (safeAssets.length === 0) {
     return (
       <EmptyState message="暂无代币" />
     );
   }
 
-  const getDisplayValue = (asset: AssetBalance) => {
-    return asset.usdValue;
-  };
+
 
   return (
     <View style={styles.container}>
@@ -152,7 +184,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#E5E7EB",
     borderRadius: 4,
   },
-  empty: { alignItems: "center", padding: 32 },
-  emptyImage: { width: 120, height: 120, marginBottom: 12 },
-  emptyText: { fontSize: 14, color: "#9CA3AF" },
+  refreshHint: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  refreshHintText: {
+    fontSize: 12,
+    color: "#9CA3AF",
+  },
 });

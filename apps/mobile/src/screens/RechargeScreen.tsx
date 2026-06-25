@@ -15,6 +15,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { walletService } from "../services/walletService";
 import { assetService } from "../services/assetService";
 import { localAddressService } from "../services/localAddressService";
+import { localWalletService } from "../services/localWalletService";
 import { rechargeService, type RechargeRecord } from "../services/rechargeService";
 import type { SimpleWallet, AssetInfo, AddressEntry, ServerWalletAddress } from "../types";
 import { TronIcon, USDTIcon, ChevronRightIcon, CopyIcon } from "../components/icons";
@@ -122,7 +123,8 @@ export default function RechargeScreen() {
   // ── 服务端钱包列表（搜索+分页） ──────────────────────────────────────────
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /** 从服务端加载钱包列表（支持搜索+分页） */
+  /** 从服务端加载钱包列表（支持搜索+分页）
+   *  如果钱包 ID 在本地存在，优先使用本地名称（本地名称可能是用户修改后的最新名称） */
   const loadServerWallets = async (page = 1, search = "", append = false) => {
     if (serverWalletsLoading) return;
     setServerWalletsLoading(true);
@@ -132,7 +134,14 @@ export default function RechargeScreen() {
         page,
         limit: 20,
       });
-      setServerWallets((prev) => (append ? [...prev, ...res.wallets] : res.wallets));
+      // 用本地钱包名称覆盖服务端名称（本地名称优先，可能是用户修改后的最新名称）
+      const localWallets = await localWalletService.getAllWallets();
+      const localNameMap = new Map(localWallets.map((w) => [w.id, w.name]));
+      const mergedWallets = res.wallets.map((w) => {
+        const localName = localNameMap.get(w.id);
+        return localName ? { ...w, name: localName } : w;
+      });
+      setServerWallets((prev) => (append ? [...prev, ...mergedWallets] : mergedWallets));
       setServerWalletsTotal(res.total);
       setServerWalletsPage(page);
     } catch {
@@ -447,7 +456,7 @@ export default function RechargeScreen() {
               style={styles.walletSearchInput}
               value={walletSearch}
               onChangeText={handleWalletSearch}
-              placeholder="搜索钱包名称或ID"
+              placeholder="搜索钱包名称"
               placeholderTextColor="#C8C9CC"
             />
             <FlatList
