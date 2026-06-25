@@ -56,6 +56,9 @@ async fn main() -> anyhow::Result<()> {
     // 4. 执行数据库迁移（flyway 驱动 V*.sql，DDL + 种子数据一步完成）
     services::migrator::migrate(db.clone()).await?;
 
+    // 4.1 同步 config.toml 配置到数据库（覆盖种子数据的默认值）
+    services::config_service::sync_config_to_db(db.clone(), &config).await?;
+
     // 5. 构建路由（RSA 初始化、RuntimeConfig 转换、AppState 构建均在内部完成）
     let port = config.port;
     let app = routes::build_routes(db, config).await?.layer(

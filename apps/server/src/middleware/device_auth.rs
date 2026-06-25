@@ -79,9 +79,12 @@ impl AppState {
         *self.cny_rate.read().unwrap()
     }
 
-    /// 更新缓存的 USD→CNY 汇率（RwLock 写锁，独占）
-    pub fn set_cny_rate(&self, rate: Decimal) {
-        *self.cny_rate.write().unwrap() = rate;
+    /// 更新缓存的 USD→CNY 汇率（RwLock 写锁，独占），返回值是否发生变化
+    pub fn set_cny_rate(&self, rate: Decimal) -> bool {
+        let mut lock = self.cny_rate.write().unwrap();
+        let changed = *lock != rate;
+        *lock = rate;
+        changed
     }
 }
 

@@ -76,8 +76,9 @@ fn spawn_cny_rate_refresh(db: Arc<rbatis::RBatis>, state: AppState) {
             interval.tick().await;
             match crate::services::fiat_service::get_usd_cny_rate(db.clone()).await {
                 Ok(rate) => {
-                    state.set_cny_rate(rate);
-                    ::log::info!("CNY rate refreshed: {}", rate);
+                    if state.set_cny_rate(rate) {
+                        ::log::info!("CNY rate refreshed: {}", rate);
+                    }
                 }
                 Err(e) => {
                     ::log::warn!("Failed to refresh CNY rate: {}", e);

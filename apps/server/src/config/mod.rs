@@ -177,7 +177,7 @@ impl From<ConfigFile> for AppConfig {
             fee_rate: c.fee.rate,
             fee_mode: c.fee.mode,
             tx_restrict_wallet: c.fee.tx_restrict_wallet,
-            server_pwd: c.service.password,
+            server_pwd: env_override("SERVER_PWD", &c.service.password),
             log_default_level: c.logging.default_level,
             timestamp_window_secs: c.security.timestamp_window_secs,
             replay_cache_capacity: c.security.replay_cache_capacity,
