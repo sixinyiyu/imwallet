@@ -1,13 +1,13 @@
--- ═══════════════════════════════════════════════════════════════
--- IMWallet / rs-wallet — 数据库初始化 & 种子数据
--- 由 flyway 0.7 MigrationRunner 驱动，按 V1 版本执行
--- 幂等设计：所有语句均可安全重复执行
--- ═══════════════════════════════════════════════════════════════
+-- ===============================================================
+-- IMWallet / rs-wallet - Database init & seed data
+-- Driven by flyway 0.7 MigrationRunner, executed as V1
+-- Idempotent: all statements can be safely re-executed
+-- ===============================================================
 
--- ─── Extensions ────────────────────────────────────────────────
+-- --- Extensions ------------------------------------------------
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- ─── Tables ────────────────────────────────────────────────────
+-- --- Tables ----------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS "devices" (
     "id"                     VARCHAR(64) NOT NULL,
@@ -164,9 +164,9 @@ CREATE TABLE IF NOT EXISTS "app_logs" (
     CONSTRAINT "app_logs_pkey" PRIMARY KEY ("id")
 );
 
--- ═══════════════════════════════════════════════════════════════
--- Seed Data — 幂等插入，可随 V1 首次执行，后续启动自动跳过
--- ═══════════════════════════════════════════════════════════════
+-- ===============================================================
+-- Seed Data - Idempotent inserts, runs with V1, skipped on subsequent starts
+-- ===============================================================
 
 INSERT INTO "chains" ("name", "display_name", "account_enable", "derivation_path")
 VALUES
@@ -200,9 +200,10 @@ ON CONFLICT ("code") DO UPDATE SET "rate" = EXCLUDED."rate", "updated_at" = NOW(
 
 INSERT INTO "app_configs" ("key", "value")
 VALUES
-    ('server_pwd',              'CHANGE_ME'),  -- 请通过环境变量 SERVER_PWD 覆盖，勿提交真实密码
+    ('server_pwd',              'CHANGE_ME'),  -- Override via SERVER_PWD env var, do not commit real password
     ('fee_rate',                '0.005'),
     ('fee_mode',                'DEDUCTED'),
     ('tx_restrict_wallet',      'true'),
     ('recharge_allowed_devices', '[]')
 ON CONFLICT ("key") DO NOTHING;
+
