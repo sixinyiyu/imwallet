@@ -1,10 +1,10 @@
-﻿<#
+<#
 .SYNOPSIS
   imwallet 本地开发环境管理工具
 
 .DESCRIPTION
   一键启动/停止本地开发环境（Server + Mobile Web）
-  自动使用 .env 本地配置，连接本地 PostgreSQL
+  Server 使用 Rust (cargo run)，配置通过 config.toml + 环境变量
 
 .EXAMPLE
   .\scripts\local.ps1          # 启动全部（server + mobile）
@@ -83,27 +83,27 @@ function Start-Server {
   Kill-ByPort 3000
   Start-Sleep -Seconds 1
 
-  Write-Host "  🚀 启动 Server (http://localhost:3000) ..." -ForegroundColor Green
+  Write-Host "  🚀 启动 Server (Rust, http://localhost:3000) ..." -ForegroundColor Green
 
-  $envFile = Join-Path $ProjectRoot "apps\server\.env"
-  if (!(Test-Path $envFile)) {
-    Write-Host "  ⚠️  缺少 apps/server/.env，将使用 config.toml 默认配置" -ForegroundColor Yellow
+  $configFile = Join-Path $ProjectRoot "apps\server\config.toml"
+  if (!(Test-Path $configFile)) {
+    Write-Host "  ⚠️  缺少 apps/server/config.toml，请从 config.toml 模板创建" -ForegroundColor Yellow
   }
 
   # Start Rust server in background
   $proc = Start-Process -FilePath "pwsh" `
-    -ArgumentList "-NoExit", "-Command", "cd '$ProjectRoot\apps\server'; cargo run" `
+    -ArgumentList "-NoExit", "-Command", "cd '$ProjectRoot\apps\server'; cargo run --release" `
     -WindowStyle Hidden `
     -PassThru
 
   Ensure-PidDir
   $proc.Id | Set-Content (Join-Path $PidDir "server.pid")
 
-  # Wait for server to be ready
-  if (Wait-ForPort 3000) {
+  # Wait for server to be ready (release build may take longer on first run)
+  if (Wait-ForPort 3000 60000) {
     Write-Host "  ✅ Server 已就绪 (PID=$($proc.Id))" -ForegroundColor Green
   } else {
-    Write-Host "  ⚠️  Server 启动超时，请检查日志" -ForegroundColor Yellow
+    Write-Host "  ⚠️  Server 启动超时，请检查日志（首次 release 编译需要较长时间）" -ForegroundColor Yellow
   }
 }
 
@@ -120,11 +120,6 @@ function Start-Mobile {
   Start-Sleep -Seconds 1
 
   Write-Host "  📱 启动 Mobile Web (http://localhost:8081) ..." -ForegroundColor Green
-
-  $envFile = Join-Path $ProjectRoot "apps\mobile\.env"
-  if (!(Test-Path $envFile)) {
-    Write-Host "  ⚠️  缺少 apps/mobile/.env，将使用 app.json 中的默认 API URL" -ForegroundColor Yellow
-  }
 
   # Start mobile in background
   $proc = Start-Process -FilePath "pwsh" `
@@ -207,15 +202,15 @@ function Show-Status {
 
   # Config
   $mobileEnv = Join-Path $ProjectRoot "apps\mobile\.env"
-  $serverEnv = Join-Path $ProjectRoot "apps\server\.env"
+  $serverConfig = Join-Path $ProjectRoot "apps\server\config.toml"
   Write-Host ""
   Write-Host "  配置文件:" -ForegroundColor Gray
-  Write-Host "    Server .env:  $(if (Test-Path $serverEnv) { '✅ 存在' } else { '❌ 缺失' })" -ForegroundColor $(if (Test-Path $serverEnv) { 'Green' } else { 'Red' })
-  Write-Host "    Mobile .env:  $(if (Test-Path $mobileEnv) { '✅ 存在' } else { '❌ 缺失' })" -ForegroundColor $(if (Test-Path $mobileEnv) { 'Green' } else { 'Red' })
+  Write-Host "    Server config.toml:  $(if (Test-Path $serverConfig) { '✅ 存在' } else { '❌ 缺失' })" -ForegroundColor $(if (Test-Path $serverConfig) { 'Green' } else { 'Red' })
+  Write-Host "    Mobile .env:         $(if (Test-Path $mobileEnv) { '✅ 存在' } else { '❌ 缺失' })" -ForegroundColor $(if (Test-Path $mobileEnv) { 'Green' } else { 'Red' })
 
   if (Test-Path $mobileEnv) {
     $apiUrl = (Get-Content $mobileEnv | Where-Object { $_ -match 'EXPO_PUBLIC_API_URL' }) -replace '.*=', ''
-    Write-Host "    API URL:      $apiUrl" -ForegroundColor Cyan
+    Write-Host "    API URL:             $apiUrl" -ForegroundColor Cyan
   }
   Write-Host ""
 }

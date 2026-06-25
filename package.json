@@ -13,9 +13,10 @@
     "local:stop": "pwsh -File scripts/local.ps1 stop",
     "local:status": "pwsh -File scripts/local.ps1 status",
     "dev:mobile": "npm run start --workspace=apps/mobile",
-    "build:server": "cd apps/server && cargo build --release",
-    "test:server": "cd apps/server && cargo test --bin rs-wallet",
-    "lint:server": "cd apps/server && cargo fmt -- --check && cargo clippy -- -D warnings",
+    "build:server": "cargo build --release --workspace",
+    "test:server": "cargo test --workspace",
+    "lint:server": "cargo fmt -- --check && cargo clippy -- -D warnings",
+    "check:server": "cargo check --workspace",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down"
   },
