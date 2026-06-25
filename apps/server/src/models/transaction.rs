@@ -1,6 +1,6 @@
 //! 交易记录模型 — 对应 transactions 表
 
-use chrono::NaiveDateTime;
+use fastdate::DateTime;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +15,6 @@ pub struct Transaction {
     pub fee: Decimal,
     pub status: String,
     pub memo: String,
-    pub created_at: Option<NaiveDateTime>,
-    pub updated_at: Option<NaiveDateTime>,
+    pub created_at: Option<DateTime>,
+    pub updated_at: Option<DateTime>,
 }

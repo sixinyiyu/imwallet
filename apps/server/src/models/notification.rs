@@ -1,6 +1,6 @@
 //! 通知模型 — 对应 notifications 表
 
-use chrono::NaiveDateTime;
+use fastdate::DateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -11,5 +11,5 @@ pub struct Notification {
     pub title: String,
     pub content: String,
     pub r#type: String,
-    pub created_at: Option<NaiveDateTime>,
+    pub created_at: Option<DateTime>,
 }

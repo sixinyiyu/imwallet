@@ -3,7 +3,7 @@
 
 use crate::db::query::{query, vals};
 use crate::errors::AppError;
-use chrono::NaiveDateTime;
+use fastdate::DateTime;
 use rbatis::RBatis;
 use serde::Serialize;
 use std::sync::Arc;
@@ -15,14 +15,14 @@ pub struct NotificationResult {
     pub title: String,
     pub content: String,
     pub r#type: String,
-    pub created_at: Option<NaiveDateTime>,
+    pub created_at: Option<DateTime>,
 }
 
 /// 获取设备的通知列表（基于订阅的钱包），支持增量同步
 pub async fn get_notifications_by_device(
     rb: Arc<RBatis>,
     device_id: &str,
-    since: Option<NaiveDateTime>,
+    since: Option<DateTime>,
 ) -> Result<Vec<NotificationResult>, AppError> {
     #[derive(serde::Deserialize)]
     struct R {
@@ -31,7 +31,7 @@ pub async fn get_notifications_by_device(
         title: String,
         content: String,
         r#type: String,
-        created_at: Option<NaiveDateTime>,
+        created_at: Option<DateTime>,
     }
 
     let sql = if since.is_some() {

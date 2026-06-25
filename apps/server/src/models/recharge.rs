@@ -1,6 +1,6 @@
 //! 充值记录模型 — 对应 recharges 表
 
-use chrono::NaiveDateTime;
+use fastdate::DateTime;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -17,5 +17,5 @@ pub struct Recharge {
     pub device_id: String,
     pub platform: String,
     pub version: String,
-    pub created_at: Option<NaiveDateTime>,
+    pub created_at: Option<DateTime>,
 }

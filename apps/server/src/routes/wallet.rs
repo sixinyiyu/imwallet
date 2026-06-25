@@ -36,8 +36,8 @@ struct WalletResponse {
     id: String,
     alias: String,
     source: String,
-    created_at: Option<chrono::NaiveDateTime>,
-    updated_at: Option<chrono::NaiveDateTime>,
+    created_at: Option<fastdate::DateTime>,
+    updated_at: Option<fastdate::DateTime>,
 }
 
 impl From<Wallet> for WalletResponse {
@@ -92,7 +92,7 @@ struct WalletAllItem {
     id: String,
     alias: String,
     source: String,
-    created_at: Option<chrono::NaiveDateTime>,
+    created_at: Option<fastdate::DateTime>,
 }
 
 impl From<Wallet> for WalletAllItem {
@@ -114,8 +114,8 @@ struct WalletDetailResponse {
     total_balance_usd: rust_decimal::Decimal,
     total_balance_cny: rust_decimal::Decimal,
     token_balances: Vec<wallet_service::AssetBalanceItem>,
-    created_at: Option<chrono::NaiveDateTime>,
-    updated_at: Option<chrono::NaiveDateTime>,
+    created_at: Option<fastdate::DateTime>,
+    updated_at: Option<fastdate::DateTime>,
 }
 
 #[derive(Debug, Serialize)]
@@ -130,7 +130,7 @@ struct AddressResponse {
     id: String,
     chain: String,
     address: String,
-    created_at: Option<chrono::NaiveDateTime>,
+    created_at: Option<fastdate::DateTime>,
 }
 
 impl From<WalletAddress> for AddressResponse {

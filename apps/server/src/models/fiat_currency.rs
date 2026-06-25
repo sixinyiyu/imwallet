@@ -1,6 +1,6 @@
 //! 法币汇率模型 — 对应 fiat_currencies 表
 
-use chrono::NaiveDateTime;
+use fastdate::DateTime;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -12,5 +12,5 @@ pub struct FiatCurrency {
     pub symbol: String,
     pub rate: Decimal,
     pub decimals: i32,
-    pub updated_at: Option<NaiveDateTime>,
+    pub updated_at: Option<DateTime>,
 }

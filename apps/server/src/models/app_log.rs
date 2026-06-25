@@ -1,6 +1,6 @@
 //! 应用日志模型 — 对应 app_logs 表
 
-use chrono::NaiveDateTime;
+use fastdate::DateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,5 +12,5 @@ pub struct AppLog {
     pub version: String,
     pub log_type: String,
     pub content: String,
-    pub created_at: Option<NaiveDateTime>,
+    pub created_at: Option<DateTime>,
 }

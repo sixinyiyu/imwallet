@@ -1,12 +1,12 @@
 //! 设备模型 — 对应 devices 表
 
-use chrono::NaiveDateTime;
+use fastdate::DateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Device {
     pub id: String,
     pub platform: String,
-    pub created_at: Option<NaiveDateTime>,
-    pub updated_at: Option<NaiveDateTime>,
+    pub created_at: Option<DateTime>,
+    pub updated_at: Option<DateTime>,
 }

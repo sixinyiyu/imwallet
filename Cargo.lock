@@ -2243,6 +2243,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "ed25519-dalek",
+ "fastdate",
  "flyway",
  "hex",
  "log",

@@ -10,6 +10,7 @@ use axum::{
     Extension, Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/notifications/sync", get(sync_notifications))
@@ -33,7 +34,7 @@ async fn sync_notifications(
 ) -> Result<Json<SyncResponse>, AppError> {
     let since = params
         .since
-        .and_then(|s| chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S").ok());
+        .and_then(|s| fastdate::DateTime::from_str(&s).ok());
 
     let notifications = notification_service::get_notifications_by_device(
         state.db.clone(),

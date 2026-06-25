@@ -1,6 +1,6 @@
 //! 资产地址余额模型 — 对应 assets_addresses 表
 
-use chrono::NaiveDateTime;
+use fastdate::DateTime;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +11,6 @@ pub struct AssetAddress {
     pub asset_id: String,
     pub chain: String,
     pub balance: Decimal,
-    pub created_at: Option<NaiveDateTime>,
-    pub updated_at: Option<NaiveDateTime>,
+    pub created_at: Option<DateTime>,
+    pub updated_at: Option<DateTime>,
 }

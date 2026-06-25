@@ -69,7 +69,7 @@ struct RechargeItem {
     token_name: String,
     amount: rust_decimal::Decimal,
     memo: String,
-    created_at: Option<chrono::NaiveDateTime>,
+    created_at: Option<fastdate::DateTime>,
 }
 
 impl From<Recharge> for RechargeItem {

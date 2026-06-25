@@ -1,6 +1,6 @@
 //! 资产模型 — 对应 assets 表
 
-use chrono::NaiveDateTime;
+use fastdate::DateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,6 +16,6 @@ pub struct Asset {
     pub is_default: bool,
     pub is_active: bool,
     pub is_tradable: bool,
-    pub created_at: Option<NaiveDateTime>,
-    pub updated_at: Option<NaiveDateTime>,
+    pub created_at: Option<DateTime>,
+    pub updated_at: Option<DateTime>,
 }
