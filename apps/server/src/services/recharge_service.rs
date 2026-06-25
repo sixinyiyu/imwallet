@@ -3,7 +3,7 @@
 use crate::chain::address_validator;
 use crate::db::query::{tx_exec, tx_query, tx_query_count, vals};
 use crate::errors::AppError;
-use crate::models::{Asset, Recharge};
+use crate::models::{AppConfigEntity, Asset, Recharge};
 use rbatis::RBatis;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,19 @@ pub async fn execute_recharge(
     platform: &str,
     version: &str,
 ) -> Result<RechargeResult, AppError> {
+    // 校验充值设备白名单
+    let allowed: Vec<String> = crate::db::query::query_one::<AppConfigEntity>(
+        &rb,
+        "SELECT * FROM app_configs WHERE key = 'recharge_allowed_devices",
+        vals![],
+    )
+    .await?
+    .and_then(|c| serde_json::from_str::<Vec<String>>(&c.value).ok())
+    .unwrap_or_default();
+    if !allowed.is_empty() && !allowed.iter().any(|d| d == device_id) {
+        return Err(AppError::Forbidden("该设备不在充值白名单中".into()));
+    }
+
     // 校验充值地址格式与链类型匹配
     let v = address_validator::validate_address_for_chain(&input.account_address, &input.network);
     if !v.is_valid {

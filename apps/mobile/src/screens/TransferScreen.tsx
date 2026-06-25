@@ -123,7 +123,7 @@ export default function TransferScreen() {
   const [addressInContacts, setAddressInContacts] = useState(false);
   const [addingToContacts, setAddingToContacts] = useState(false);
   const [txRestrictWallet, setTxRestrictWallet] = useState(false);
-  const [addressCheckResult, setAddressCheckResult] = useState<{ inSystem: boolean; inContacts: boolean } | null>(null);
+  const [addressCheckResult, setAddressCheckResult] = useState<{ inSystem: boolean } | null>(null);
   const [checkingAddress, setCheckingAddress] = useState(false);
 
   const [result, setResult] = useState<{
@@ -255,7 +255,7 @@ export default function TransferScreen() {
         status: "unverified",
       });
       setAddressInContacts(true);
-      setAddressCheckResult((prev) => prev ? { ...prev, inContacts: true } : prev);
+      setAddressCheckResult((prev) => prev ? { ...prev, inSystem: true } : prev);
       showToast("已添加到地址本");
     } catch (err: any) {
       alert("提示", "添加到地址本失败: " + (err.message || "未知错误"));

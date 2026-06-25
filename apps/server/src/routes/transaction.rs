@@ -47,12 +47,8 @@ pub struct TransactionQuery {
     pub wallet_id: String,
     pub page: Option<u64>,
     pub limit: Option<u64>,
-    #[allow(dead_code)]
     #[serde(default)]
     pub token_symbol: Option<String>,
-    #[allow(dead_code)]
-    #[serde(default)]
-    pub search: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -67,9 +63,14 @@ async fn get_transactions(
 ) -> Result<Json<TransactionsResponse>, AppError> {
     let page = query.page.unwrap_or(1);
     let limit = query.limit.unwrap_or(20);
-    let (txns, total) =
-        transaction_service::get_transactions(state.db.clone(), &query.wallet_id, page, limit)
-            .await?;
+    let (txns, total) = transaction_service::get_transactions(
+        state.db.clone(),
+        &query.wallet_id,
+        query.token_symbol.as_deref(),
+        page,
+        limit,
+    )
+    .await?;
 
     Ok(Json(TransactionsResponse {
         transactions: txns,
@@ -80,7 +81,6 @@ async fn get_transactions(
 #[derive(Debug, Serialize)]
 struct CheckAddressResponse {
     in_system: bool,
-    in_contacts: bool,
 }
 
 /// GET /transactions/check-address?address=xxx — 检查地址是否在系统内
@@ -94,10 +94,7 @@ async fn check_address(
     Query(query): Query<CheckAddressQuery>,
 ) -> Result<Json<CheckAddressResponse>, AppError> {
     let in_system = transaction_service::check_address(state.db.clone(), &query.address).await?;
-    Ok(Json(CheckAddressResponse {
-        in_system,
-        in_contacts: false,
-    }))
+    Ok(Json(CheckAddressResponse { in_system }))
 }
 
 /// GET /transactions/:id — 获取交易详情
