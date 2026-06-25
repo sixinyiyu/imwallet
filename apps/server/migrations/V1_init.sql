@@ -193,9 +193,9 @@ ON CONFLICT ("symbol", "chain") DO UPDATE SET
 INSERT INTO "fiat_currencies" ("id", "code", "name", "symbol", "rate", "decimals", "updated_at")
 VALUES
     (gen_random_uuid(), 'USD', 'US Dollar',    '$',  1.0,   2, NOW()),
-    (gen_random_uuid(), 'CNY', '人民币',        '¥',  7.25,  2, NOW()),
-    (gen_random_uuid(), 'EUR', 'Euro',          '€',  0.92,  2, NOW()),
-    (gen_random_uuid(), 'JPY', 'Japanese Yen',  '¥',  155.0, 0, NOW())
+    (gen_random_uuid(), 'CNY', 'CNY Yuan',       'CNY', 7.25,  2, NOW()),
+    (gen_random_uuid(), 'EUR', 'Euro',          'EUR', 0.92,  2, NOW()),
+    (gen_random_uuid(), 'JPY', 'Japanese Yen',  'JPY', 155.0, 0, NOW())
 ON CONFLICT ("code") DO UPDATE SET "rate" = EXCLUDED."rate", "updated_at" = NOW();
 
 INSERT INTO "app_configs" ("key", "value")
@@ -206,4 +206,3 @@ VALUES
     ('tx_restrict_wallet',      'true'),
     ('recharge_allowed_devices', '[]')
 ON CONFLICT ("key") DO NOTHING;
-
