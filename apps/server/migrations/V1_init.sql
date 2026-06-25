@@ -171,8 +171,8 @@ CREATE TABLE IF NOT EXISTS "app_logs" (
 INSERT INTO "chains" ("name", "display_name", "account_enable", "derivation_path")
 VALUES
     ('Tron',     'Tron (TRX)',     true, 'm/44''/195''/0''/0'),
-    ('Ethereum', 'Ethereum (ETH)', true, 'm/44''/60''/0''/0'),
-    ('Bitcoin',  'Bitcoin (BTC)',  true, 'm/44''/0''/0''/0')
+    ('Ethereum', 'Ethereum (ETH)', false, 'm/44''/60''/0''/0'),
+    ('Bitcoin',  'Bitcoin (BTC)',  false, 'm/44''/0''/0''/0')
 ON CONFLICT ("name") DO NOTHING;
 
 INSERT INTO "assets" ("id", "symbol", "name", "decimals", "chain", "type", "token_id", "is_default", "is_active", "is_tradable", "created_at", "updated_at")

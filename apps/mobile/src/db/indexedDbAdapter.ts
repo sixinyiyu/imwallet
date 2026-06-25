@@ -7,18 +7,20 @@ import type { DatabaseAdapter, SelectOptions, OrderByClause } from "./types";
  */
 
 const DB_NAME = "imwallet";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 /** 客户端所有表名 */
 const TABLES = [
   "wallets",
   "accounts",
   "addresses",
+  "notifications",
 ] as const;
 
 /** 布尔字段列表（需要 true/false ↔ 1/0 转换） */
 const BOOLEAN_FIELDS: Record<string, string[]> = {
   wallets: ["is_pinned"],
+  notifications: ["is_read"],
 };
 
 function isBooleanField(table: string, field: string): boolean {
@@ -129,6 +131,11 @@ export class IndexedDBAdapter implements DatabaseAdapter {
           if (db.objectStoreNames.contains("addresses")) {
             db.deleteObjectStore("addresses");
           }
+        }
+
+        // v4 → v5：添加 notifications object store
+        if (oldVersion < 5) {
+          didUpgrade = true;
         }
 
         // 创建所有 object store

@@ -15,6 +15,7 @@ pub async fn create_wallet_and_subscribe(
     rb: Arc<RBatis>,
     wallet_id: &str,
     source: &str,
+    alias: &str,
     device_id: &str,
 ) -> Result<Wallet, AppError> {
     let src = if source == "IMPORT" {
@@ -27,8 +28,8 @@ pub async fn create_wallet_and_subscribe(
     // 1. 创建钱包
     let inserted: Option<Wallet> = crate::db::query::tx_query_one(
         &tx,
-        "INSERT INTO wallets (id, source) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING RETURNING *",
-        vals![wallet_id, src],
+        "INSERT INTO wallets (id, alias, source) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING RETURNING *",
+        vals![wallet_id, alias, src],
     )
     .await?;
     let wallet = if let Some(w) = inserted {
@@ -76,9 +77,10 @@ pub async fn delete_wallet_with_subs(
     Ok(())
 }
 
-/// 同步地址 — INSERT ON CONFLICT 原子操作
-/// 并发下不会重复插入同一链上地址，已存在时返回已有记录
-pub async fn sync_address(
+/// 订阅链 — 创建/获取链上地址，并建立设备订阅。
+/// 新地址自动初始化该链默认代币余额（balance=0）；
+/// 已存在地址若缺少 assets_addresses 记录也会补初始化。
+pub async fn subscribe_chain(
     rb: Arc<RBatis>,
     chain: &str,
     address: &str,
@@ -96,19 +98,52 @@ pub async fn sync_address(
         vals![&id, chain, address],
     )
     .await?;
-    if let Some(wa) = inserted {
-        return Ok(wa);
-    }
-    // ON CONFLICT 触发，地址已存在
-    query_one(
-        &rb,
-        "SELECT * FROM wallets_addresses WHERE chain = $1 AND address = $2",
-        vals![chain, address],
-    )
-    .await?
-    .ok_or_else(|| AppError::Internal("地址同步失败".into()))
+
+    let wa = if let Some(w) = inserted {
+        // 新地址：初始化该链的默认代币余额（balance=0）
+        ensure_asset_balances(&rb, &w.id, chain).await?;
+        w
+    } else {
+        // ON CONFLICT 触发，地址已存在，检查是否缺少 assets_addresses 记录
+        let existing: WalletAddress = query_one(
+            &rb,
+            "SELECT * FROM wallets_addresses WHERE chain = $1 AND address = $2",
+            vals![chain, address],
+        )
+        .await?
+        .ok_or_else(|| AppError::Internal("地址同步失败".into()))?;
+        ensure_asset_balances(&rb, &existing.id, chain).await?;
+        existing
+    };
+
+    Ok(wa)
 }
 
+/// 确保地址在该链的 assets_addresses 中有默认代币余额记录。
+/// 已有记录的跳过，只补缺失的（balance=0）。
+async fn ensure_asset_balances(
+    rb: &Arc<RBatis>,
+    address_id: &str,
+    chain: &str,
+) -> Result<(), AppError> {
+    let assets: Vec<crate::models::Asset> = query(
+        rb,
+        "SELECT * FROM assets WHERE chain = $1 AND is_default = true",
+        vals![chain],
+    )
+    .await?;
+
+    for asset in assets {
+        let id = uuid::Uuid::new_v4().to_string();
+        exec(
+            rb,
+            "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance) VALUES ($1, $2, $3, $4, 0) ON CONFLICT (address_id, asset_id) DO NOTHING",
+            vals![&id, address_id, &asset.id, chain],
+        )
+        .await?;
+    }
+    Ok(())
+}
 pub async fn get_wallet_addresses(
     rb: Arc<RBatis>,
     wallet_id: &str,

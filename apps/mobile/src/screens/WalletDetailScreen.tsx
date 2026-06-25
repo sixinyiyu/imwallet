@@ -135,7 +135,12 @@ export default function WalletDetailScreen() {
     if (!walletId) return;
     try {
       const data = await walletService.getWalletDetail(walletId);
-      setDetail(data as Wallet);
+      // 合并数据：本地 name 优先（服务端 alias 可能为空），服务端补充余额等字段
+      const merged: Wallet = {
+        ...data,
+        name: walletFromStore?.name || data.name || "",
+      };
+      setDetail(merged);
     } catch {
       setDetail(walletFromStore || null);
     }

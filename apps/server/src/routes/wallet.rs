@@ -22,7 +22,7 @@ pub fn router() -> Router<AppState> {
         .route("/wallets/{id}/balance", get(get_wallet_balance))
         .route(
             "/wallets/{id}/addresses",
-            get(get_wallet_addresses).post(sync_address),
+            get(get_wallet_addresses).post(subscribe_chain),
         )
         .route(
             "/wallets/{id}/addresses/{address_id}",
@@ -157,6 +157,8 @@ pub struct CreateWalletRequest {
     pub wallet_id: String,
     #[serde(default)]
     pub source: String,
+    #[serde(default)]
+    pub alias: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -184,6 +186,7 @@ async fn create_wallet(
         state.db.clone(),
         &body.wallet_id,
         &body.source,
+        &body.alias,
         &device.device_id,
     )
     .await?;
@@ -283,14 +286,14 @@ async fn get_wallet_balance(
     }))
 }
 
-/// POST /wallets/:id/addresses — 同步地址到服务端
-async fn sync_address(
+/// POST /wallets/:id/addresses — 订阅链（创建/获取地址 + 设备订阅 + 初始化代币余额）
+async fn subscribe_chain(
     State(state): State<AppState>,
     Extension(device): Extension<DevicePayload>,
     Path(wallet_id): Path<String>,
     Json(body): Json<SyncAddressRequest>,
 ) -> Result<(axum::http::StatusCode, Json<AddressResponse>), AppError> {
-    let wa = wallet_service::sync_address(state.db.clone(), &body.chain, &body.address).await?;
+    let wa = wallet_service::subscribe_chain(state.db.clone(), &body.chain, &body.address).await?;
 
     // 创建订阅记录
     device_service::subscribe_wallet(

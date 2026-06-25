@@ -54,7 +54,7 @@ export const walletService = {
 
   /** 订阅钱包到当前设备 */
   async subscribeWallet(walletId: string): Promise<void> {
-    await api.post("/devices/wallets", { wallet_id: walletId });
+    await api.post("/devices/wallets", { walletId });
   },
 
   /** 取消订阅钱包 */

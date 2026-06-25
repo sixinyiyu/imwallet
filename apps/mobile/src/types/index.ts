@@ -1,10 +1,10 @@
 /** 服务端返回的精简设备信息 */
 export interface ServerDevice {
   id: number;
-  device_id: string;
+  deviceId: string;
   platform: string;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** 本地钱包主表 */
@@ -29,10 +29,10 @@ export interface SimpleWallet {
   name: string;
   source: string;
   type: string;
-  sort_order: number;
-  is_pinned: boolean;
+  sortOrder: number;
+  isPinned: boolean;
   avatar: string;
-  password_hint: string;
+  passwordHint: string;
   createdAt: string;
 }
 

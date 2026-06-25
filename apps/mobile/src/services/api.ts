@@ -28,6 +28,44 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+// ===== snake_case ↔ camelCase 自动转换 =====
+// Rust 后端使用 snake_case，前端使用 camelCase。
+// 在 API 边界自动转换，避免逐个手动改字段名。
+
+/** camelCase → snake_case */
+function toSnakeCase(str: string): string {
+  return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
+
+/** snake_case → camelCase */
+function toCamelCase(str: string): string {
+  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
+/** 递归转换对象的所有 key */
+function transformKeys(obj: any, transformer: (key: string) => string): any {
+  if (Array.isArray(obj)) return obj.map((item) => transformKeys(item, transformer));
+  if (obj !== null && typeof obj === "object") {
+    const result: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[transformer(key)] = transformKeys(value, transformer);
+    }
+    return result;
+  }
+  return obj;
+}
+
+// 请求拦截器：发送前 camelCase → snake_case（合并到签名拦截器中，确保先转换再签名）
+// 不单独注册，避免执行顺序问题导致签名不匹配
+
+// 响应拦截器：接收后 snake_case → camelCase
+api.interceptors.response.use((response) => {
+  if (response.data && typeof response.data === "object") {
+    response.data = transformKeys(response.data, toCamelCase);
+  }
+  return response;
+});
+
 // ===== 工具函数 =====
 
 function bytesToHex(bytes: Uint8Array): string {
@@ -133,8 +171,15 @@ export async function ensureDeviceRegistered(publicKeyHex: string): Promise<void
 // ===== 拦截器 =====
 
 api.interceptors.request.use(async (config) => {
-  // 设备密钥和注册已在 walletStore.loadLocalState 中显式初始化
-  // 拦截器只负责签名，不再隐式初始化设备
+  // 1. 先将请求 body/params 转为 snake_case（必须在签名之前）
+  if (config.data && typeof config.data === "object") {
+    config.data = transformKeys(config.data, toSnakeCase);
+  }
+  if (config.params && typeof config.params === "object") {
+    config.params = transformKeys(config.params, toSnakeCase);
+  }
+
+  // 2. 签名（基于已转换的 snake_case body）
   const publicKeyHex = await SecureStore.getItemAsync(DEVICE_PUBLIC_KEY);
   const privateKeyHex = await SecureStore.getItemAsync(DEVICE_PRIV_JWK);
   if (!publicKeyHex || !privateKeyHex) return config;

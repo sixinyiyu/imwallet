@@ -13,7 +13,7 @@ export const syncService = {
    * walletId 由客户端基于助记词确定性生成，相同助记词在不同设备生成相同 ID。
    * 返回服务端创建的 wallet 记录。
    */
-  async registerWallet(source: "CREATE" | "IMPORT", walletId: string, alias: string): Promise<{ id: string; source: string; createdAt: string; updatedAt: string }> {
+  async registerWallet(source: "CREATE" | "IMPORT", walletId: string, alias: string): Promise<{ id: string; alias: string; source: string; createdAt: string; updatedAt: string }> {
     const { data } = await api.post("/wallets", { source, walletId, alias });
     return data;
   },

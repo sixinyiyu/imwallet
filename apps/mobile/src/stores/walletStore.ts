@@ -35,10 +35,10 @@ function localToSimple(w: LocalWallet): SimpleWallet {
     name: w.name,
     source: w.source,
     type: w.type,
-    sort_order: w.sort_order,
-    is_pinned: w.is_pinned,
+    sortOrder: w.sort_order,
+    isPinned: w.is_pinned,
     avatar: w.avatar,
-    password_hint: w.password_hint,
+    passwordHint: w.password_hint,
     createdAt: w.created_at,
   };
 }
