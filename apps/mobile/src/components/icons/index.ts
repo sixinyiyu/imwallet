@@ -25,3 +25,4 @@ export { default as NoScreenshotIcon } from "./NoScreenshotIcon";
 export { default as WarningIcon } from "./WarningIcon";
 export { default as EthIcon } from "./EthIcon";
 export { default as BtcIcon } from "./BtcIcon";
+export { default as AddContactIcon } from "./AddContactIcon";

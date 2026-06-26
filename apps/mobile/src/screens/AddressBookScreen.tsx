@@ -12,7 +12,7 @@ import {
 import { localAddressService } from "../services/localAddressService";
 import { useAlert } from "../hooks/useAlert";
 import { detectNetwork } from "../utils/address";
-import { TronIcon, EthIcon, BtcIcon, ContactIcon, CopyIcon, PlusCircleIcon } from "../components/icons";
+import { TronIcon, EthIcon, BtcIcon, ContactIcon, CopyIcon, AddContactIcon } from "../components/icons";
 import { saveLogToLocal } from "../services/logService";
 import { AddressBookSkeleton } from "../components/Skeleton";
 import type { AddressEntry } from "../types";
@@ -82,7 +82,7 @@ export default function AddressBookScreen() {
           style={{ marginRight: 16 }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <PlusCircleIcon size={22} color="#287220" />
+          <AddContactIcon size={22} color="#287220" />
         </TouchableOpacity>
       ),
     });
