@@ -19,6 +19,7 @@ import AddressBookScreen from "../screens/AddressBookScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import ServiceConfigScreen from "../screens/ServiceConfigScreen";
 import ConfigManageScreen from "../screens/ConfigManageScreen";
+import DeviceManageScreen from "../screens/DeviceManageScreen";
 import RechargeScreen from "../screens/RechargeScreen";
 import TokenManageScreen from "../screens/TokenManageScreen";
 import SecurityScreen from "../screens/SecurityScreen";
@@ -158,6 +159,11 @@ export function RootStack() {
         name="TokenManage"
         component={TokenManageScreen}
         options={{ ...CENTERED_HEADER, title: "代币管理" }}
+      />
+      <Stack.Screen
+        name="DeviceManage"
+        component={DeviceManageScreen}
+        options={{ ...CENTERED_HEADER, title: "设备管理" }}
       />
       <Stack.Screen
         name="Security"

@@ -14,14 +14,12 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { configService, type FeeConfig } from "../services/configService";
-import { adminService, type DeviceInfo, type DeviceTransaction, type DeviceRecharge } from "../services/adminService";
 import { EditIcon, ChevronRightIcon } from "../components/icons";
 import { GreenToggle } from "../components/GreenToggle";
 import { ConfigManageSkeleton } from "../components/Skeleton";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
-import { formatTime } from "../utils/date";
 
 export default function ConfigManageScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -46,18 +44,6 @@ export default function ConfigManageScreen() {
   // Toast
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
-
-  // 设备管理
-  const [adminPwd, setAdminPwd] = useState("");
-  const [adminVerified, setAdminVerified] = useState(false);
-  const [devices, setDevices] = useState<DeviceInfo[]>([]);
-  const [devicesLoading, setDevicesLoading] = useState(false);
-  const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
-  const [deviceTransactions, setDeviceTransactions] = useState<DeviceTransaction[]>([]);
-  const [deviceRecharges, setDeviceRecharges] = useState<DeviceRecharge[]>([]);
-  const [deviceDataLoading, setDeviceDataLoading] = useState(false);
-  const [deviceDataTab, setDeviceDataTab] = useState<"transactions" | "recharges">("transactions");
-  const [deviceDataOffset, setDeviceDataOffset] = useState(0);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -132,7 +118,6 @@ export default function ConfigManageScreen() {
   // ── 交易限制开关 ──
 
   const handleToggleTxRestrict = (value: boolean) => {
-    // 弹出密码抽屉，记录待切换的目标值
     setPendingToggleValue(value);
     setTogglePwdInput("");
     setTogglePwdError(null);
@@ -172,63 +157,6 @@ export default function ConfigManageScreen() {
     setTogglePwdError(null);
     setPendingToggleValue(null);
   };
-
-  // ── 设备管理 ──
-
-  const handleVerifyAdmin = async () => {
-    if (!adminPwd.trim()) return;
-    setDevicesLoading(true);
-    try {
-      const list = await adminService.listDevices(adminPwd.trim());
-      setDevices(list);
-      setAdminVerified(true);
-    } catch {
-      showToast("密码验证失败");
-    }
-    setDevicesLoading(false);
-  };
-
-  const handleSelectDevice = async (deviceId: string) => {
-    if (selectedDevice === deviceId) {
-      setSelectedDevice(null);
-      return;
-    }
-    setSelectedDevice(deviceId);
-    setDeviceDataOffset(0);
-    setDeviceDataTab("transactions");
-    setDeviceDataLoading(true);
-    try {
-      const [txns, recharges] = await Promise.all([
-        adminService.getDeviceTransactions(deviceId, adminPwd, 0),
-        adminService.getDeviceRecharges(deviceId, adminPwd, 0),
-      ]);
-      setDeviceTransactions(txns);
-      setDeviceRecharges(recharges);
-    } catch {
-      showToast("加载设备数据失败");
-    }
-    setDeviceDataLoading(false);
-  };
-
-  const handleLoadMoreDeviceData = async () => {
-    if (!selectedDevice) return;
-    const nextOffset = deviceDataOffset + 20;
-    setDeviceDataOffset(nextOffset);
-    setDeviceDataLoading(true);
-    try {
-      if (deviceDataTab === "transactions") {
-        const more = await adminService.getDeviceTransactions(selectedDevice, adminPwd, nextOffset);
-        setDeviceTransactions((prev) => [...prev, ...more]);
-      } else {
-        const more = await adminService.getDeviceRecharges(selectedDevice, adminPwd, nextOffset);
-        setDeviceRecharges((prev) => [...prev, ...more]);
-      }
-    } catch {
-      showToast("加载更多失败");
-    }
-    setDeviceDataLoading(false);
-  };
-  const shortId = (id: string) => id.length > 16 ? `${id.slice(0, 8)}...${id.slice(-8)}` : id;
 
   if (loading) {
     return (
@@ -273,7 +201,7 @@ export default function ConfigManageScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.infoLabel}>交易限制钱包账户</Text>
           </View>
-            <GreenToggle value={txRestrictWallet} onValueChange={handleToggleTxRestrict} />
+          <GreenToggle value={txRestrictWallet} onValueChange={handleToggleTxRestrict} />
         </View>
         <View style={styles.infoDivider} />
         <Text style={styles.cardHint}>
@@ -307,136 +235,21 @@ export default function ConfigManageScreen() {
         </Text>
       </TouchableOpacity>
 
-      {/* ── 设备管理区块 ── */}
-      <View style={[styles.infoCard, { marginTop: 12 }]}>
-        <Text style={styles.sectionTitle}>设备管理</Text>
-
-        {!adminVerified ? (
-          <View style={styles.adminPwdRow}>
-            <TextInput
-              style={styles.adminPwdInput}
-              value={adminPwd}
-              onChangeText={setAdminPwd}
-              placeholder="输入管理密码"
-              placeholderTextColor="#C8C9CC"
-              secureTextEntry
-            />
-            <TouchableOpacity
-              style={[styles.adminPwdBtn, (!adminPwd.trim() || devicesLoading) && styles.adminPwdBtnDisabled]}
-              onPress={handleVerifyAdmin}
-              disabled={!adminPwd.trim() || devicesLoading}
-              activeOpacity={0.7}
-            >
-              {devicesLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.adminPwdBtnText}>验证</Text>}
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <>
-            {devices.length === 0 ? (
-              <Text style={styles.emptyText}>暂无设备</Text>
-            ) : (
-              devices.map((d) => (
-                <View key={d.id}>
-                  <TouchableOpacity
-                    style={styles.deviceRow}
-                    onPress={() => handleSelectDevice(d.id)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.deviceInfo}>
-                      <View style={styles.deviceNameRow}>
-                        <Text style={styles.deviceId}>{shortId(d.id)}</Text>
-                        <View style={[styles.onlineBadge, d.online ? styles.onlineBadgeOn : styles.onlineBadgeOff]}>
-                          <Text style={[styles.onlineBadgeText, d.online ? styles.onlineBadgeTextOn : styles.onlineBadgeTextOff]}>
-                            {d.online ? "在线" : "离线"}
-                          </Text>
-                        </View>
-                      </View>
-                      <Text style={styles.deviceMeta}>
-                        {d.platform} · {d.walletCount} 个钱包 · {d.lastActiveAt ? formatTime(d.lastActiveAt) : "从未活跃"}
-                      </Text>
-                    </View>
-                    <ChevronRightIcon size={16} color="#8899B8" />
-                  </TouchableOpacity>
-
-                  {/* 展开的设备数据 */}
-                  {selectedDevice === d.id && (
-                    <View style={styles.deviceDataPanel}>
-                      {deviceDataLoading ? (
-                        <ActivityIndicator size="small" color="#287220" style={{ marginVertical: 12 }} />
-                      ) : (
-                        <>
-                          {/* Tab 切换 */}
-                          <View style={styles.dataTabRow}>
-                            <TouchableOpacity
-                              style={[styles.dataTab, deviceDataTab === "transactions" && styles.dataTabActive]}
-                              onPress={() => setDeviceDataTab("transactions")}
-                            >
-                              <Text style={[styles.dataTabText, deviceDataTab === "transactions" && styles.dataTabTextActive]}>交易</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={[styles.dataTab, deviceDataTab === "recharges" && styles.dataTabActive]}
-                              onPress={() => setDeviceDataTab("recharges")}
-                            >
-                              <Text style={[styles.dataTabText, deviceDataTab === "recharges" && styles.dataTabTextActive]}>充值</Text>
-                            </TouchableOpacity>
-                          </View>
-
-                          {deviceDataTab === "transactions" ? (
-                            deviceTransactions.length === 0 ? (
-                              <Text style={styles.emptyText}>暂无交易记录</Text>
-                            ) : (
-                              deviceTransactions.map((t) => (
-                                <View key={t.id} style={styles.dataItem}>
-                                  <View style={styles.dataItemRow}>
-                                    <Text style={styles.dataItemSymbol}>{t.tokenSymbol}</Text>
-                                    <Text style={styles.dataItemAmount}>{t.amount}</Text>
-                                  </View>
-                                  <Text style={styles.dataItemMeta}>
-                                    {t.status} · {formatTime(t.createdAt)}
-                                  </Text>
-                                </View>
-                              ))
-                            )
-                          ) : (
-                            deviceRecharges.length === 0 ? (
-                              <Text style={styles.emptyText}>暂无充值记录</Text>
-                            ) : (
-                              deviceRecharges.map((r) => (
-                                <View key={r.id} style={styles.dataItem}>
-                                  <View style={styles.dataItemRow}>
-                                    <Text style={styles.dataItemSymbol}>{r.tokenSymbol}</Text>
-                                    <Text style={styles.dataItemAmount}>{r.amount}</Text>
-                                  </View>
-                                  <Text style={styles.dataItemMeta}>
-                                    {r.walletAlias} · {formatTime(r.createdAt)}
-                                  </Text>
-                                </View>
-                              ))
-                            )
-                          )}
-                          {/* 加载更多 */}
-                          <TouchableOpacity
-                            style={styles.loadMoreBtn}
-                            onPress={handleLoadMoreDeviceData}
-                            disabled={deviceDataLoading}
-                            activeOpacity={0.7}
-                          >
-                            {deviceDataLoading ? (
-                              <ActivityIndicator size="small" color="#287220" />
-                            ) : (
-                              <Text style={styles.loadMoreBtnText}>加载更多</Text>
-                            )}
-                          </TouchableOpacity>
-                        </>
-                      )}
-                    </View>
-                  )}
-                </View>
-              ))
-            )}
-          </>
-        )}
-      </View>
+      {/* 设备管理入口 */}
+      <TouchableOpacity
+        style={[styles.infoCard, { marginTop: 12 }]}
+        onPress={() => navigation.navigate("DeviceManage")}
+        activeOpacity={0.7}
+      >
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>设备管理</Text>
+          <ChevronRightIcon size={18} color="#8899B8" />
+        </View>
+        <View style={styles.infoDivider} />
+        <Text style={styles.cardHint}>
+          可以查看具体活跃情况以及钱包的设备信息包含充值，交易等数据。
+        </Text>
+      </TouchableOpacity>
 
       {/* Toast */}
       {toastVisible && (
@@ -582,52 +395,6 @@ const styles = StyleSheet.create({
   rowIcon: { padding: 4 },
   infoDivider: { height: 1, backgroundColor: "#F3F4F6" },
   cardHint: { fontSize: 12, color: "#9CA3AF", marginTop: 10, lineHeight: 18 },
-  // ── 设备管理 ──
-  sectionTitle: { fontSize: 15, fontWeight: "600", color: "#374151", marginBottom: 12 },
-  adminPwdRow: { flexDirection: "row", gap: 8 },
-  adminPwdInput: {
-    flex: 1, borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 10,
-    padding: 12, fontSize: 15, color: "#1F2937",
-  },
-  adminPwdBtn: {
-    backgroundColor: "#287220", borderRadius: 10, padding: 12,
-    alignItems: "center", justifyContent: "center", minWidth: 64,
-  },
-  adminPwdBtnDisabled: { backgroundColor: "#A5D6A7" },
-  adminPwdBtnText: { color: "#fff", fontWeight: "600", fontSize: 15 },
-  deviceRow: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
-  },
-  deviceInfo: { flex: 1 },
-  deviceNameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  deviceId: { fontSize: 14, fontWeight: "500", color: "#1F2937" },
-  onlineBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  onlineBadgeOn: { backgroundColor: "#E8F5E9" },
-  onlineBadgeOff: { backgroundColor: "#F3F4F6" },
-  onlineBadgeText: { fontSize: 11, fontWeight: "500" },
-  onlineBadgeTextOn: { color: "#287220" },
-  onlineBadgeTextOff: { color: "#9CA3AF" },
-  deviceMeta: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
-  deviceDataPanel: {
-    backgroundColor: "#F9FAFB", borderRadius: 8, padding: 12, marginTop: 4, marginBottom: 8,
-  },
-  dataTabRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
-  dataTab: {
-    paddingHorizontal: 16, paddingVertical: 6, borderRadius: 6,
-    backgroundColor: "#F3F4F6",
-  },
-  dataTabActive: { backgroundColor: "#287220" },
-  dataTabText: { fontSize: 13, color: "#6B7280", fontWeight: "500" },
-  dataTabTextActive: { color: "#FFFFFF" },
-  dataItem: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
-  dataItemRow: { flexDirection: "row", justifyContent: "space-between" },
-  dataItemSymbol: { fontSize: 14, fontWeight: "500", color: "#1F2937" },
-  dataItemAmount: { fontSize: 14, color: "#1F2937" },
-  dataItemMeta: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
-  emptyText: { fontSize: 14, color: "#9CA3AF", textAlign: "center", paddingVertical: 12 },
-  loadMoreBtn: { paddingVertical: 10, alignItems: "center" },
-  loadMoreBtnText: { fontSize: 13, color: "#287220", fontWeight: "500" },
   // Toast
   toastWrap: { position: "absolute", bottom: 80, left: 0, right: 0, alignItems: "center" },
   toast: { backgroundColor: "rgba(0,0,0,0.75)", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
