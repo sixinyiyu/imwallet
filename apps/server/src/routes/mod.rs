@@ -1,6 +1,7 @@
 //! 路由层 — API 基路径 /api/v1
 
 pub mod account;
+pub mod admin;
 pub mod asset;
 pub mod config;
 pub mod device;
@@ -56,6 +57,7 @@ pub async fn build_routes(db: Arc<rbatis::RBatis>, config: AppConfig) -> anyhow:
         .merge(config::router())
         .merge(notification::router())
         .merge(recharge::router())
+        .merge(admin::router())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             crate::middleware::device_auth::device_auth,

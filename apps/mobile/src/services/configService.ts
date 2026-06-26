@@ -41,12 +41,13 @@ export const configService = {
   },
 
   /**
-   * 通用更新字典配置（调用后端 PUT /config/update）
+   * 通用更新字典配置（调用后端 PUT /config/update，需管理密码验证）
    * @param key 配置键名，如 fee_rate
    * @param value 配置值
+   * @param password 管理密码
    */
-  async updateConfig(key: string, value: string): Promise<{ key: string; value: string }> {
-    const { data } = await api.put("/config/update", { key, value });
+  async updateConfig(key: string, value: string, password: string): Promise<{ key: string; value: string }> {
+    const { data } = await api.put("/config/update", { key, value, password });
     return data;
   },
 

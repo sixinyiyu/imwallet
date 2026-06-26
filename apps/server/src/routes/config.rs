@@ -84,6 +84,7 @@ async fn verify_password(
 pub struct UpdateConfigRequest {
     pub key: String,
     pub value: String,
+    pub password: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -92,11 +93,16 @@ struct UpdateConfigResponse {
     value: String,
 }
 
-/// PUT /config/update — 更新配置项
+/// PUT /config/update — 更新配置项（需密码验证）
 async fn update_config(
     State(state): State<AppState>,
     Json(body): Json<UpdateConfigRequest>,
 ) -> Result<Json<UpdateConfigResponse>, AppError> {
+    // 先验证管理密码
+    let verified = config_service::verify_service_password_sync(&body.password, &state.config);
+    if !verified {
+        return Err(AppError::Forbidden("管理密码验证失败".into()));
+    }
     let config = config_service::update_config(state.db.clone(), &body.key, &body.value).await?;
     Ok(Json(UpdateConfigResponse {
         key: config.key,
