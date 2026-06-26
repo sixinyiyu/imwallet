@@ -12,11 +12,14 @@ import {
 import { localAddressService } from "../services/localAddressService";
 import { useAlert } from "../hooks/useAlert";
 import { detectNetwork } from "../utils/address";
-import { TronIcon, EthIcon, BtcIcon, ContactIcon, CopyIcon } from "../components/icons";
+import { TronIcon, EthIcon, BtcIcon, ContactIcon, CopyIcon, PlusCircleIcon } from "../components/icons";
 import { saveLogToLocal } from "../services/logService";
 import { AddressBookSkeleton } from "../components/Skeleton";
 import type { AddressEntry } from "../types";
 import EmptyState from "../components/EmptyState";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../types/navigation";
 
 /** 联系人表单模式：新增 / 编辑 */
 type FormMode = "add" | "edit";
@@ -33,6 +36,7 @@ function NetworkIcon({ network, size = 20 }: { network: string; size?: number })
 }
 
 export default function AddressBookScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const alert = useAlert();
   const [contacts, setContacts] = useState<AddressEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -68,6 +72,21 @@ export default function AddressBookScreen() {
   useEffect(() => {
     loadContacts();
   }, []);
+
+  // 导航栏右上角：添加联系人按钮
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={openAddForm}
+          style={{ marginRight: 16 }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <PlusCircleIcon size={22} color="#287220" />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
 
   const loadContacts = async () => {
     setLoading(true);
@@ -164,11 +183,6 @@ export default function AddressBookScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 添加按钮 */}
-      <TouchableOpacity style={styles.addButton} onPress={openAddForm}>
-        <Text style={styles.addButtonText}>+ 添加联系人</Text>
-      </TouchableOpacity>
-
       {/* 联系人列表 */}
       <FlatList
         data={contacts}
@@ -381,14 +395,6 @@ export default function AddressBookScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F9FAFB", padding: 16 },
-  addButton: {
-    backgroundColor: "#287220",
-    borderRadius: 10,
-    padding: 14,
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  addButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
   centerLoading: {
     flex: 1,
     alignItems: "center",
