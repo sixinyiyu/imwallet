@@ -99,7 +99,7 @@ async fn update_config(
     Json(body): Json<UpdateConfigRequest>,
 ) -> Result<Json<UpdateConfigResponse>, AppError> {
     // 先验证管理密码
-    let verified = config_service::verify_service_password_sync(&body.password, &state.config);
+    let verified = config_service::verify_service_password(&body.password, &state.config).await?;
     if !verified {
         return Err(AppError::Forbidden("管理密码验证失败".into()));
     }

@@ -31,8 +31,8 @@ pub struct AdminAuth {
     pub password: String,
 }
 
-fn verify_admin(state: &AppState, password: &str) -> Result<(), AppError> {
-    let verified = config_service::verify_service_password_sync(password, &state.config);
+async fn verify_admin(state: &AppState, password: &str) -> Result<(), AppError> {
+    let verified = config_service::verify_service_password(password, &state.config).await?;
     if verified {
         Ok(())
     } else {
@@ -57,7 +57,7 @@ async fn list_devices(
     State(state): State<AppState>,
     Json(auth): Json<AdminAuth>,
 ) -> Result<Json<Vec<DeviceListItem>>, AppError> {
-    verify_admin(&state, &auth.password)?;
+    verify_admin(&state, &auth.password).await?;
 
     #[derive(serde::Deserialize)]
     struct Row {
@@ -124,7 +124,7 @@ async fn get_device_detail(
     Path(device_id): Path<String>,
     Json(auth): Json<AdminAuth>,
 ) -> Result<Json<DeviceDetailResponse>, AppError> {
-    verify_admin(&state, &auth.password)?;
+    verify_admin(&state, &auth.password).await?;
 
     #[derive(serde::Deserialize)]
     struct DeviceRow {
@@ -193,7 +193,7 @@ async fn get_device_transactions(
     Path(device_id): Path<String>,
     Json(auth): Json<AdminAuth>,
 ) -> Result<Json<Vec<crate::models::Transaction>>, AppError> {
-    verify_admin(&state, &auth.password)?;
+    verify_admin(&state, &auth.password).await?;
 
     let rows: Vec<crate::models::Transaction> = query(
         &state.db,
@@ -213,7 +213,7 @@ async fn get_device_recharges(
     Path(device_id): Path<String>,
     Json(auth): Json<AdminAuth>,
 ) -> Result<Json<Vec<crate::models::Recharge>>, AppError> {
-    verify_admin(&state, &auth.password)?;
+    verify_admin(&state, &auth.password).await?;
 
     let rows: Vec<crate::models::Recharge> = query(
         &state.db,

@@ -67,15 +67,6 @@ pub async fn verify_service_password(
     Ok(password == e)
 }
 
-/// 同步版本：管理路由密码验证（无需 async）
-pub fn verify_service_password_sync(password: &str, cfg: &RuntimeConfig) -> bool {
-    let e = &cfg.server_pwd;
-    if e.is_empty() {
-        return false;
-    }
-    password == e
-}
-
 /// Sync config.toml values to database app_configs table.
 /// Overwrites seed data defaults (e.g. CHANGE_ME) with actual config values.
 /// Uses UPSERT (ON CONFLICT DO UPDATE) so it's idempotent.
