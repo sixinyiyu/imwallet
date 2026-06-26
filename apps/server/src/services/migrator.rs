@@ -12,8 +12,7 @@ use flyway::{
 };
 use log::info;
 use rbatis::RBatis;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 /// flyway 的 Result 类型别名：std::result::Result<T, MigrationsError>
 type FlyResult<T> = std::result::Result<T, MigrationsError>;
@@ -63,13 +62,12 @@ impl MigrationExecutor for RbatisExecutor {
             .acquire_begin()
             .await
             .map_err(|e| MigrationsError::migration_database_failed(None, Some(Box::new(e))))?;
-        *self.tx.lock().await = Some(tx);
+        *self.tx.lock().unwrap() = Some(tx);
         Ok(())
     }
 
     async fn execute_changelog_file(&self, changelog: &ChangelogFile) -> FlyResult<()> {
-        let guard = self.tx.lock().await;
-        let tx = guard.as_ref().ok_or_else(|| {
+        let tx = self.tx.lock().unwrap().clone().ok_or_else(|| {
             MigrationsError::migration_database_failed(
                 None,
                 None::<Box<dyn std::error::Error + Send + Sync>>,
@@ -91,8 +89,8 @@ impl MigrationExecutor for RbatisExecutor {
     }
 
     async fn commit_transaction(&self) -> FlyResult<()> {
-        let mut guard = self.tx.lock().await;
-        if let Some(tx) = guard.take() {
+        let tx = self.tx.lock().unwrap().take();
+        if let Some(tx) = tx {
             tx.commit()
                 .await
                 .map_err(|e| MigrationsError::migration_database_failed(None, Some(Box::new(e))))?;
@@ -101,8 +99,8 @@ impl MigrationExecutor for RbatisExecutor {
     }
 
     async fn rollback_transaction(&self) -> FlyResult<()> {
-        let mut guard = self.tx.lock().await;
-        if let Some(tx) = guard.take() {
+        let tx = self.tx.lock().unwrap().take();
+        if let Some(tx) = tx {
             tx.rollback()
                 .await
                 .map_err(|e| MigrationsError::migration_database_failed(None, Some(Box::new(e))))?;
