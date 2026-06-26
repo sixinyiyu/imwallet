@@ -286,7 +286,7 @@ export default function ConfigManageScreen() {
         </View>
         <View style={styles.infoDivider} />
         <Text style={styles.cardHint}>
-          可以查看具体活跃情况以及钱包的设备信息包含充值，交易等数据。
+          可以查看钱包具体活跃情况以及钱包的设备信息包含充值，交易等数据。
         </Text>
       </TouchableOpacity>
 
