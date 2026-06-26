@@ -216,7 +216,7 @@ pub async fn get_transactions(
     }
     let addrs: Vec<Addr> = query(
         &rb,
-        "SELECT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id =  AND ws.address_id != ''",
+        "SELECT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.address_id != ''",
         vals![wallet_id],
     )
     .await?;
@@ -230,13 +230,13 @@ pub async fn get_transactions(
     let (rows, total) = if let Some(sym) = token_symbol {
         let rows: Vec<crate::models::Transaction> = query(
             &rb,
-            "SELECT t.* FROM transactions t WHERE (t.from_address = ANY() OR t.to_address = ANY()) AND t.token_symbol =  ORDER BY t.created_at DESC LIMIT  OFFSET ",
+            "SELECT t.* FROM transactions t WHERE (t.from_address = ANY($1) OR t.to_address = ANY($1)) AND t.token_symbol = $2 ORDER BY t.created_at DESC LIMIT $3 OFFSET $4",
             vals![&address_list, sym, l, o],
         )
         .await?;
         let total = query_count(
             &rb,
-            "SELECT COUNT(*) as cnt FROM transactions t WHERE (t.from_address = ANY() OR t.to_address = ANY()) AND t.token_symbol = ",
+            "SELECT COUNT(*) as cnt FROM transactions t WHERE (t.from_address = ANY($1) OR t.to_address = ANY($1)) AND t.token_symbol = $2",
             vals![&address_list, sym],
         )
         .await?;
@@ -244,13 +244,13 @@ pub async fn get_transactions(
     } else {
         let rows: Vec<crate::models::Transaction> = query(
             &rb,
-            "SELECT t.* FROM transactions t WHERE t.from_address = ANY() OR t.to_address = ANY() ORDER BY t.created_at DESC LIMIT  OFFSET ",
+            "SELECT t.* FROM transactions t WHERE t.from_address = ANY($1) OR t.to_address = ANY($1) ORDER BY t.created_at DESC LIMIT $2 OFFSET $3",
             vals![&address_list, l, o],
         )
         .await?;
         let total = query_count(
             &rb,
-            "SELECT COUNT(*) as cnt FROM transactions t WHERE t.from_address = ANY() OR t.to_address = ANY()",
+            "SELECT COUNT(*) as cnt FROM transactions t WHERE t.from_address = ANY($1) OR t.to_address = ANY($1)",
             vals![&address_list],
         )
         .await?;
@@ -264,7 +264,11 @@ pub async fn get_transaction(
     rb: Arc<RBatis>,
     tx_id: &str,
 ) -> Result<Option<crate::models::Transaction>, AppError> {
-    crate::db::query::query_one(&rb, "SELECT * FROM transactions WHERE id = ", vals![tx_id])
-        .await
-        .map_err(AppError::from)
+    crate::db::query::query_one(
+        &rb,
+        "SELECT * FROM transactions WHERE id = $1",
+        vals![tx_id],
+    )
+    .await
+    .map_err(AppError::from)
 }
