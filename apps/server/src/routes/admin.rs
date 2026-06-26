@@ -17,11 +17,12 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/admin/devices", post(list_devices))
         .route("/admin/devices/{id}", post(get_device_detail))
+        .route("/admin/wallets", post(list_wallets))
         .route(
-            "/admin/devices/{id}/transactions",
-            post(get_device_transactions),
+            "/admin/wallets/{id}/transactions",
+            post(get_wallet_transactions),
         )
-        .route("/admin/devices/{id}/recharges", post(get_device_recharges))
+        .route("/admin/wallets/{id}/recharges", post(get_wallet_recharges))
 }
 
 // ── 密码验证 ──
@@ -185,40 +186,160 @@ async fn get_device_detail(
     }))
 }
 
-// ── 设备交易记录 ──
+// ── 钱包列表（管理视角） ──
 
-/// POST /admin/devices/:id/transactions — 该设备的最近交易（需 device_auth + 密码验证）
-async fn get_device_transactions(
+#[derive(Debug, Serialize, Clone)]
+struct DeviceBrief {
+    id: String,
+    platform: String,
+    online: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct WalletAdminItem {
+    id: String,
+    alias: String,
+    source: String,
+    chains: Vec<String>,
+    device_count: i64,
+    devices: Vec<DeviceBrief>,
+    created_at: Option<DateTime>,
+}
+
+/// POST /admin/wallets — 钱包列表（含关联设备，需 device_auth + 密码验证）
+async fn list_wallets(
     State(state): State<AppState>,
-    Path(device_id): Path<String>,
+    Json(auth): Json<AdminAuth>,
+) -> Result<Json<Vec<WalletAdminItem>>, AppError> {
+    verify_admin(&state, &auth.password).await?;
+
+    // 1. 查所有钱包
+    #[derive(serde::Deserialize)]
+    struct WalletRow {
+        id: String,
+        alias: String,
+        source: String,
+        created_at: Option<DateTime>,
+    }
+
+    let wallets: Vec<WalletRow> = query(
+        &state.db,
+        "SELECT id, alias, source, created_at FROM wallets ORDER BY created_at DESC",
+        vals![],
+    )
+    .await?;
+
+    // 2. 查每个钱包的 chain 列表
+    #[derive(serde::Deserialize)]
+    struct ChainRow {
+        wallet_id: String,
+        chain: String,
+    }
+
+    let chains: Vec<ChainRow> = query(
+        &state.db,
+        "SELECT ws.wallet_id, wa.chain FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.address_id != '' GROUP BY ws.wallet_id, wa.chain ORDER BY ws.wallet_id, wa.chain",
+        vals![],
+    )
+    .await?;
+
+    // 3. 查每个钱包关联的设备
+    #[derive(serde::Deserialize)]
+    struct DeviceSubRow {
+        wallet_id: String,
+        device_id: String,
+        platform: String,
+        last_active_at: Option<DateTime>,
+    }
+
+    let subs: Vec<DeviceSubRow> = query(
+        &state.db,
+        "SELECT ws.wallet_id, d.id as device_id, d.platform, d.last_active_at FROM wallet_subscriptions ws JOIN devices d ON d.id = ws.device_id WHERE ws.address_id != '' GROUP BY ws.wallet_id, d.id, d.platform, d.last_active_at ORDER BY ws.wallet_id, d.last_active_at DESC NULLS LAST",
+        vals![],
+    )
+    .await?;
+
+    let now_ts = chrono::Utc::now().timestamp();
+
+    // 组装
+    let chain_map: std::collections::HashMap<String, Vec<String>> =
+        chains
+            .into_iter()
+            .fold(std::collections::HashMap::new(), |mut m, r| {
+                m.entry(r.wallet_id).or_default().push(r.chain);
+                m
+            });
+
+    let device_map: std::collections::HashMap<String, Vec<DeviceBrief>> =
+        subs.into_iter()
+            .fold(std::collections::HashMap::new(), |mut m, r| {
+                let online = r
+                    .last_active_at
+                    .clone()
+                    .is_some_and(|la| (now_ts - la.unix_timestamp()).abs() <= 300);
+                m.entry(r.wallet_id).or_default().push(DeviceBrief {
+                    id: r.device_id,
+                    platform: r.platform,
+                    online,
+                });
+                m
+            });
+
+    let items: Vec<WalletAdminItem> = wallets
+        .into_iter()
+        .map(|w| {
+            let wid = w.id.clone();
+            let devices = device_map.get(&wid).cloned().unwrap_or_default();
+            let device_count = devices.len() as i64;
+            WalletAdminItem {
+                id: w.id,
+                alias: w.alias,
+                source: w.source,
+                chains: chain_map.get(&wid).cloned().unwrap_or_default(),
+                device_count,
+                devices,
+                created_at: w.created_at,
+            }
+        })
+        .collect();
+
+    Ok(Json(items))
+}
+
+// ── 钱包交易记录 ──
+
+/// POST /admin/wallets/:id/transactions — 该钱包的最近交易（需 device_auth + 密码验证）
+async fn get_wallet_transactions(
+    State(state): State<AppState>,
+    Path(wallet_id): Path<String>,
     Json(auth): Json<AdminAuth>,
 ) -> Result<Json<Vec<crate::models::Transaction>>, AppError> {
     verify_admin(&state, &auth.password).await?;
 
     let rows: Vec<crate::models::Transaction> = query(
         &state.db,
-        "WITH device_addr AS (SELECT DISTINCT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.device_id = $1 AND ws.address_id != '') SELECT t.* FROM transactions t WHERE t.from_address IN (SELECT address FROM device_addr) OR t.to_address IN (SELECT address FROM device_addr) ORDER BY t.created_at DESC LIMIT 20",
-        vals![&device_id],
+        "WITH wallet_addr AS (SELECT DISTINCT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.address_id != '') SELECT t.* FROM transactions t WHERE t.from_address IN (SELECT address FROM wallet_addr) OR t.to_address IN (SELECT address FROM wallet_addr) ORDER BY t.created_at DESC LIMIT 20",
+        vals![&wallet_id],
     )
     .await?;
 
     Ok(Json(rows))
 }
 
-// ── 设备充值记录 ──
+// ── 钱包充值记录 ──
 
-/// POST /admin/devices/:id/recharges — 该设备的最近充值记录（需 device_auth + 密码验证）
-async fn get_device_recharges(
+/// POST /admin/wallets/:id/recharges — 该钱包的最近充值记录（需 device_auth + 密码验证）
+async fn get_wallet_recharges(
     State(state): State<AppState>,
-    Path(device_id): Path<String>,
+    Path(wallet_id): Path<String>,
     Json(auth): Json<AdminAuth>,
 ) -> Result<Json<Vec<crate::models::Recharge>>, AppError> {
     verify_admin(&state, &auth.password).await?;
 
     let rows: Vec<crate::models::Recharge> = query(
         &state.db,
-        "SELECT * FROM recharges WHERE device_id = $1 ORDER BY created_at DESC LIMIT 20",
-        vals![&device_id],
+        "SELECT * FROM recharges WHERE wallet_id = $1 ORDER BY created_at DESC LIMIT 20",
+        vals![&wallet_id],
     )
     .await?;
 
