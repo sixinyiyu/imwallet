@@ -57,9 +57,9 @@ export const adminService = {
       id: d.id,
       platform: d.platform,
       online: d.online,
-      walletCount: d.walletCount ?? d.wallet_count ?? 0,
-      lastActiveAt: d.lastActiveAt ?? d.last_active_at ?? null,
-      createdAt: d.createdAt ?? d.created_at ?? null,
+      walletCount: d.walletCount ?? 0,
+      lastActiveAt: d.lastActiveAt ?? null,
+      createdAt: d.createdAt ?? null,
     }));
   },
 
@@ -70,10 +70,10 @@ export const adminService = {
       id: data.id,
       platform: data.platform,
       online: data.online,
-      lastActiveAt: data.lastActiveAt ?? data.last_active_at ?? null,
-      createdAt: data.createdAt ?? data.created_at ?? null,
+      lastActiveAt: data.lastActiveAt ?? null,
+      createdAt: data.createdAt ?? null,
       wallets: (data.wallets || []).map((w: any) => ({
-        walletId: w.walletId ?? w.wallet_id,
+        walletId: w.walletId,
         alias: w.alias,
         source: w.source,
         chain: w.chain,
@@ -87,15 +87,15 @@ export const adminService = {
     const { data } = await api.post(`/admin/devices/${deviceId}/transactions`, { password, offset });
     return (data || []).map((t: any) => ({
       id: t.id,
-      txHash: t.txHash ?? t.tx_hash,
-      fromAddress: t.fromAddress ?? t.from_address,
-      toAddress: t.toAddress ?? t.to_address,
-      tokenSymbol: t.tokenSymbol ?? t.token_symbol,
+      txHash: t.txHash,
+      fromAddress: t.fromAddress,
+      toAddress: t.toAddress,
+      tokenSymbol: t.tokenSymbol,
       amount: String(t.amount ?? "0"),
       fee: String(t.fee ?? "0"),
       status: t.status,
       memo: t.memo ?? "",
-      createdAt: t.createdAt ?? t.created_at ?? "",
+      createdAt: t.createdAt ?? "",
     }));
   },
 
@@ -104,14 +104,14 @@ export const adminService = {
     const { data } = await api.post(`/admin/devices/${deviceId}/recharges`, { password, offset });
     return (data || []).map((r: any) => ({
       id: r.id,
-      walletId: r.walletId ?? r.wallet_id,
-      walletAlias: r.walletAlias ?? r.wallet_alias,
-      accountAddress: r.accountAddress ?? r.account_address,
-      tokenSymbol: r.tokenSymbol ?? r.token_symbol,
-      tokenName: r.tokenName ?? r.token_name,
+      walletId: r.walletId,
+      walletAlias: r.walletAlias,
+      accountAddress: r.accountAddress,
+      tokenSymbol: r.tokenSymbol,
+      tokenName: r.tokenName,
       amount: String(r.amount ?? "0"),
       memo: r.memo ?? "",
-      createdAt: r.createdAt ?? r.created_at ?? "",
+      createdAt: r.createdAt ?? "",
     }));
   },
 };

@@ -43,7 +43,6 @@ async fn verify_admin(state: &AppState, password: &str) -> Result<(), AppError> 
 // ── 设备列表 ──
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 struct DeviceListItem {
     id: String,
     platform: String,
@@ -101,7 +100,6 @@ async fn list_devices(
 // ── 设备详情 ──
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 struct WalletBrief {
     wallet_id: String,
     alias: String,
@@ -111,7 +109,6 @@ struct WalletBrief {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 struct DeviceDetailResponse {
     id: String,
     platform: String,
