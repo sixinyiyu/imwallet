@@ -1,18 +1,15 @@
 -- ===============================================================
--- IMWallet / rs-wallet - V3: transactions table indexes
--- Optimizes the CTE-based transaction query:
---   WHERE from_address IN (...) OR to_address IN (...)
---   AND token_symbol = ...
---   ORDER BY created_at DESC
+-- IMWallet / rs-wallet - V3: transactions index optimization
 -- ===============================================================
 
--- 单列索引：支持 IN 子查询快速定位地址匹配的行
-CREATE INDEX IF NOT EXISTS "transactions_from_address_idx" ON "transactions"("from_address");
-CREATE INDEX IF NOT EXISTS "transactions_to_address_idx" ON "transactions"("to_address");
+-- 移除无检索场景的 tx_hash 唯一索引（tx_hash 由 SHA-256 + UUID 生成，天然唯一）
+DROP INDEX IF EXISTS "transactions_tx_hash_key";
 
--- 复合索引：支持按代币 + 时间排序的分页查询（最常用的查询模式）
-CREATE INDEX IF NOT EXISTS "transactions_token_symbol_created_at_idx" ON "transactions"("token_symbol", "created_at" DESC);
+-- 复合索引：地址 + 时间 DESC
+-- 高基数列 (address) 提供良好的选择性，时间排序内嵌索引避免额外 sort
+-- 覆盖 CTE 查询中 IN 子查询 + ORDER BY created_at DESC + LIMIT/OFFSET
+CREATE INDEX IF NOT EXISTS "transactions_from_address_created_at_idx" ON "transactions"("from_address", "created_at" DESC);
+CREATE INDEX IF NOT EXISTS "transactions_to_address_created_at_idx" ON "transactions"("to_address", "created_at" DESC);
 
--- 复合索引：支持 wallet_subscriptions 按 wallet_id 快速查找（已有复合唯一索引前缀匹配，
--- 但单独查 wallet_id 时复合索引效率不如单列索引，加一个轻量单列索引）
+-- wallet_subscriptions 单列索引：补充复合唯一索引前缀，更轻量
 CREATE INDEX IF NOT EXISTS "wallet_subscriptions_wallet_id_idx" ON "wallet_subscriptions"("wallet_id");
