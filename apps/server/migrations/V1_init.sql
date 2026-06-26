@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS "wallet_subscriptions" (
     CONSTRAINT "wallet_subscriptions_pkey" PRIMARY KEY ("id")
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "wallet_subscriptions_wallet_id_device_id_chain_address_id_key" ON "wallet_subscriptions"("wallet_id", "device_id", "chain", "address_id");
+CREATE INDEX IF NOT EXISTS "wallet_subscriptions_wallet_id_idx" ON "wallet_subscriptions"("wallet_id");
 
 CREATE TABLE IF NOT EXISTS "fiat_currencies" (
     "id"       TEXT        NOT NULL,
@@ -115,7 +116,8 @@ CREATE TABLE IF NOT EXISTS "transactions" (
     "updated_at"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "transactions_pkey" PRIMARY KEY ("id")
 );
-CREATE UNIQUE INDEX IF NOT EXISTS "transactions_tx_hash_key" ON "transactions"("tx_hash");
+CREATE INDEX IF NOT EXISTS "transactions_from_address_created_at_idx" ON "transactions"("from_address", "created_at" DESC);
+CREATE INDEX IF NOT EXISTS "transactions_to_address_created_at_idx" ON "transactions"("to_address", "created_at" DESC);
 
 CREATE TABLE IF NOT EXISTS "notifications" (
     "id"         TEXT        NOT NULL,
