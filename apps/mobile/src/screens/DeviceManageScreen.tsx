@@ -1,23 +1,27 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
   FlatList,
 } from "react-native";
+import { useRoute } from "@react-navigation/native";
 import { adminService, type DeviceInfo, type DeviceTransaction, type DeviceRecharge } from "../services/adminService";
 import { ChevronRightIcon } from "../components/icons";
 import { formatTime } from "../utils/date";
+import type { RouteProp } from "@react-navigation/native";
+import type { RootStackParamList } from "../types/navigation";
+
+type DeviceManageRoute = RouteProp<RootStackParamList, "DeviceManage">;
 
 export default function DeviceManageScreen() {
-  // 设备管理
-  const [adminPwd, setAdminPwd] = useState("");
-  const [adminVerified, setAdminVerified] = useState(false);
+  const route = useRoute<DeviceManageRoute>();
+  const adminPwd = route.params.password;
+
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
-  const [devicesLoading, setDevicesLoading] = useState(false);
+  const [devicesLoading, setDevicesLoading] = useState(true);
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [deviceTransactions, setDeviceTransactions] = useState<DeviceTransaction[]>([]);
   const [deviceRecharges, setDeviceRecharges] = useState<DeviceRecharge[]>([]);
@@ -35,18 +39,20 @@ export default function DeviceManageScreen() {
     setTimeout(() => setToastVisible(false), 2000);
   }, []);
 
-  const handleVerifyAdmin = async () => {
-    if (!adminPwd.trim()) return;
-    setDevicesLoading(true);
-    try {
-      const list = await adminService.listDevices(adminPwd.trim());
-      setDevices(list);
-      setAdminVerified(true);
-    } catch {
-      showToast("密码验证失败");
-    }
-    setDevicesLoading(false);
-  };
+  // 自动加载设备列表（密码已由前一个页面验证通过）
+  useEffect(() => {
+    const loadDevices = async () => {
+      setDevicesLoading(true);
+      try {
+        const list = await adminService.listDevices(adminPwd);
+        setDevices(list);
+      } catch {
+        showToast("加载设备列表失败");
+      }
+      setDevicesLoading(false);
+    };
+    loadDevices();
+  }, [adminPwd]);
 
   const handleSelectDevice = async (deviceId: string) => {
     if (selectedDevice === deviceId) {
@@ -91,154 +97,131 @@ export default function DeviceManageScreen() {
 
   const shortId = (id: string) => id.length > 16 ? `${id.slice(0, 8)}...${id.slice(-8)}` : id;
 
-  /** 格式化 lastActiveAt：有值则显示时间，无值则显示"从未活跃" */
+  /** 格式化 lastActiveAt：有值则显示时间，无值或解析失败则显示"从未活跃" */
   const formatLastActive = (iso: string | null) => {
     if (!iso) return "从未活跃";
     const formatted = formatTime(iso);
     return formatted === "--" ? "从未活跃" : formatted;
   };
 
+  if (devicesLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#287220" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {!adminVerified ? (
-        <View style={styles.verifyCard}>
-          <Text style={styles.verifyTitle}>设备管理</Text>
-          <Text style={styles.verifyDesc}>
-            查看设备活跃情况及钱包信息，需要输入管理密码验证身份。
-          </Text>
-          <View style={styles.adminPwdRow}>
-            <TextInput
-              style={styles.adminPwdInput}
-              value={adminPwd}
-              onChangeText={setAdminPwd}
-              placeholder="输入管理密码"
-              placeholderTextColor="#C8C9CC"
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <TouchableOpacity
-              style={[styles.adminPwdBtn, (!adminPwd.trim() || devicesLoading) && styles.adminPwdBtnDisabled]}
-              onPress={handleVerifyAdmin}
-              disabled={!adminPwd.trim() || devicesLoading}
-              activeOpacity={0.7}
-            >
-              {devicesLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.adminPwdBtnText}>验证</Text>}
-            </TouchableOpacity>
-          </View>
+      {devices.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>暂无设备</Text>
         </View>
       ) : (
-        <>
-          {devices.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyText}>暂无设备</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={devices}
-              keyExtractor={(d) => d.id}
-              contentContainerStyle={styles.listContent}
-              renderItem={({ item: d }) => (
-                <View style={styles.deviceCard}>
-                  <TouchableOpacity
-                    style={styles.deviceRow}
-                    onPress={() => handleSelectDevice(d.id)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.deviceInfo}>
-                      <View style={styles.deviceNameRow}>
-                        <Text style={styles.deviceId}>{shortId(d.id)}</Text>
-                        <View style={[styles.onlineBadge, d.online ? styles.onlineBadgeOn : styles.onlineBadgeOff]}>
-                          <Text style={[styles.onlineBadgeText, d.online ? styles.onlineBadgeTextOn : styles.onlineBadgeTextOff]}>
-                            {d.online ? "在线" : "离线"}
-                          </Text>
-                        </View>
-                      </View>
-                      <Text style={styles.deviceMeta}>
-                        {d.platform} · {d.walletCount} 个钱包 · {formatLastActive(d.lastActiveAt)}
+        <FlatList
+          data={devices}
+          keyExtractor={(d) => d.id}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item: d }) => (
+            <View style={styles.deviceCard}>
+              <TouchableOpacity
+                style={styles.deviceRow}
+                onPress={() => handleSelectDevice(d.id)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.deviceInfo}>
+                  <View style={styles.deviceNameRow}>
+                    <Text style={styles.deviceId}>{shortId(d.id)}</Text>
+                    <View style={[styles.onlineBadge, d.online ? styles.onlineBadgeOn : styles.onlineBadgeOff]}>
+                      <Text style={[styles.onlineBadgeText, d.online ? styles.onlineBadgeTextOn : styles.onlineBadgeTextOff]}>
+                        {d.online ? "在线" : "离线"}
                       </Text>
                     </View>
-                    <ChevronRightIcon size={16} color="#8899B8" />
-                  </TouchableOpacity>
+                  </View>
+                  <Text style={styles.deviceMeta}>
+                    {d.platform} · {d.walletCount} 个钱包 · {formatLastActive(d.lastActiveAt)}
+                  </Text>
+                </View>
+                <ChevronRightIcon size={16} color="#8899B8" />
+              </TouchableOpacity>
 
-                  {/* 展开的设备数据 */}
-                  {selectedDevice === d.id && (
-                    <View style={styles.deviceDataPanel}>
-                      {deviceDataLoading ? (
-                        <ActivityIndicator size="small" color="#287220" style={{ marginVertical: 12 }} />
+              {/* 展开的设备数据 */}
+              {selectedDevice === d.id && (
+                <View style={styles.deviceDataPanel}>
+                  {deviceDataLoading ? (
+                    <ActivityIndicator size="small" color="#287220" style={{ marginVertical: 12 }} />
+                  ) : (
+                    <>
+                      {/* Tab 切换 */}
+                      <View style={styles.dataTabRow}>
+                        <TouchableOpacity
+                          style={[styles.dataTab, deviceDataTab === "transactions" && styles.dataTabActive]}
+                          onPress={() => setDeviceDataTab("transactions")}
+                        >
+                          <Text style={[styles.dataTabText, deviceDataTab === "transactions" && styles.dataTabTextActive]}>交易</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.dataTab, deviceDataTab === "recharges" && styles.dataTabActive]}
+                          onPress={() => setDeviceDataTab("recharges")}
+                        >
+                          <Text style={[styles.dataTabText, deviceDataTab === "recharges" && styles.dataTabTextActive]}>充值</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {deviceDataTab === "transactions" ? (
+                        deviceTransactions.length === 0 ? (
+                          <Text style={styles.emptyText}>暂无交易记录</Text>
+                        ) : (
+                          deviceTransactions.map((t) => (
+                            <View key={t.id} style={styles.dataItem}>
+                              <View style={styles.dataItemRow}>
+                                <Text style={styles.dataItemSymbol}>{t.tokenSymbol}</Text>
+                                <Text style={styles.dataItemAmount}>{t.amount}</Text>
+                              </View>
+                              <Text style={styles.dataItemMeta}>
+                                {t.status} · {formatTime(t.createdAt)}
+                              </Text>
+                            </View>
+                          ))
+                        )
                       ) : (
-                        <>
-                          {/* Tab 切换 */}
-                          <View style={styles.dataTabRow}>
-                            <TouchableOpacity
-                              style={[styles.dataTab, deviceDataTab === "transactions" && styles.dataTabActive]}
-                              onPress={() => setDeviceDataTab("transactions")}
-                            >
-                              <Text style={[styles.dataTabText, deviceDataTab === "transactions" && styles.dataTabTextActive]}>交易</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={[styles.dataTab, deviceDataTab === "recharges" && styles.dataTabActive]}
-                              onPress={() => setDeviceDataTab("recharges")}
-                            >
-                              <Text style={[styles.dataTabText, deviceDataTab === "recharges" && styles.dataTabTextActive]}>充值</Text>
-                            </TouchableOpacity>
-                          </View>
-
-                          {deviceDataTab === "transactions" ? (
-                            deviceTransactions.length === 0 ? (
-                              <Text style={styles.emptyText}>暂无交易记录</Text>
-                            ) : (
-                              deviceTransactions.map((t) => (
-                                <View key={t.id} style={styles.dataItem}>
-                                  <View style={styles.dataItemRow}>
-                                    <Text style={styles.dataItemSymbol}>{t.tokenSymbol}</Text>
-                                    <Text style={styles.dataItemAmount}>{t.amount}</Text>
-                                  </View>
-                                  <Text style={styles.dataItemMeta}>
-                                    {t.status} · {formatTime(t.createdAt)}
-                                  </Text>
-                                </View>
-                              ))
-                            )
-                          ) : (
-                            deviceRecharges.length === 0 ? (
-                              <Text style={styles.emptyText}>暂无充值记录</Text>
-                            ) : (
-                              deviceRecharges.map((r) => (
-                                <View key={r.id} style={styles.dataItem}>
-                                  <View style={styles.dataItemRow}>
-                                    <Text style={styles.dataItemSymbol}>{r.tokenSymbol}</Text>
-                                    <Text style={styles.dataItemAmount}>{r.amount}</Text>
-                                  </View>
-                                  <Text style={styles.dataItemMeta}>
-                                    {r.walletAlias} · {formatTime(r.createdAt)}
-                                  </Text>
-                                </View>
-                              ))
-                            )
-                          )}
-                          {/* 加载更多 */}
-                          <TouchableOpacity
-                            style={styles.loadMoreBtn}
-                            onPress={handleLoadMoreDeviceData}
-                            disabled={deviceDataLoading}
-                            activeOpacity={0.7}
-                          >
-                            {deviceDataLoading ? (
-                              <ActivityIndicator size="small" color="#287220" />
-                            ) : (
-                              <Text style={styles.loadMoreBtnText}>加载更多</Text>
-                            )}
-                          </TouchableOpacity>
-                        </>
+                        deviceRecharges.length === 0 ? (
+                          <Text style={styles.emptyText}>暂无充值记录</Text>
+                        ) : (
+                          deviceRecharges.map((r) => (
+                            <View key={r.id} style={styles.dataItem}>
+                              <View style={styles.dataItemRow}>
+                                <Text style={styles.dataItemSymbol}>{r.tokenSymbol}</Text>
+                                <Text style={styles.dataItemAmount}>{r.amount}</Text>
+                              </View>
+                              <Text style={styles.dataItemMeta}>
+                                {r.walletAlias} · {formatTime(r.createdAt)}
+                              </Text>
+                            </View>
+                          ))
+                        )
                       )}
-                    </View>
+                      {/* 加载更多 */}
+                      <TouchableOpacity
+                        style={styles.loadMoreBtn}
+                        onPress={handleLoadMoreDeviceData}
+                        disabled={deviceDataLoading}
+                        activeOpacity={0.7}
+                      >
+                        {deviceDataLoading ? (
+                          <ActivityIndicator size="small" color="#287220" />
+                        ) : (
+                          <Text style={styles.loadMoreBtnText}>加载更多</Text>
+                        )}
+                      </TouchableOpacity>
+                    </>
                   )}
                 </View>
               )}
-            />
+            </View>
           )}
-        </>
+        />
       )}
 
       {/* Toast */}
@@ -255,31 +238,7 @@ export default function DeviceManageScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F8" },
-  // 验证卡片
-  verifyCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    margin: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  verifyTitle: { fontSize: 15, fontWeight: "600", color: "#374151", marginBottom: 8 },
-  verifyDesc: { fontSize: 13, color: "#9CA3AF", lineHeight: 18, marginBottom: 16 },
-  adminPwdRow: { flexDirection: "row", gap: 8 },
-  adminPwdInput: {
-    flex: 1, borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 10,
-    padding: 12, fontSize: 15, color: "#1F2937",
-  },
-  adminPwdBtn: {
-    backgroundColor: "#287220", borderRadius: 10, padding: 12,
-    alignItems: "center", justifyContent: "center", minWidth: 64,
-  },
-  adminPwdBtnDisabled: { backgroundColor: "#A5D6A7" },
-  adminPwdBtnText: { color: "#fff", fontWeight: "600", fontSize: 15 },
+  loadingContainer: { flex: 1, backgroundColor: "#F5F6F8", justifyContent: "center", alignItems: "center" },
   // 设备列表
   listContent: { padding: 16 },
   deviceCard: {

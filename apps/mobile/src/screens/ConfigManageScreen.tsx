@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { configService, type FeeConfig } from "../services/configService";
+import { adminService } from "../services/adminService";
 import { EditIcon, ChevronRightIcon } from "../components/icons";
 import { GreenToggle } from "../components/GreenToggle";
 import { ConfigManageSkeleton } from "../components/Skeleton";
@@ -40,6 +41,12 @@ export default function ConfigManageScreen() {
   const [togglePwdVerifying, setTogglePwdVerifying] = useState(false);
   const [togglePwdError, setTogglePwdError] = useState<string | null>(null);
   const [pendingToggleValue, setPendingToggleValue] = useState<boolean | null>(null);
+
+  // 设备管理密码抽屉
+  const [showDevicePwdDrawer, setShowDevicePwdDrawer] = useState(false);
+  const [devicePwdInput, setDevicePwdInput] = useState("");
+  const [devicePwdVerifying, setDevicePwdVerifying] = useState(false);
+  const [devicePwdError, setDevicePwdError] = useState<string | null>(null);
 
   // Toast
   const [toastVisible, setToastVisible] = useState(false);
@@ -158,6 +165,38 @@ export default function ConfigManageScreen() {
     setPendingToggleValue(null);
   };
 
+  // ── 设备管理入口密码验证 ──
+
+  const handleOpenDeviceManage = () => {
+    setDevicePwdInput("");
+    setDevicePwdError(null);
+    setShowDevicePwdDrawer(true);
+  };
+
+  const handleConfirmDevicePwd = async () => {
+    if (!devicePwdInput.trim()) {
+      setDevicePwdError("请输入密码");
+      return;
+    }
+    setDevicePwdVerifying(true);
+    setDevicePwdError(null);
+    try {
+      await adminService.listDevices(devicePwdInput.trim());
+      // 密码验证成功，跳转到设备管理页面
+      setShowDevicePwdDrawer(false);
+      navigation.navigate("DeviceManage", { password: devicePwdInput.trim() });
+    } catch {
+      setDevicePwdError("密码验证失败，请重试");
+    }
+    setDevicePwdVerifying(false);
+  };
+
+  const handleCloseDevicePwdDrawer = () => {
+    setShowDevicePwdDrawer(false);
+    setDevicePwdInput("");
+    setDevicePwdError(null);
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -238,7 +277,7 @@ export default function ConfigManageScreen() {
       {/* 设备管理入口 */}
       <TouchableOpacity
         style={[styles.infoCard, { marginTop: 12 }]}
-        onPress={() => navigation.navigate("DeviceManage")}
+        onPress={handleOpenDeviceManage}
         activeOpacity={0.7}
       >
         <View style={styles.infoRow}>
@@ -367,6 +406,60 @@ export default function ConfigManageScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* 设备管理密码抽屉 */}
+      <Modal
+        visible={showDevicePwdDrawer}
+        transparent
+        animationType="slide"
+        onRequestClose={handleCloseDevicePwdDrawer}
+      >
+        <KeyboardAvoidingView
+          style={styles.drawerOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <Pressable style={styles.drawerBackdrop} onPress={handleCloseDevicePwdDrawer} />
+          <View style={styles.drawerContent}>
+            <View style={styles.drawerHandle} />
+            <Text style={styles.drawerTitle}>请输入管理密码</Text>
+            <Text style={styles.drawerDesc}>进入设备管理需要验证管理密码</Text>
+            <TextInput
+              style={styles.pwdInput}
+              value={devicePwdInput}
+              onChangeText={setDevicePwdInput}
+              placeholder="请输入密码"
+              placeholderTextColor="#C8C9CC"
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+              onSubmitEditing={handleConfirmDevicePwd}
+            />
+            {devicePwdError && <Text style={styles.pwdError}>{devicePwdError}</Text>}
+            <View style={styles.drawerActions}>
+              <TouchableOpacity
+                style={styles.drawerCancelBtn}
+                onPress={handleCloseDevicePwdDrawer}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.drawerCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.drawerConfirmBtn, devicePwdVerifying && styles.drawerConfirmBtnDisabled]}
+                onPress={handleConfirmDevicePwd}
+                disabled={devicePwdVerifying}
+                activeOpacity={0.7}
+              >
+                {devicePwdVerifying ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.drawerConfirmText}>确认</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -414,7 +507,7 @@ const styles = StyleSheet.create({
   modalConfirmBtn: { flex: 1, padding: 14, borderRadius: 10, backgroundColor: "#287220", alignItems: "center" },
   modalConfirmBtnDisabled: { backgroundColor: "#A5D6A7" },
   modalConfirmText: { color: "#FFFFFF", fontWeight: "600" },
-  // Drawer (交易限制密码)
+  // Drawer (通用密码抽屉)
   drawerOverlay: { flex: 1, justifyContent: "flex-end" },
   drawerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
   drawerContent: {
