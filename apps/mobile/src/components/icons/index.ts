@@ -26,3 +26,5 @@ export { default as WarningIcon } from "./WarningIcon";
 export { default as EthIcon } from "./EthIcon";
 export { default as BtcIcon } from "./BtcIcon";
 export { default as AddContactIcon } from "./AddContactIcon";
+export { default as AndroidIcon } from "./AndroidIcon";
+export { default as IosIcon } from "./IosIcon";

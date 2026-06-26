@@ -163,7 +163,7 @@ export function RootStack() {
       <Stack.Screen
         name="DeviceManage"
         component={DeviceManageScreen}
-        options={{ ...CENTERED_HEADER, title: "设备管理" }}
+        options={{ ...CENTERED_HEADER, title: "设备列表" }}
       />
       <Stack.Screen
         name="Security"
