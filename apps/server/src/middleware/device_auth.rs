@@ -180,8 +180,8 @@ pub async fn device_auth(
     )
     .await
     .map_err(AppError::from)?;
-    let platform = if let Some(d) = existing {
-        d.platform
+    let platform = if let Some(ref d) = existing {
+        d.platform.clone()
     } else {
         // 设备未注册，自动注册（INSERT ON CONFLICT 保证并发安全）
         let inserted: Option<Device> = query_one(
@@ -195,6 +195,24 @@ pub async fn device_auth(
             .map(|d| d.platform)
             .unwrap_or_else(|| platform_from_header.to_string())
     };
+
+    // 节流更新 last_active_at：仅当过期 >5min 时才写 DB，避免每次请求都 UPDATE
+    let should_update = existing
+        .as_ref()
+        .and_then(|d| d.last_active_at.clone())
+        .is_none_or(|la| {
+            // last_active_at 为空 → 需要更新；距现在 >5min → 需要更新
+            let la_ts = la.unix_timestamp();
+            (now - la_ts).abs() > 300
+        });
+    if should_update {
+        let _ = crate::db::query::exec(
+            &state.db,
+            "UPDATE devices SET last_active_at = NOW() WHERE id = $1",
+            vals![device_id],
+        )
+        .await;
+    }
 
     // 重建 request
     let mut request = axum::extract::Request::from_parts(parts, axum::body::Body::from(body_bytes));

@@ -12,6 +12,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS "devices" (
     "id"                     VARCHAR(64) NOT NULL,
     "platform"               VARCHAR(16) NOT NULL DEFAULT 'android',
+    "last_active_at"         TIMESTAMP(3),
     "created_at"             TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at"             TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "devices_pkey" PRIMARY KEY ("id")
