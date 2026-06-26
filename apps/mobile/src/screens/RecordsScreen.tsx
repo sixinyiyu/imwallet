@@ -19,6 +19,7 @@ import { transactionService, type TransactionFilter } from "../services/transact
 import { localAddressService } from "../services/localAddressService";
 import type { Transaction, AddressEntry } from "../types";
 import { SearchIcon, USDTIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
+import { formatTime } from "../utils/date";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type RecordsRoute = RouteProp<RootStackParamList, "Records">;
@@ -39,11 +40,7 @@ const TIME_OPTIONS: { label: string; value: TimeFilter }[] = [
   { label: "近90天", value: "90d" },
 ];
 
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+
 
 const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
   TRX: TronIcon,

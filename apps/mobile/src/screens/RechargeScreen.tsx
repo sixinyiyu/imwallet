@@ -20,6 +20,7 @@ import { rechargeService, type RechargeRecord } from "../services/rechargeServic
 import type { SimpleWallet, AssetInfo, AddressEntry, ServerWalletAddress } from "../types";
 import { TronIcon, USDTIcon, ChevronRightIcon, CopyIcon } from "../components/icons";
 import { RechargeSkeleton } from "../components/Skeleton";
+import { formatTime as formatDate } from "../utils/date";
 
 /** 预置代币图标映射 */
 const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
@@ -549,12 +550,7 @@ export default function RechargeScreen() {
   );
 }
 
-/** 格式化日期 */
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F8" },

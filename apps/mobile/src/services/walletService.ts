@@ -1,6 +1,27 @@
 import api from "./api";
-// WalletAllItem 的后端原始类型（alias 字段），仅用于 getAllWallets 内部映射
-import type { Wallet, SimpleWallet, AggregateWallet, WalletBalanceDetail, ServerWalletAddress } from "../types";
+import type { Wallet, SimpleWallet, AggregateWallet, WalletBalanceDetail, ServerWalletAddress, AssetBalance } from "../types";
+
+/**
+ * 后端 AssetBalanceItem (snake_case) → 前端 AssetBalance (camelCase) 映射
+ * 后端返回: asset_id, symbol, name, chain, decimals, icon_url, balance, usd_value, cny_value
+ * 前端需要: assetId, symbol, name, network, decimals, iconUrl, balance, usdValue, cnyValue, id, type
+ */
+function mapAssetBalance(item: any): AssetBalance {
+  return {
+    id: item.asset_id || "",
+    assetId: item.asset_id || "",
+    symbol: item.symbol || "",
+    name: item.name || "",
+    balance: String(item.balance ?? "0"),
+    usdValue: String(item.usd_value ?? "0"),
+    cnyValue: String(item.cny_value ?? "0"),
+    decimals: item.decimals ?? 6,
+    type: item.type || "NATIVE",
+    chain: item.chain || "",
+    tokenId: item.token_id || null,
+    iconUrl: item.icon_url || undefined,
+  };
+}
 
 /**
  * 钱包服务（服务端 API 部分）。
@@ -34,7 +55,6 @@ export const walletService = {
     if (params.page) query.page = String(params.page);
     if (params.limit) query.limit = String(params.limit);
     const { data } = await api.get("/wallets/all", { params: query });
-    // 后端 WalletAllItem 字段为 alias，映射为前端 SimpleWallet 的 name
     const wallets: SimpleWallet[] = (data.wallets || []).map((w: any) => ({
       id: w.id,
       name: w.alias || "",
@@ -55,17 +75,21 @@ export const walletService = {
     return data;
   },
 
-  /** 获取钱包余额详情（总余额+各资产余额） */
+  /** 获取钱包余额详情（总余额+各资产余额）
+   *  后端返回 snake_case 字段，映射为前端 camelCase */
   async getWalletBalanceDetail(walletId: string): Promise<WalletBalanceDetail> {
     const { data } = await api.get(`/wallets/${walletId}/balance`);
-    return data;
+    return {
+      totalBalanceUsd: String(data.total_balance_usd ?? "0"),
+      totalBalanceCny: String(data.total_balance_cny ?? "0"),
+      assets: (data.assets || []).map(mapAssetBalance),
+    };
   },
 
   /** 获取钱包详情（含余额信息）
-   *  后端返回字段 alias，前端 Wallet 用 name，此处做映射 */
+   *  后端返回 snake_case 字段，映射为前端 camelCase */
   async getWalletDetail(walletId: string): Promise<Wallet> {
     const { data } = await api.get(`/wallets/${walletId}`);
-    // 后端 WalletDetailResponse 字段为 alias，映射为前端 Wallet 的 name
     return {
       id: data.id,
       name: data.alias || "",
@@ -75,10 +99,10 @@ export const walletService = {
       isPinned: false,
       avatar: "",
       passwordHint: "",
-      createdAt: "",
+      createdAt: data.created_at || "",
       updatedAt: data.updated_at || "",
-      tokenBalances: data.token_balances || [],
-      totalBalanceCny: data.total_balance_cny || "0",
+      tokenBalances: (data.token_balances || []).map(mapAssetBalance),
+      totalBalanceCny: String(data.total_balance_cny ?? "0"),
     };
   },
 

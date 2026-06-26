@@ -249,7 +249,10 @@ pub struct WalletBalance {
 pub struct AssetBalanceItem {
     pub asset_id: String,
     pub symbol: String,
+    pub name: String,
     pub chain: String,
+    pub decimals: i32,
+    pub icon_url: String,
     pub balance: Decimal,
     pub usd_value: Decimal,
     pub cny_value: Decimal,
@@ -264,10 +267,13 @@ pub async fn get_wallet_balance(
     struct R {
         asset_id: String,
         symbol: String,
+        name: String,
         chain: String,
+        decimals: i32,
+        icon_url: String,
         total_balance: Decimal,
     }
-    let rows: Vec<R> = query(&rb, "SELECT aa.asset_id, a.symbol, aa.chain, SUM(aa.balance) as total_balance FROM assets_addresses aa JOIN assets a ON a.id = aa.asset_id JOIN wallet_subscriptions ws ON ws.address_id = aa.address_id WHERE ws.wallet_id = $1 AND ws.address_id != '' GROUP BY aa.asset_id, a.symbol, aa.chain", vals![wallet_id]).await?;
+    let rows: Vec<R> = query(&rb, "SELECT aa.asset_id, a.symbol, a.name, aa.chain, a.decimals, a.icon_url, SUM(aa.balance) as total_balance FROM assets_addresses aa JOIN assets a ON a.id = aa.asset_id JOIN wallet_subscriptions ws ON ws.address_id = aa.address_id WHERE ws.wallet_id = $1 AND ws.address_id != '' GROUP BY aa.asset_id, a.symbol, a.name, aa.chain, a.decimals, a.icon_url", vals![wallet_id]).await?;
     let cny = cny_rate;
     let assets: Vec<AssetBalanceItem> = rows
         .into_iter()
@@ -276,7 +282,10 @@ pub async fn get_wallet_balance(
             cny_value: r.total_balance * cny,
             asset_id: r.asset_id,
             symbol: r.symbol,
+            name: r.name,
             chain: r.chain,
+            decimals: r.decimals,
+            icon_url: r.icon_url,
             balance: r.total_balance,
         })
         .collect();

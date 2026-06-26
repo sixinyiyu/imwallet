@@ -25,6 +25,7 @@ import { USDTIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import type { AddressEntry } from "../types";
 import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
+import { formatFullTime } from "../utils/date";
 
 type Route = RouteProp<RootStackParamList, "TradeDetail">;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -41,19 +42,7 @@ function renderTokenIcon(symbol: string, size: number) {
   return Icon ? <Icon size={size} /> : null;
 }
 
-function formatFullTime(iso: string): string {
-  const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = d.getMonth() + 1;
-  const day = d.getDate();
-  const h = d.getHours();
-  const min = d.getMinutes();
-  const weekDays = ["日", "一", "二", "三", "四", "五", "六"];
-  const w = weekDays[d.getDay()];
-  const period = h < 12 ? "上午" : h < 18 ? "下午" : "晚上";
-  const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
-  return `${y}年${m}月${day}日 星期${w} ${period}${h12}点${min}分`;
-}
+
 
 function shortenAddress(addr: string): string {
   return `${addr.slice(0, 12)}...${addr.slice(-8)}`;

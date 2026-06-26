@@ -34,6 +34,7 @@ import {
   CopyIcon,
 } from "../components/icons";
 import type { Wallet, SimpleWallet } from "../types";
+import { formatDate } from "../utils/date";
 
 /** 根据网络名获取对应图标组件（PascalCase） */
 function getNetworkIcon(network: string): React.FC<{ size?: number; color?: string }> | null {
@@ -46,13 +47,7 @@ function getNetworkIcon(network: string): React.FC<{ size?: number; color?: stri
 type Nav = NativeStackNavigationProp<RootStackParamList, "WalletDetail">;
 type RouteType = RouteProp<RootStackParamList, "WalletDetail">;
 
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+
 
 export default function WalletDetailScreen() {
   const alert = useAlert();
@@ -135,10 +130,13 @@ export default function WalletDetailScreen() {
     if (!walletId) return;
     try {
       const data = await walletService.getWalletDetail(walletId);
-      // 合并数据：本地 name 优先（服务端 alias 可能为空），服务端补充余额等字段
+      // 数据源策略：本地优先，服务端只补充余额
+      // 钱包基本信息（name/source/createdAt/passwordHint 等）全用本地，服务端仅叠加余额
       const merged: Wallet = {
-        ...data,
-        name: walletFromStore?.name || data.name || "",
+        ...walletFromStore!,
+        updatedAt: data.updatedAt || "",
+        tokenBalances: data.tokenBalances || [],
+        totalBalanceCny: data.totalBalanceCny || "0",
       };
       setDetail(merged);
     } catch {
@@ -214,7 +212,7 @@ export default function WalletDetailScreen() {
     );
   }
 
-  const passwordHint = (detail as any)?.passwordHint;
+  const passwordHint = wallet.passwordHint;
 
   return (
     <View style={styles.wrapper}>

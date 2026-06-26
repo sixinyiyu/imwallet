@@ -15,6 +15,7 @@ import { TronIcon, EthIcon, BtcIcon, ContactIcon } from "../components/icons";
 import { NotificationSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import type { Notification } from "../types";
+import { formatDateTime } from "../utils/date";
 
 function NetworkIcon({ network, size = 20 }: { network: string; size?: number }) {
   if (!network) return <ContactIcon size={size} color="#6B7280" />;
@@ -108,7 +109,7 @@ export default function NotificationScreen() {
           {item.content}
         </Text>
         <Text style={styles.dateText}>
-          {new Date(item.createdAt).toLocaleString()}
+          {formatDateTime(item.createdAt)}
         </Text>
       </View>
     </TouchableOpacity>
