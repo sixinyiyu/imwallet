@@ -65,35 +65,7 @@ export default function TokenList({ assets, onAssetPress, loading }: Props) {
     );
   }
 
-  // 加载中但有旧数据：顶部显示刷新提示
-  if (loading && safeAssets.length > 0) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.refreshHint}>
-          <Text style={styles.refreshHintText}>刷新中...</Text>
-        </View>
-        {safeAssets.map((asset, index) => (
-          <TouchableOpacity
-            key={asset.assetId || asset.symbol || index}
-            style={[styles.item, index < safeAssets.length - 1 && styles.itemBorder]}
-            onPress={() => onAssetPress(asset)}
-          >
-            <View style={styles.iconContainer}>
-              {asset.symbol === "TRX" ? <TronIcon size={32} /> : <USDTIcon size={32} />}
-            </View>
-            <View style={styles.info}>
-              <Text style={styles.symbol}>{asset.symbol}</Text>
-              <Text style={styles.name}>{asset.name}</Text>
-            </View>
-            <View style={styles.balance}>
-              <Text style={styles.balanceText}>{asset.balance}</Text>
-              <Text style={styles.fiatValue}>≈ {currency.symbol}{getDisplayValue(asset)}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  }
+  // 加载中但有旧数据：静默刷新，保持布局不变避免抖动
   if (safeAssets.length === 0) {
     return (
       <EmptyState message="暂无代币" />
@@ -184,12 +156,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#E5E7EB",
     borderRadius: 4,
   },
-  refreshHint: {
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  refreshHintText: {
-    fontSize: 12,
-    color: "#9CA3AF",
-  },
+
 });
