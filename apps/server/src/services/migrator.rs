@@ -226,10 +226,25 @@ pub async fn migrate(db: Arc<RBatis>) -> std::result::Result<(), AppError> {
     // 4. 组装 Runner，按版本升序执行未应用版本
     let runner = MigrationRunner::new(store, state_manager, executor, false);
 
-    runner
-        .migrate()
-        .await
-        .map_err(|e| AppError::Internal(format!("Flyway migration failed: {}", e)))?;
+    if let Err(e) = runner.migrate().await {
+        // 将 flyway 错误分类输出到日志，方便排查
+        // 常见原因：数据库连接失败、SQL 语法错误、表已存在冲突、种子数据冲突等
+        log::error!(
+            "Flyway migration failed — error kind: {:?}, detail: {}",
+            e.kind(),
+            e
+        );
+        // 如果有最后成功版本号，额外输出
+        if let Some(ver) = e.last_successful_version() {
+            log::error!("  Last successful migration version: V{}", ver);
+        }
+        // 输出完整错误链（含底层 rbatis / postgres 错误）
+        log::error!("  Full error: {:?}", e);
+        return Err(AppError::Internal(format!(
+            "Flyway migration failed: {}",
+            e
+        )));
+    }
 
     info!("Flyway migrations completed");
     Ok(())

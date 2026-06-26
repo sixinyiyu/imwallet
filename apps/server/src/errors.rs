@@ -49,7 +49,11 @@ impl IntoResponse for AppError {
         // Internal 变体只返回固定字符串，内部原因仅记日志
         let message = match &self {
             AppError::Internal(detail) => {
-                log::error!("Internal error: {}", detail);
+                log::error!(
+                    "Internal error: {}\nBacktrace: {}",
+                    detail,
+                    std::backtrace::Backtrace::capture()
+                );
                 "Internal server error".to_string()
             }
             _ => self.to_string(),
