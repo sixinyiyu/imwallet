@@ -18,6 +18,27 @@ use tokio::sync::Mutex;
 /// flyway 的 Result 类型别名：std::result::Result<T, MigrationsError>
 type FlyResult<T> = std::result::Result<T, MigrationsError>;
 
+/// _flyway_schema_history 行的反序列化结构体
+/// rbatis exec_decode 返回的是 Map（key-value），不能用 tuple 反序列化
+#[derive(serde::Deserialize)]
+struct FlywayRow {
+    version: i64,
+    status: String,
+}
+
+impl FlywayRow {
+    fn into_state(self) -> MigrationState {
+        MigrationState {
+            version: self.version as u64,
+            status: if self.status == "IN_PROGRESS" {
+                MigrationStatus::InProgress
+            } else {
+                MigrationStatus::Deployed
+            },
+        }
+    }
+}
+
 // ── RbatisExecutor（仅迁移时使用） ──
 
 struct RbatisExecutor {
@@ -116,7 +137,7 @@ impl MigrationStateManager for RbatisStateManager {
     }
 
     async fn lowest_version(&self) -> FlyResult<Option<MigrationState>> {
-        let rows: Vec<(i64, String)> = self
+        let rows: Vec<FlywayRow> = self
             .rb
             .exec_decode(
                 "SELECT version, status FROM _flyway_schema_history ORDER BY version ASC LIMIT 1",
@@ -124,18 +145,11 @@ impl MigrationStateManager for RbatisStateManager {
             )
             .await
             .map_err(|e| MigrationsError::migration_database_failed(None, Some(Box::new(e))))?;
-        Ok(rows.into_iter().next().map(|(v, s)| MigrationState {
-            version: v as u64,
-            status: if s == "IN_PROGRESS" {
-                MigrationStatus::InProgress
-            } else {
-                MigrationStatus::Deployed
-            },
-        }))
+        Ok(rows.into_iter().next().map(FlywayRow::into_state))
     }
 
     async fn highest_version(&self) -> FlyResult<Option<MigrationState>> {
-        let rows: Vec<(i64, String)> = self
+        let rows: Vec<FlywayRow> = self
             .rb
             .exec_decode(
                 "SELECT version, status FROM _flyway_schema_history ORDER BY version DESC LIMIT 1",
@@ -143,18 +157,11 @@ impl MigrationStateManager for RbatisStateManager {
             )
             .await
             .map_err(|e| MigrationsError::migration_database_failed(None, Some(Box::new(e))))?;
-        Ok(rows.into_iter().next().map(|(v, s)| MigrationState {
-            version: v as u64,
-            status: if s == "IN_PROGRESS" {
-                MigrationStatus::InProgress
-            } else {
-                MigrationStatus::Deployed
-            },
-        }))
+        Ok(rows.into_iter().next().map(FlywayRow::into_state))
     }
 
     async fn list_versions(&self) -> FlyResult<Vec<MigrationState>> {
-        let rows: Vec<(i64, String)> = self
+        let rows: Vec<FlywayRow> = self
             .rb
             .exec_decode(
                 "SELECT version, status FROM _flyway_schema_history ORDER BY version",
@@ -162,17 +169,7 @@ impl MigrationStateManager for RbatisStateManager {
             )
             .await
             .map_err(|e| MigrationsError::migration_database_failed(None, Some(Box::new(e))))?;
-        Ok(rows
-            .into_iter()
-            .map(|(v, s)| MigrationState {
-                version: v as u64,
-                status: if s == "IN_PROGRESS" {
-                    MigrationStatus::InProgress
-                } else {
-                    MigrationStatus::Deployed
-                },
-            })
-            .collect())
+        Ok(rows.into_iter().map(FlywayRow::into_state).collect())
     }
 
     async fn begin_version(&self, changelog: &ChangelogFile) -> FlyResult<()> {
