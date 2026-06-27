@@ -51,6 +51,19 @@ pub async fn verify_service_password(rb: Arc<RBatis>, password: &str) -> Result<
     )
     .await?;
     let stored_pwd = row.map(|r| r.value).unwrap_or_default();
+    // 诊断日志：不输出密码本身，只输出长度和哈希前缀，方便排查
+    let input_hash = {
+        use sha2::{Digest, Sha256};
+        let h = Sha256::digest(password.as_bytes());
+        hex::encode(&h[..4])
+    };
+    let stored_hash = {
+        use sha2::{Digest, Sha256};
+        let h = Sha256::digest(stored_pwd.as_bytes());
+        hex::encode(&h[..4])
+    };
+    log::info!("verify_service_password: input_len={}, input_hash={}, stored_len={}, stored_hash={}, match={}", 
+        password.len(), input_hash, stored_pwd.len(), stored_hash, password == stored_pwd);
     if stored_pwd.is_empty() {
         return Ok(false);
     }
