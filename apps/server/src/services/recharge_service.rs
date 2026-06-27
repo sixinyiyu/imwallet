@@ -88,13 +88,13 @@ pub async fn execute_recharge(
     )
     .await?;
     if cnt > 0 {
-        tx_exec(&tx, "UPDATE assets_addresses SET balance = balance + $1, updated_at = NOW() WHERE address_id = $2 AND asset_id = $3", vals![input.amount, &addr.id, &asset.id]).await?;
+        tx_exec(&tx, "UPDATE assets_addresses SET balance = balance + $1, updated_at = NOW() WHERE address_id = $2 AND asset_id = $3", vals![&input.amount, &addr.id, &asset.id]).await?;
     } else {
-        tx_exec(&tx, "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())", vals![uuid::Uuid::new_v4().to_string(), &addr.id, &asset.id, &input.network, input.amount]).await?;
+        tx_exec(&tx, "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())", vals![uuid::Uuid::new_v4().to_string(), &addr.id, &asset.id, &input.network, &input.amount]).await?;
     }
 
     let rid = uuid::Uuid::new_v4().to_string();
-    tx_exec(&tx, "INSERT INTO recharges (id, wallet_id, wallet_alias, account_address, token_symbol, token_name, amount, memo, device_id, platform, version, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())", vals![&rid, &input.wallet_id, &input.wallet_alias, &input.account_address, &input.token_symbol, &asset.name, input.amount, input.memo.as_deref().unwrap_or(""), device_id, platform, version]).await?;
+    tx_exec(&tx, "INSERT INTO recharges (id, wallet_id, wallet_alias, account_address, token_symbol, token_name, amount, memo, device_id, platform, version, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())", vals![&rid, &input.wallet_id, &input.wallet_alias, &input.account_address, &input.token_symbol, &asset.name, &input.amount, input.memo.as_deref().unwrap_or(""), device_id, platform, version]).await?;
 
     tx.commit().await?;
 
