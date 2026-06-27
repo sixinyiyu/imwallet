@@ -36,13 +36,21 @@ jobs:
         run: cargo build --release --target x86_64-unknown-linux-musl
 
       - name: Strip binary
-        run: strip apps/server/target/x86_64-unknown-linux-musl/release/rs-wallet
+        run: |
+          BINARY=$(find apps/server/target/x86_64-unknown-linux-musl/release -maxdepth 1 -type f -executable -name 'rs-wallet' | head -1)
+          if [ -z "$BINARY" ]; then
+            echo "ERROR: rs-wallet binary not found in target directory"
+            ls -la apps/server/target/x86_64-unknown-linux-musl/release/ 2>/dev/null || echo "directory does not exist"
+            exit 1
+          fi
+          echo "Stripping: $BINARY"
+          strip "$BINARY"
 
       - name: Create release archive
         run: |
           mkdir -p dist
           cp apps/server/target/x86_64-unknown-linux-musl/release/rs-wallet dist/
-          cp apps/server/migrations/V1_init.sql dist/
+          cp apps/server/migrations/*.sql dist/
           cp apps/server/deploy/rs-wallet.service dist/
           cp apps/server/deploy/install.sh dist/
           cp apps/server/deploy/upgrade.sh dist/
@@ -81,7 +89,7 @@ jobs:
         run: |
           mkdir dist
           Copy-Item apps/server/target/release/rs-wallet.exe dist/
-          Copy-Item apps/server/migrations/V1_init.sql dist/
+          Copy-Item apps/server/migrations/*.sql dist/
           Copy-Item apps/server/config.toml dist/config.toml.example
           Compress-Archive -Path dist/* -DestinationPath rs-wallet-${{ inputs.version }}-x86_64-windows.zip
 
