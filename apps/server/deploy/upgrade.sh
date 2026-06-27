@@ -4,7 +4,10 @@
 # 示例: sudo bash upgrade.sh v0.1.0
 #       sudo bash upgrade.sh latest
 #
-# 仅替换二进制和迁移文件，保留 env/keys/config 不动
+# 仅替换二进制，保留 env/keys/config 不动
+#
+# 注意：自 v0.2.0 起，迁移 SQL 已内嵌到二进制中（#[migrations] 宏），
+# 不再依赖外部 migrations/ 目录。升级只需替换二进制即可。
 
 set -euo pipefail
 
@@ -50,30 +53,22 @@ curl -sL "${DOWNLOAD_URL}" | tar xz -C "${TMPDIR}"
 echo "Stopping rs-wallet service ..."
 systemctl stop "${SERVICE_NAME}" || true
 
-# 4. 替换二进制
+# 4. 替换二进制（迁移 SQL 已内嵌，无需更新外部文件）
 echo "Replacing binary ..."
 cp "${TMPDIR}/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
 chown rs-wallet:rs-wallet "${INSTALL_DIR}/${BIN_NAME}"
 
-# 5. 更新迁移文件（仅覆盖，不删除新增的）
-echo "Updating migration files ..."
-cp "${TMPDIR}/V1_init.sql" "${INSTALL_DIR}/migrations/V1_init.sql" 2>/dev/null || true
-# 如果 tar 包中有更多迁移文件，一并复制
-find "${TMPDIR}" -name 'V*.sql' -exec cp {} "${INSTALL_DIR}/migrations/" \; 2>/dev/null || true
-chown -R rs-wallet:rs-wallet "${INSTALL_DIR}/migrations"
-
-# 6. 清理临时目录
+# 5. 清理临时目录
 rm -rf "${TMPDIR}"
 
-# 7. 重启服务
+# 6. 重启服务
 echo "Starting rs-wallet service ..."
 systemctl start "${SERVICE_NAME}"
 
-# 8. 等待并确认
+# 7. 等待并确认
 sleep 2
 if systemctl is-active --quiet "${SERVICE_NAME}"; then
-    CURRENT_VER=$(curl -s http://localhost:3000/health 2>/dev/null | grep -o '"version":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
-    echo "=== rs-wallet upgraded to ${VERSION} (running: ${CURRENT_VER}) ==="
+    echo "=== rs-wallet upgraded to ${VERSION} ==="
 else
     echo "ERROR: rs-wallet failed to start after upgrade"
     echo "Check logs: journalctl -u rs-wallet -n 50 --no-pager"

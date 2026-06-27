@@ -232,5 +232,7 @@ sudo journalctl -u rs-wallet -f
 
 ### 数据库迁移
 
-- 服务启动时自动执行 flyway 迁移（`migrations/V1_init.sql`）
+- 迁移 SQL 在编译时通过 `#[flyway::migrations]` 宏内嵌到二进制中，无需外部文件
+- 服务启动时自动执行 flyway 迁移，创建所有业务表和种子数据
 - 迁移是幂等的，可安全重复执行
+- **制品包（二进制）自包含，不需要 migrations/ 目录**
