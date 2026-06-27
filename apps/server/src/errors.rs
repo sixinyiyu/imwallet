@@ -42,6 +42,20 @@ struct ErrorResponse {
     message: String,
 }
 
+/// 遍历 error source chain，拼接完整错误链字符串
+/// 即使 release 构建无 debug 符号，也能看到完整的错误原因链
+fn format_error_chain(err: &dyn std::error::Error) -> String {
+    let mut chain = format!("{}", err);
+    let mut source = std::error::Error::source(err);
+    let mut depth = 0;
+    while let Some(s) = source {
+        depth += 1;
+        chain.push_str(&format!("\n  caused by (depth {}): {}", depth, s));
+        source = std::error::Error::source(s);
+    }
+    chain
+}
+
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let status = self.status_code();
@@ -49,11 +63,10 @@ impl IntoResponse for AppError {
         // Internal 变体只返回固定字符串，内部原因仅记日志
         let message = match &self {
             AppError::Internal(detail) => {
-                log::error!(
-                    "Internal error: {}\nBacktrace: {}",
-                    detail,
-                    std::backtrace::Backtrace::capture()
-                );
+                // 遍历错误链输出完整原因（比 Backtrace 更可靠，release 构建也能用）
+                let chain = format_error_chain(&self);
+                let bt = std::backtrace::Backtrace::capture();
+                log::error!("Internal error: {}\nError chain: {}\nBacktrace: {}", detail, chain, bt);
                 "Internal server error".to_string()
             }
             _ => self.to_string(),
@@ -65,8 +78,9 @@ impl IntoResponse for AppError {
 
 impl From<rbatis::Error> for AppError {
     fn from(e: rbatis::Error) -> Self {
-        let bt = std::backtrace::Backtrace::capture();
-        log::error!("DB error: {:?}\n{}", e, bt);
+        // 遍历 error source chain 输出完整错误链（release 构建也能看到有用信息）
+        let chain = format_error_chain(&e);
+        log::error!("DB error chain: {}", chain);
         AppError::Internal("Database operation failed".into())
     }
 }

@@ -1,6 +1,9 @@
 //! Flyway 数据库迁移门控
 //! 使用 flyway 0.7 MigrationRunner 驱动迁移
 //!
+//! 关键设计：使用 #[migrations] 宏在编译时将 SQL 内嵌到二进制中，
+//! 不依赖运行时文件系统。这样制品包（二进制）自包含，无需外部 SQL 文件。
+//!
 //! RbatisExecutor 和 RbatisStateManager 仅在迁移时使用，
 //! 已从 db/ 模块移入此处，减少模块暴露。
 
@@ -8,11 +11,15 @@ use crate::db::query::vals;
 use crate::errors::AppError;
 use flyway::{
     ChangelogFile, MigrationExecutor, MigrationRunner, MigrationState, MigrationStateManager,
-    MigrationStatus, MigrationsError, RuntimeMigrationStore,
+    MigrationStatus, MigrationsError, MigrationStore,
 };
 use log::info;
 use rbatis::RBatis;
 use std::sync::{Arc, Mutex};
+
+/// 编译时内嵌的迁移存储 — SQL 文件在编译时嵌入二进制，无需运行时文件系统
+#[flyway::migrations("migrations/")]
+struct EmbeddedMigrations {}
 
 /// flyway 的 Result 类型别名：std::result::Result<T, MigrationsError>
 type FlyResult<T> = std::result::Result<T, MigrationsError>;
@@ -207,10 +214,19 @@ impl MigrationStateManager for RbatisStateManager {
 // ── 迁移入口 ──
 
 pub async fn migrate(db: Arc<RBatis>) -> std::result::Result<(), AppError> {
-    info!("Running flyway migrations...");
+    info!("Running flyway migrations (embedded SQL)...",);
 
-    // 1. 文件系统扫描 —— V*.sql 文件自动发现
-    let store = RuntimeMigrationStore::new("migrations");
+    // 1. 编译时内嵌的迁移存储 — SQL 已在编译时嵌入二进制，无需运行时文件系统
+    let store = EmbeddedMigrations {};
+    let changelogs = store.changelogs();
+    info!("Found {} embedded migration(s):", changelogs.len());
+    for cl in &changelogs {
+        info!("  V{} — {}", cl.version, cl.name);
+    }
+    if changelogs.is_empty() {
+        log::error!("No embedded migrations found — this should never happen if migrations/ directory has V*.sql files at compile time");
+        return Err(AppError::Internal("No migrations found in embedded store".into()));
+    }
 
     // 2. 状态管理 —— _flyway_schema_history 表
     let state_manager = Arc::new(RbatisStateManager::new(db.clone()));

@@ -1,7 +1,6 @@
 [Unit]
 Description=rs-wallet service
-After=network.target postgresql.service
-Requires=postgresql.service
+After=network.target
 
 [Service]
 Type=simple
@@ -13,7 +12,7 @@ Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
 
-# Environment overrides — adjust as needed
+# Environment overrides
 Environment=RUST_BACKTRACE=1
 EnvironmentFile=-/opt/rs-wallet/env
 
@@ -21,7 +20,7 @@ EnvironmentFile=-/opt/rs-wallet/env
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/rs-wallet/keys
+ReadWritePaths=/opt/rs-wallet
 PrivateTmp=true
 
 [Install]
