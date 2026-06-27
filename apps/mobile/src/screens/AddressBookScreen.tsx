@@ -82,7 +82,7 @@ export default function AddressBookScreen() {
           style={{ marginRight: 16 }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <AddContactIcon size={22} color="#287220" />
+          <AddContactIcon size={22} color="#374151" />
         </TouchableOpacity>
       ),
     });

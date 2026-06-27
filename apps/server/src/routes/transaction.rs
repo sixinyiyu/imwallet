@@ -36,6 +36,7 @@ async fn transfer(
         state.db.clone(),
         body,
         &device.device_id,
+        &device.platform,
         &state.config,
     )
     .await?;

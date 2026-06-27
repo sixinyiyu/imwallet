@@ -33,6 +33,7 @@ sha2 = "0.11"
 rsa = { version = "0.9", features = ["sha2"] }
 rand = "0.8"
 hex = "0.4"
+base64 = "0.22"
 
 # ── Utilities ──
 uuid = { version = "1", features = ["v4", "serde"] }

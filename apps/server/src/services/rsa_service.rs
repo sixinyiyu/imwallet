@@ -2,14 +2,15 @@
 //! 从配置路径加载 PEM 密钥文件；文件不存在时自动生成并保存
 //! 密钥对加载后存入 AppState，不再使用全局静态
 
+use base64::Engine;
 use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
+use rsa::Pkcs1v15Encrypt;
 use rsa::RsaPrivateKey;
 use rsa::RsaPublicKey;
 use std::path::Path;
 
 /// RSA 密钥对（私钥 + PEM 格式公钥字符串）
 pub struct RsaKeys {
-    #[allow(dead_code)]
     private_key: RsaPrivateKey,
     public_key_pem: String,
 }
@@ -112,5 +113,18 @@ impl RsaKeys {
     /// 获取 PEM 格式公钥字符串
     pub fn public_key_pem(&self) -> &str {
         &self.public_key_pem
+    }
+
+    /// 用 RSA 私钥解密 Base64 编码的密文（PKCS1v15），返回解密后的明文
+    /// 用于前端 RSA 公钥加密的密码传输场景
+    pub fn decrypt(&self, ciphertext_b64: &str) -> anyhow::Result<String> {
+        let ciphertext = base64::engine::general_purpose::STANDARD
+            .decode(ciphertext_b64)
+            .map_err(|e| anyhow::anyhow!("Base64 解码失败: {}", e))?;
+        let plaintext = self
+            .private_key
+            .decrypt(Pkcs1v15Encrypt, &ciphertext)
+            .map_err(|e| anyhow::anyhow!("RSA 解密失败: {}", e))?;
+        String::from_utf8(plaintext).map_err(|e| anyhow::anyhow!("解密结果非 UTF-8: {}", e))
     }
 }

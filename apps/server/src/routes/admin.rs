@@ -1,5 +1,6 @@
 //! 管理路由 — /api/v1/admin
 //! 需要 device_auth + SERVER_PWD 双重验证
+//! 密码字段使用 RSA 加密传输，服务端解密后比对
 
 use crate::db::query::{query, vals};
 use crate::errors::AppError;
@@ -29,13 +30,32 @@ pub fn router() -> Router<AppState> {
 
 #[derive(Debug, Deserialize)]
 pub struct AdminAuth {
-    pub password: String,
+    /// RSA 公钥加密后的密码（Base64 编码）
+    pub encrypted_password: String,
 }
 
-async fn verify_admin(state: &AppState, password: &str) -> Result<(), AppError> {
-    let verified = config_service::verify_service_password(state.db.clone(), password).await?;
+#[derive(Debug, Deserialize)]
+struct AdminDataAuth {
+    encrypted_password: String,
+    #[serde(default)]
+    offset: i64,
+}
+
+/// RSA 解密密码后验证管理员身份
+async fn decrypt_and_verify_admin(
+    state: &AppState,
+    encrypted_password: &str,
+) -> Result<String, AppError> {
+    // RSA 私钥解密
+    let password = state
+        .rsa_keys
+        .decrypt(encrypted_password)
+        .map_err(|_| AppError::BadRequest("密码解密失败".into()))?;
+
+    // 验证管理密码
+    let verified = config_service::verify_service_password(state.db.clone(), &password).await?;
     if verified {
-        Ok(())
+        Ok(password)
     } else {
         Err(AppError::Forbidden("管理密码验证失败".into()))
     }
@@ -58,7 +78,7 @@ async fn list_devices(
     State(state): State<AppState>,
     Json(auth): Json<AdminAuth>,
 ) -> Result<Json<Vec<DeviceListItem>>, AppError> {
-    verify_admin(&state, &auth.password).await?;
+    decrypt_and_verify_admin(&state, &auth.encrypted_password).await?;
 
     #[derive(serde::Deserialize)]
     struct Row {
@@ -125,7 +145,7 @@ async fn get_device_detail(
     Path(device_id): Path<String>,
     Json(auth): Json<AdminAuth>,
 ) -> Result<Json<DeviceDetailResponse>, AppError> {
-    verify_admin(&state, &auth.password).await?;
+    decrypt_and_verify_admin(&state, &auth.encrypted_password).await?;
 
     #[derive(serde::Deserialize)]
     struct DeviceRow {
@@ -211,7 +231,7 @@ async fn list_wallets(
     State(state): State<AppState>,
     Json(auth): Json<AdminAuth>,
 ) -> Result<Json<Vec<WalletAdminItem>>, AppError> {
-    verify_admin(&state, &auth.password).await?;
+    decrypt_and_verify_admin(&state, &auth.encrypted_password).await?;
 
     // 1. 查所有钱包
     #[derive(serde::Deserialize)]
@@ -308,18 +328,18 @@ async fn list_wallets(
 
 // ── 钱包交易记录 ──
 
-/// POST /admin/wallets/:id/transactions — 该钱包的最近交易（需 device_auth + 密码验证）
+/// POST /admin/wallets/:id/transactions — 该钱包的交易记录（需 device_auth + 密码验证，支持 offset 分页）
 async fn get_wallet_transactions(
     State(state): State<AppState>,
     Path(wallet_id): Path<String>,
-    Json(auth): Json<AdminAuth>,
+    Json(auth): Json<AdminDataAuth>,
 ) -> Result<Json<Vec<crate::models::Transaction>>, AppError> {
-    verify_admin(&state, &auth.password).await?;
+    decrypt_and_verify_admin(&state, &auth.encrypted_password).await?;
 
     let rows: Vec<crate::models::Transaction> = query(
         &state.db,
-        "WITH wallet_addr AS (SELECT DISTINCT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.address_id != '') SELECT t.* FROM transactions t WHERE t.from_address IN (SELECT address FROM wallet_addr) OR t.to_address IN (SELECT address FROM wallet_addr) ORDER BY t.created_at DESC LIMIT 20",
-        vals![&wallet_id],
+        "WITH wallet_addr AS (SELECT DISTINCT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.address_id != '') SELECT t.* FROM transactions t WHERE t.from_address IN (SELECT address FROM wallet_addr) OR t.to_address IN (SELECT address FROM wallet_addr) ORDER BY t.created_at DESC LIMIT 20 OFFSET $2",
+        vals![&wallet_id, auth.offset],
     )
     .await?;
 
@@ -328,18 +348,18 @@ async fn get_wallet_transactions(
 
 // ── 钱包充值记录 ──
 
-/// POST /admin/wallets/:id/recharges — 该钱包的最近充值记录（需 device_auth + 密码验证）
+/// POST /admin/wallets/:id/recharges — 该钱包的充值记录（需 device_auth + 密码验证，支持 offset 分页）
 async fn get_wallet_recharges(
     State(state): State<AppState>,
     Path(wallet_id): Path<String>,
-    Json(auth): Json<AdminAuth>,
+    Json(auth): Json<AdminDataAuth>,
 ) -> Result<Json<Vec<crate::models::Recharge>>, AppError> {
-    verify_admin(&state, &auth.password).await?;
+    decrypt_and_verify_admin(&state, &auth.encrypted_password).await?;
 
     let rows: Vec<crate::models::Recharge> = query(
         &state.db,
-        "SELECT * FROM recharges WHERE wallet_id = $1 ORDER BY created_at DESC LIMIT 20",
-        vals![&wallet_id],
+        "SELECT * FROM recharges WHERE wallet_id = $1 ORDER BY created_at DESC LIMIT 20 OFFSET $2",
+        vals![&wallet_id, auth.offset],
     )
     .await?;
 

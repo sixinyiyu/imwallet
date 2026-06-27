@@ -42,6 +42,7 @@ pub async fn execute_transfer(
     rb: Arc<RBatis>,
     input: TransferInput,
     device_id: &str,
+    platform: &str,
     cfg: &RuntimeConfig,
 ) -> Result<TransferResult, AppError> {
     // 校验收款地址格式与链类型匹配
@@ -153,7 +154,7 @@ pub async fn execute_transfer(
         time::OffsetDateTime::now_utc()
     );
     let tx_hash = format!("0x{}", hex::encode(Sha256::digest(hash.as_bytes())));
-    tx_exec(&tx, "INSERT INTO transactions (id, tx_hash, from_address, to_address, token_symbol, amount, fee, status, memo, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, 'CONFIRMED', $8, NOW(), NOW())", vals![&tx_id, &tx_hash, &from_addr.address, &input.to_address, &input.token_symbol, rbdc::Decimal::new(&input.amount.to_string()).unwrap(), rbdc::Decimal::new(&fee.to_string()).unwrap(), input.memo.as_deref().unwrap_or("")]).await?;
+    tx_exec(&tx, "INSERT INTO transactions (id, tx_hash, from_address, to_address, token_symbol, amount, fee, status, memo, platform, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, 'CONFIRMED', $8, $9, NOW(), NOW())", vals![&tx_id, &tx_hash, &from_addr.address, &input.to_address, &input.token_symbol, rbdc::Decimal::new(&input.amount.to_string()).unwrap(), rbdc::Decimal::new(&fee.to_string()).unwrap(), input.memo.as_deref().unwrap_or(""), platform]).await?;
 
     let nid1 = uuid::Uuid::new_v4().to_string();
     tx_exec(&tx, "INSERT INTO notifications (id, wallet_id, title, content, type, created_at) VALUES ($1, $2, '转账成功', $3, $4, NOW())", vals![&nid1, &input.from_wallet_id, &format!("转出 {} {}", input.amount, input.token_symbol), TRANSFER_OUT]).await?;

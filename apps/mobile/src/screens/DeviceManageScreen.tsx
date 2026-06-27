@@ -9,22 +9,23 @@ import {
 } from "react-native";
 import { useRoute } from "@react-navigation/native";
 import { adminService, type WalletAdminInfo, type WalletTransaction, type WalletRecharge } from "../services/adminService";
-import { ChevronRightIcon, AndroidIcon, IosIcon, WalletIcon } from "../components/icons";
+import { ChevronRightIcon, AndroidIcon, IosIcon, WalletIcon, TronIcon, USDTIcon, EthIcon, BtcIcon } from "../components/icons";
 import { WalletListSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import { formatTime } from "../utils/date";
 import type { RouteProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../types/navigation";
 
+/** 预置代币图标映射 */
+const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
+  TRX: TronIcon,
+  USDT: USDTIcon,
+  ETH: EthIcon,
+  BTC: BtcIcon,
+};
+
 type DeviceManageRoute = RouteProp<RootStackParamList, "DeviceManage">;
 
-/** 交易状态图标 */
-function statusIcon(status: string): string {
-  if (status === "confirmed" || status === "success") return "✅";
-  if (status === "pending" || status === "processing") return "⏳";
-  if (status === "failed" || status === "rejected") return "❌";
-  return "✅";
-}
 
 /** 平台图标 */
 function PlatformIcon({ platform, size = 16 }: { platform: string; size?: number }) {
@@ -207,22 +208,27 @@ export default function DeviceManageScreen() {
                         transactions.map((t) => (
                           <View key={t.id} style={styles.txCard}>
                             <View style={styles.txTopRow}>
-                              <View style={styles.txLabelWrap}>
-                                <Text style={styles.txStatusIcon}>{statusIcon(t.status)}</Text>
-                                <Text style={styles.txLabel}>{t.status === "confirmed" ? "转账" : t.status}</Text>
+                              <View style={styles.txTokenWrap}>
+                                {TOKEN_ICONS[t.tokenSymbol]
+                                  ? React.createElement(TOKEN_ICONS[t.tokenSymbol], { size: 20 })
+                                  : <Text style={styles.txTokenEmoji}>🪙</Text>
+                                }
+                                <Text style={styles.txSymbol}>{t.tokenSymbol}</Text>
                               </View>
-                              <Text style={styles.txAmount}>{t.amount} {t.tokenSymbol}</Text>
+                              <Text style={styles.txAmount}>{t.amount} / 手续费 {t.fee}</Text>
                             </View>
-                            <View style={styles.txMiddleRow}>
-                              <Text style={styles.txAddr} numberOfLines={1}>
-                                {t.fromAddress.slice(0, 8)}...→{t.toAddress.slice(0, 8)}...
+                            <View style={styles.txAddrRow}>
+                              <Text style={styles.txAddr} numberOfLines={1} ellipsizeMode="middle">
+                                {t.fromAddress}
+                              </Text>
+                              <Text style={styles.txArrow}> → </Text>
+                              <Text style={styles.txAddr} numberOfLines={1} ellipsizeMode="middle">
+                                {t.toAddress}
                               </Text>
                             </View>
                             <View style={styles.txBottomRow}>
                               <Text style={styles.txTime}>{formatTime(t.createdAt)}</Text>
-                              {parseFloat(t.fee) > 0 && (
-                                <Text style={styles.txFee}>手续费 {t.fee}</Text>
-                              )}
+                              <Text style={styles.txPlatform}>{t.platform === "ios" ? "iOS" : "Android"}</Text>
                             </View>
                           </View>
                         ))
@@ -234,15 +240,19 @@ export default function DeviceManageScreen() {
                         recharges.map((r) => (
                           <View key={r.id} style={styles.txCard}>
                             <View style={styles.txTopRow}>
-                              <View style={styles.txLabelWrap}>
-                                <Text style={styles.txStatusIcon}>💰</Text>
-                                <Text style={styles.txLabel}>充值</Text>
+                              <View style={styles.txTokenWrap}>
+                                {TOKEN_ICONS[r.tokenSymbol]
+                                  ? React.createElement(TOKEN_ICONS[r.tokenSymbol], { size: 20 })
+                                  : <Text style={styles.txTokenEmoji}>🪙</Text>
+                                }
+                                <Text style={styles.txSymbol}>{r.tokenSymbol}</Text>
                               </View>
-                              <Text style={[styles.txAmount, { color: "#10B981" }]}>+{r.amount} {r.tokenSymbol}</Text>
+                              <Text style={[styles.txAmount, { color: "#10B981" }]}>+{r.amount}</Text>
                             </View>
-                            <View style={styles.txMiddleRow}>
-                              <Text style={styles.txAddr} numberOfLines={1}>
-                                {r.walletAlias} · {r.accountAddress.slice(0, 8)}...
+                            <View style={styles.txAddrRow}>
+                              <Text style={styles.txAddrLabel}>{r.walletAlias}</Text>
+                              <Text style={styles.txAddr} numberOfLines={1} ellipsizeMode="middle">
+                                {r.accountAddress}
                               </Text>
                             </View>
                             <View style={styles.txBottomRow}>
@@ -371,23 +381,36 @@ const styles = StyleSheet.create({
 
   // ── 交易/充值卡片 ──
   txCard: {
-    backgroundColor: "#F9FAFB",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   txTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  txLabelWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
-  txStatusIcon: { fontSize: 14 },
-  txLabel: { fontSize: 14, fontWeight: "500", color: "#1F2937" },
+  txTokenWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
+  txTokenEmoji: { fontSize: 16 },
+  txSymbol: { fontSize: 15, fontWeight: "600", color: "#1F2937" },
   txAmount: { fontSize: 15, fontWeight: "700", color: "#1F2937" },
-  txMiddleRow: { marginTop: 6 },
-  txAddr: { fontSize: 12, color: "#6B7280", fontFamily: "monospace" },
-  txBottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6 },
+  txAddrRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },
+  txAddr: { fontSize: 13, color: "#6B7280", fontFamily: "monospace", flex: 1 },
+  txAddrLabel: { fontSize: 13, fontWeight: "500", color: "#374151", marginRight: 6 },
+  txArrow: { fontSize: 13, color: "#9CA3AF", fontWeight: "500" },
+  txBottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 },
   txTime: { fontSize: 12, color: "#9CA3AF" },
-  txFee: { fontSize: 12, color: "#9CA3AF" },
+  txPlatform: {
+    fontSize: 11,
+    color: "#6B7280",
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: "hidden",
+  },
 
   // ── 加载更多 ──
   loadMoreBtn: { paddingVertical: 10, alignItems: "center" },

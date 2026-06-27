@@ -18,7 +18,7 @@ import { localAddressService } from "../services/localAddressService";
 import { localWalletService } from "../services/localWalletService";
 import { rechargeService, type RechargeRecord } from "../services/rechargeService";
 import type { SimpleWallet, AssetInfo, AddressEntry, ServerWalletAddress } from "../types";
-import { TronIcon, USDTIcon, ChevronRightIcon, CopyIcon } from "../components/icons";
+import { TronIcon, USDTIcon, EthIcon, BtcIcon, ChevronRightIcon, CopyIcon } from "../components/icons";
 import { RechargeSkeleton } from "../components/Skeleton";
 import { formatTime as formatDate } from "../utils/date";
 
@@ -26,6 +26,8 @@ import { formatTime as formatDate } from "../utils/date";
 const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
   TRX: TronIcon,
   USDT: USDTIcon,
+  ETH: EthIcon,
+  BTC: BtcIcon,
 };
 
 export default function RechargeScreen() {

@@ -1,5 +1,6 @@
 //! 配置路由 — /api/v1/config
 //! 迁移自 IMWallet routes/config.ts (4 个接口)
+//! 密码字段使用 RSA 加密传输，服务端解密后比对
 
 use crate::errors::AppError;
 use crate::middleware::{AppState, DevicePayload};
@@ -81,7 +82,8 @@ async fn get_all_configs(
 
 #[derive(Debug, Deserialize)]
 pub struct VerifyPasswordRequest {
-    pub password: String,
+    /// RSA 公钥加密后的密码（Base64 编码）
+    pub encrypted_password: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -90,12 +92,18 @@ struct VerifyPasswordResponse {
 }
 
 /// POST /config/verify-password — 验证服务配置密码
+/// 密码由前端 RSA 公钥加密传输，服务端私钥解密后比对
 async fn verify_password(
     State(state): State<AppState>,
     Json(body): Json<VerifyPasswordRequest>,
 ) -> Result<Json<VerifyPasswordResponse>, AppError> {
-    let verified =
-        config_service::verify_service_password(state.db.clone(), &body.password).await?;
+    // RSA 私钥解密
+    let password = state
+        .rsa_keys
+        .decrypt(&body.encrypted_password)
+        .map_err(|_| AppError::BadRequest("密码解密失败".into()))?;
+
+    let verified = config_service::verify_service_password(state.db.clone(), &password).await?;
     if verified {
         Ok(Json(VerifyPasswordResponse { verified: true }))
     } else {
@@ -107,7 +115,8 @@ async fn verify_password(
 pub struct UpdateConfigRequest {
     pub key: String,
     pub value: String,
-    pub password: String,
+    /// RSA 公钥加密后的密码（Base64 编码）
+    pub encrypted_password: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -118,6 +127,7 @@ struct UpdateConfigResponse {
 
 /// PUT /config/update — 更新配置项（需密码验证）
 /// 禁止通过 API 修改 server_pwd 和 recharge_allowed_devices，这两个字段仅由运维人员直接修改数据库
+/// 密码由前端 RSA 公钥加密传输，服务端私钥解密后比对
 async fn update_config(
     State(state): State<AppState>,
     Json(body): Json<UpdateConfigRequest>,
@@ -131,9 +141,14 @@ async fn update_config(
         )));
     }
 
-    // 先验证管理密码
-    let verified =
-        config_service::verify_service_password(state.db.clone(), &body.password).await?;
+    // RSA 私钥解密密码
+    let password = state
+        .rsa_keys
+        .decrypt(&body.encrypted_password)
+        .map_err(|_| AppError::BadRequest("密码解密失败".into()))?;
+
+    // 验证管理密码
+    let verified = config_service::verify_service_password(state.db.clone(), &password).await?;
     if !verified {
         return Err(AppError::Forbidden("管理密码验证失败".into()));
     }

@@ -1,4 +1,5 @@
 import api from "./api";
+import { encryptPassword } from "../utils/rsaEncrypt";
 
 export interface DeviceInfo {
   id: string;
@@ -48,8 +49,7 @@ export interface WalletTransaction {
   tokenSymbol: string;
   amount: string;
   fee: string;
-  status: string;
-  memo: string;
+  platform: string;
   createdAt: string;
 }
 
@@ -66,9 +66,10 @@ export interface WalletRecharge {
 }
 
 export const adminService = {
-  /** 获取设备列表（POST，需 device_auth + 管理密码） */
+  /** 获取设备列表（POST，需 device_auth + RSA加密管理密码） */
   async listDevices(password: string): Promise<DeviceInfo[]> {
-    const { data } = await api.post("/admin/devices", { password });
+    const encryptedPassword = await encryptPassword(password);
+    const { data } = await api.post("/admin/devices", { encryptedPassword });
     return (data || []).map((d: any) => ({
       id: d.id,
       platform: d.platform,
@@ -79,9 +80,10 @@ export const adminService = {
     }));
   },
 
-  /** 获取钱包列表（POST，含关联设备，需 device_auth + 管理密码） */
+  /** 获取钱包列表（POST，含关联设备，需 device_auth + RSA加密管理密码） */
   async listWallets(password: string): Promise<WalletAdminInfo[]> {
-    const { data } = await api.post("/admin/wallets", { password });
+    const encryptedPassword = await encryptPassword(password);
+    const { data } = await api.post("/admin/wallets", { encryptedPassword });
     return (data || []).map((w: any) => ({
       id: w.id,
       alias: w.alias,
@@ -97,9 +99,10 @@ export const adminService = {
     }));
   },
 
-  /** 获取设备详情（POST，需 device_auth + 管理密码） */
+  /** 获取设备详情（POST，需 device_auth + RSA加密管理密码） */
   async getDeviceDetail(deviceId: string, password: string): Promise<DeviceDetail> {
-    const { data } = await api.post(`/admin/devices/${deviceId}`, { password });
+    const encryptedPassword = await encryptPassword(password);
+    const { data } = await api.post(`/admin/devices/${deviceId}`, { encryptedPassword });
     return {
       id: data.id,
       platform: data.platform,
@@ -116,9 +119,10 @@ export const adminService = {
     };
   },
 
-  /** 获取钱包交易记录（POST，需 device_auth + 管理密码） */
+  /** 获取钱包交易记录（POST，需 device_auth + RSA加密管理密码） */
   async getWalletTransactions(walletId: string, password: string, offset: number = 0): Promise<WalletTransaction[]> {
-    const { data } = await api.post(`/admin/wallets/${walletId}/transactions`, { password, offset });
+    const encryptedPassword = await encryptPassword(password);
+    const { data } = await api.post(`/admin/wallets/${walletId}/transactions`, { encryptedPassword, offset });
     return (data || []).map((t: any) => ({
       id: t.id,
       txHash: t.txHash,
@@ -127,15 +131,16 @@ export const adminService = {
       tokenSymbol: t.tokenSymbol,
       amount: String(t.amount ?? "0"),
       fee: String(t.fee ?? "0"),
-      status: t.status,
-      memo: t.memo ?? "",
+      platform: t.platform ?? "",
       createdAt: t.createdAt ?? "",
+      memo: t.memo ?? "",
     }));
   },
 
-  /** 获取钱包充值记录（POST，需 device_auth + 管理密码） */
+  /** 获取钱包充值记录（POST，需 device_auth + RSA加密管理密码） */
   async getWalletRecharges(walletId: string, password: string, offset: number = 0): Promise<WalletRecharge[]> {
-    const { data } = await api.post(`/admin/wallets/${walletId}/recharges`, { password, offset });
+    const encryptedPassword = await encryptPassword(password);
+    const { data } = await api.post(`/admin/wallets/${walletId}/recharges`, { encryptedPassword, offset });
     return (data || []).map((r: any) => ({
       id: r.id,
       walletId: r.walletId,

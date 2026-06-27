@@ -1,6 +1,7 @@
 import api from "./api";
 import { getDevicePublicKey } from "./api";
 import * as SecureStore from "../utils/secureStorage";
+import { encryptPassword } from "../utils/rsaEncrypt";
 
 export interface FeeConfig {
   feeRate: number;
@@ -43,21 +44,26 @@ export const configService = {
 
   /**
    * 校验服务配置密码（调用后端 /config/verify-password）
+   * 密码经 RSA 公钥加密后传输，服务端私钥解密比对
+   * @param password 明文密码
    * @returns true=密码正确, throws=密码错误或网络异常
    */
   async verifyServerPassword(password: string): Promise<boolean> {
-    const { data } = await api.post("/config/verify-password", { password });
+    const encryptedPassword = await encryptPassword(password);
+    const { data } = await api.post("/config/verify-password", { encryptedPassword });
     return data.verified === true;
   },
 
   /**
    * 通用更新字典配置（调用后端 PUT /config/update，需管理密码验证）
+   * 密码经 RSA 公钥加密后传输，服务端私钥解密比对
    * @param key 配置键名，如 fee_rate
    * @param value 配置值
-   * @param password 管理密码
+   * @param password 明文密码
    */
   async updateConfig(key: string, value: string, password: string): Promise<{ key: string; value: string }> {
-    const { data } = await api.put("/config/update", { key, value, password });
+    const encryptedPassword = await encryptPassword(password);
+    const { data } = await api.put("/config/update", { key, value, encryptedPassword });
     return data;
   },
 

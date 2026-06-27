@@ -15,6 +15,7 @@ pub struct Transaction {
     pub fee: Decimal,
     pub status: String,
     pub memo: String,
+    pub platform: String,
     pub created_at: Option<DateTime>,
     pub updated_at: Option<DateTime>,
 }
