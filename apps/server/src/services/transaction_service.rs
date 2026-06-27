@@ -127,7 +127,7 @@ pub async fn execute_transfer(
     )
     .await?;
 
-    tx_exec(&tx, "UPDATE assets_addresses SET balance = balance - $1, updated_at = NOW() WHERE address_id = $2 AND asset_id = $3", vals![total_debit, &from_addr.id, &asset.id]).await?;
+    tx_exec(&tx, "UPDATE assets_addresses SET balance = balance - $1, updated_at = NOW() WHERE address_id = $2 AND asset_id = $3", vals![rbdc::Decimal::new(&total_debit.to_string()).unwrap(), &from_addr.id, &asset.id]).await?;
 
     if let Some(to) = to_addr.first() {
         let c = tx_query_count(
@@ -137,9 +137,9 @@ pub async fn execute_transfer(
         )
         .await?;
         if c > 0 {
-            tx_exec(&tx, "UPDATE assets_addresses SET balance = balance + $1, updated_at = NOW() WHERE address_id = $2 AND asset_id = $3", vals![received, &to.id, &asset.id]).await?;
+            tx_exec(&tx, "UPDATE assets_addresses SET balance = balance + $1, updated_at = NOW() WHERE address_id = $2 AND asset_id = $3", vals![rbdc::Decimal::new(&received.to_string()).unwrap(), &to.id, &asset.id]).await?;
         } else {
-            tx_exec(&tx, "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())", vals![uuid::Uuid::new_v4().to_string(), &to.id, &asset.id, &input.network, received]).await?;
+            tx_exec(&tx, "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())", vals![uuid::Uuid::new_v4().to_string(), &to.id, &asset.id, &input.network, rbdc::Decimal::new(&received.to_string()).unwrap()]).await?;
         }
     }
 
@@ -153,7 +153,7 @@ pub async fn execute_transfer(
         time::OffsetDateTime::now_utc()
     );
     let tx_hash = format!("0x{}", hex::encode(Sha256::digest(hash.as_bytes())));
-    tx_exec(&tx, "INSERT INTO transactions (id, tx_hash, from_address, to_address, token_symbol, amount, fee, status, memo, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, 'CONFIRMED', $8, NOW(), NOW())", vals![&tx_id, &tx_hash, &from_addr.address, &input.to_address, &input.token_symbol, &input.amount, &fee, input.memo.as_deref().unwrap_or("")]).await?;
+    tx_exec(&tx, "INSERT INTO transactions (id, tx_hash, from_address, to_address, token_symbol, amount, fee, status, memo, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, 'CONFIRMED', $8, NOW(), NOW())", vals![&tx_id, &tx_hash, &from_addr.address, &input.to_address, &input.token_symbol, rbdc::Decimal::new(&input.amount.to_string()).unwrap(), rbdc::Decimal::new(&fee.to_string()).unwrap(), input.memo.as_deref().unwrap_or("")]).await?;
 
     let nid1 = uuid::Uuid::new_v4().to_string();
     tx_exec(&tx, "INSERT INTO notifications (id, wallet_id, title, content, type, created_at) VALUES ($1, $2, '转账成功', $3, $4, NOW())", vals![&nid1, &input.from_wallet_id, &format!("转出 {} {}", input.amount, input.token_symbol), TRANSFER_OUT]).await?;
