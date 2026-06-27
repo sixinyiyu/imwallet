@@ -65,8 +65,10 @@ export default function DeviceManageScreen() {
       setWalletsTotal(list.length);
       setWallets((prev) => (append ? [...prev, ...list] : list));
       setWalletsPage(page);
-    } catch {
-      showToast("加载钱包列表失败");
+    } catch (err: any) {
+      const msg = err?.message || "加载钱包列表失败";
+      console.warn("[DeviceManage] loadWallets error:", msg);
+      showToast(msg);
     }
   }, [adminPwd]);
 
@@ -98,8 +100,10 @@ export default function DeviceManageScreen() {
       ]);
       setTransactions(txns);
       setRecharges(rechs);
-    } catch {
-      showToast("加载钱包数据失败");
+    } catch (err: any) {
+      const msg = err?.message || "加载钱包数据失败";
+      console.warn("[DeviceManage] loadWalletData error:", msg);
+      showToast(msg);
     }
     setDataLoading(false);
   };
@@ -117,8 +121,10 @@ export default function DeviceManageScreen() {
         const more = await adminService.getWalletRecharges(selectedWallet, adminPwd, nextOffset);
         setRecharges((prev) => [...prev, ...more]);
       }
-    } catch {
-      showToast("加载更多失败");
+    } catch (err: any) {
+      const msg = err?.message || "加载更多失败";
+      console.warn("[DeviceManage] loadMore error:", msg);
+      showToast(msg);
     }
     setDataLoading(false);
   };

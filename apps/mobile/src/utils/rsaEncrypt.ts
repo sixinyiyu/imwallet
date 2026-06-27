@@ -9,13 +9,7 @@
  */
 
 import JSEncrypt from "jsencrypt";
-import axios from "axios";
-import Constants from "expo-constants";
-
-const BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ||
-  Constants.expoConfig?.extra?.apiBaseUrl ||
-  "https://imwallet.dpdns.org/api/v1";
+import api from "../services/api";
 
 /** RSA 公钥缓存（PEM 字符串），避免每次请求都重新获取 */
 let cachedPublicKeyPem: string | null = null;
@@ -27,9 +21,11 @@ let cachedPublicKeyPem: string | null = null;
 export async function fetchRsaPublicKey(): Promise<string> {
   if (cachedPublicKeyPem) return cachedPublicKeyPem;
 
-  const { data } = await axios.get(`${BASE_URL}/rsa/public-key`);
+  console.log("[RSA] Fetching public key from server...");
+  const { data } = await api.get("/rsa/public-key");
   const pem: string = data.public_key || data.publicKey;
   if (!pem) throw new Error("服务端未返回 RSA 公钥");
+  console.log("[RSA] Public key fetched, length:", pem.length);
   cachedPublicKeyPem = pem;
   return pem;
 }
@@ -50,9 +46,11 @@ export async function encryptPassword(plaintextPassword: string): Promise<string
   if (!encrypted) {
     // 加密失败时清除缓存，下次重新获取公钥
     cachedPublicKeyPem = null;
+    console.error("[RSA] Encryption failed, cleared cache");
     throw new Error("RSA 加密失败，请重试");
   }
 
+  console.log("[RSA] Password encrypted, ciphertext length:", encrypted.length);
   return encrypted;
 }
 
