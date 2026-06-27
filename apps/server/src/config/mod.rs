@@ -153,7 +153,6 @@ pub struct RuntimeConfig {
     pub fee_rate: f64,
     pub fee_mode: String,
     pub tx_restrict_wallet: bool,
-    pub server_pwd: String,
     pub timestamp_window_secs: i64,
 }
 
@@ -163,7 +162,6 @@ impl From<AppConfig> for RuntimeConfig {
             fee_rate: c.fee_rate,
             fee_mode: c.fee_mode,
             tx_restrict_wallet: c.tx_restrict_wallet,
-            server_pwd: c.server_pwd,
             timestamp_window_secs: c.timestamp_window_secs,
         }
     }

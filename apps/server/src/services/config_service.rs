@@ -56,15 +56,35 @@ pub async fn update_config(
     .ok_or_else(|| AppError::NotFound("config item not found".into()))
 }
 
-pub async fn verify_service_password(
-    password: &str,
-    cfg: &RuntimeConfig,
-) -> Result<bool, AppError> {
-    let e = &cfg.server_pwd;
-    if e.is_empty() {
+/// 判断指定设备是否有充值权限
+/// 白名单为空时允许所有设备，非空时只允许白名单中的设备
+pub async fn is_recharge_permitted(rb: Arc<RBatis>, device_id: &str) -> Result<bool, AppError> {
+    let row: Option<AppConfigEntity> = query_one(
+        &rb,
+        "SELECT * FROM app_configs WHERE key = $1",
+        vals!["recharge_allowed_devices"],
+    )
+    .await?;
+    let allowed: Vec<String> = row
+        .and_then(|c| serde_json::from_str::<Vec<String>>(&c.value).ok())
+        .unwrap_or_default();
+    // 白名单为空 → 所有设备都有权限；非空 → 仅白名单中的设备有权限
+    Ok(allowed.is_empty() || allowed.iter().any(|d| d == device_id))
+}
+
+/// 验证服务配置密码 — 从数据库读取 server_pwd，避免内存缓存导致修改后不生效
+pub async fn verify_service_password(rb: Arc<RBatis>, password: &str) -> Result<bool, AppError> {
+    let row: Option<AppConfigEntity> = query_one(
+        &rb,
+        "SELECT * FROM app_configs WHERE key = $1",
+        vals!["server_pwd"],
+    )
+    .await?;
+    let stored_pwd = row.map(|r| r.value).unwrap_or_default();
+    if stored_pwd.is_empty() {
         return Ok(false);
     }
-    Ok(password == e)
+    Ok(password == stored_pwd)
 }
 
 /// Sync config.toml values to database app_configs table.

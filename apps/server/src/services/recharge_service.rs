@@ -39,8 +39,8 @@ pub async fn execute_recharge(
     // 校验充值设备白名单
     let allowed: Vec<String> = crate::db::query::query_one::<AppConfigEntity>(
         &rb,
-        "SELECT * FROM app_configs WHERE key = 'recharge_allowed_devices",
-        vals![],
+        "SELECT * FROM app_configs WHERE key = $1",
+        vals!["recharge_allowed_devices"],
     )
     .await?
     .and_then(|c| serde_json::from_str::<Vec<String>>(&c.value).ok())

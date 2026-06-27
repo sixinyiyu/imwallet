@@ -25,6 +25,7 @@ export default function ProfileScreen() {
   const totalAccountCount = wallets.length;
   const [unreadCount, setUnreadCount] = React.useState(0);
   const [serviceConfigEnabled, setServiceConfigEnabled] = React.useState(false);
+  const [rechargePermitted, setRechargePermitted] = React.useState(false);
 
   const fetchUnreadCount = async () => {
     try {
@@ -40,6 +41,7 @@ export default function ProfileScreen() {
       // 先同步通知，再刷新未读数
       notificationSyncService.syncNotifications().then(() => fetchUnreadCount());
       configService.getServiceConfigEnabled().then(setServiceConfigEnabled);
+      configService.getRechargePermitted().then(setRechargePermitted);
     }, [])
   );
 
@@ -47,7 +49,7 @@ export default function ProfileScreen() {
     { icon: <WalletIcon size={22} color="#3B82F6" />, label: "钱包管理", screen: "WalletManage", badge: `${totalAccountCount} 个钱包` },
     { icon: <CopyIcon size={22} color="#10B981" />, label: "地址本", screen: "AddressBook" },
     { icon: <Text style={styles.emojiIcon}>⚙️</Text>, label: "通用设置", screen: "Settings" },
-    ...(serviceConfigEnabled
+    ...(serviceConfigEnabled && rechargePermitted
       ? [{ icon: <Text style={styles.emojiIcon}>🔧</Text>, label: "配置管理", screen: "ConfigManage" as keyof RootStackParamList }]
       : []),
     { icon: <Text style={styles.emojiIcon}>🔐</Text>, label: "安全与隐私", screen: "Security" },

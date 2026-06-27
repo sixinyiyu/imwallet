@@ -33,7 +33,7 @@ pub struct AdminAuth {
 }
 
 async fn verify_admin(state: &AppState, password: &str) -> Result<(), AppError> {
-    let verified = config_service::verify_service_password(password, &state.config).await?;
+    let verified = config_service::verify_service_password(state.db.clone(), password).await?;
     if verified {
         Ok(())
     } else {
