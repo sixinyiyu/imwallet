@@ -32,15 +32,15 @@ jobs:
           restore-keys: linux-musl-cargo-release-
 
       - name: Build release binary (musl)
-        working-directory: apps/server
-        run: cargo build --release --target x86_64-unknown-linux-musl
+        run: cargo build --release --target x86_64-unknown-linux-musl --manifest-path apps/server/Cargo.toml
 
       - name: Strip binary
         run: |
           BINARY=$(find apps/server/target/x86_64-unknown-linux-musl/release -maxdepth 1 -type f -executable -name 'rs-wallet' | head -1)
           if [ -z "$BINARY" ]; then
-            echo "ERROR: rs-wallet binary not found in target directory"
-            ls -la apps/server/target/x86_64-unknown-linux-musl/release/ 2>/dev/null || echo "directory does not exist"
+            echo "ERROR: rs-wallet binary not found"
+            find apps/server/target -name 'rs-wallet' -type f 2>/dev/null || echo "no rs-wallet found anywhere in target"
+            ls -la apps/server/target/x86_64-unknown-linux-musl/release/ 2>/dev/null || echo "musl release dir does not exist"
             exit 1
           fi
           echo "Stripping: $BINARY"
@@ -81,8 +81,7 @@ jobs:
           restore-keys: windows-cargo-release-
 
       - name: Build release binary
-        working-directory: apps/server
-        run: cargo build --release
+        run: cargo build --release --manifest-path apps/server/Cargo.toml
 
       - name: Create release archive
         shell: pwsh
