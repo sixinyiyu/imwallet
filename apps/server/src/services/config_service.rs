@@ -1,40 +1,11 @@
 //! 配置服务
 
 use crate::config::AppConfig;
-use crate::config::RuntimeConfig;
 use crate::db::query::{query, query_one, vals};
 use crate::errors::AppError;
 use crate::models::AppConfigEntity;
 use rbatis::RBatis;
-use serde::Serialize;
 use std::sync::Arc;
-
-#[derive(Debug, Serialize)]
-pub struct FeeConfig {
-    pub fee_rate: f64,
-    pub fee_mode: String,
-}
-
-pub async fn get_fee_config(rb: Arc<RBatis>, cfg: &RuntimeConfig) -> Result<FeeConfig, AppError> {
-    let rows: Vec<AppConfigEntity> = query(
-        &rb,
-        "SELECT * FROM app_configs WHERE key IN ('fee_rate', 'fee_mode')",
-        vals![],
-    )
-    .await?;
-    Ok(FeeConfig {
-        fee_rate: rows
-            .iter()
-            .find(|c| c.key == "fee_rate")
-            .and_then(|c| c.value.parse().ok())
-            .unwrap_or(cfg.fee_rate),
-        fee_mode: rows
-            .iter()
-            .find(|c| c.key == "fee_mode")
-            .map(|c| c.value.clone())
-            .unwrap_or_else(|| cfg.fee_mode.clone()),
-    })
-}
 
 pub async fn get_all_configs(rb: Arc<RBatis>) -> Result<Vec<AppConfigEntity>, AppError> {
     query(&rb, "SELECT * FROM app_configs ORDER BY key", vals![])
@@ -57,7 +28,7 @@ pub async fn update_config(
 }
 
 /// 判断指定设备是否有充值权限
-/// 白名单为空时允许所有设备，非空时只允许白名单中的设备
+/// 仅白名单中明确列出的设备有权限，白名单为空时所有设备均无权限
 pub async fn is_recharge_permitted(rb: Arc<RBatis>, device_id: &str) -> Result<bool, AppError> {
     let row: Option<AppConfigEntity> = query_one(
         &rb,
@@ -68,8 +39,7 @@ pub async fn is_recharge_permitted(rb: Arc<RBatis>, device_id: &str) -> Result<b
     let allowed: Vec<String> = row
         .and_then(|c| serde_json::from_str::<Vec<String>>(&c.value).ok())
         .unwrap_or_default();
-    // 白名单为空 → 所有设备都有权限；非空 → 仅白名单中的设备有权限
-    Ok(allowed.is_empty() || allowed.iter().any(|d| d == device_id))
+    Ok(!allowed.is_empty() && allowed.iter().any(|d| d == device_id))
 }
 
 /// 验证服务配置密码 — 从数据库读取 server_pwd，避免内存缓存导致修改后不生效

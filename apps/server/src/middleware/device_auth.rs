@@ -131,7 +131,7 @@ pub async fn device_auth(
     let ts: i64 = ts_str
         .parse()
         .map_err(|_| AppError::Unauthorized("invalid timestamp".into()))?;
-    let now = chrono::Utc::now().timestamp();
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
     if (now - ts).abs() > state.config.timestamp_window_secs {
         return Err(AppError::Unauthorized("request expired".into()));
     }

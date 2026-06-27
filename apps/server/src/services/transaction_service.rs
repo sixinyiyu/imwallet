@@ -150,7 +150,7 @@ pub async fn execute_transfer(
         input.to_address,
         input.amount,
         uuid::Uuid::new_v4(),
-        chrono::Utc::now()
+        time::OffsetDateTime::now_utc()
     );
     let tx_hash = format!("0x{}", hex::encode(Sha256::digest(hash.as_bytes())));
     tx_exec(&tx, "INSERT INTO transactions (id, tx_hash, from_address, to_address, token_symbol, amount, fee, status, memo, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, 'CONFIRMED', $8, NOW(), NOW())", vals![&tx_id, &tx_hash, &from_addr.address, &input.to_address, &input.token_symbol, input.amount, fee, input.memo.as_deref().unwrap_or("")]).await?;

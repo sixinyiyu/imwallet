@@ -36,7 +36,7 @@ hex = "0.4"
 
 # ── Utilities ──
 uuid = { version = "1", features = ["v4", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
+time = { version = "0.3", features = ["serde"] }
 rust_decimal = { version = "1", features = ["serde", "db-postgres"] }
 dotenvy = "0.15"
 log = "0.4"

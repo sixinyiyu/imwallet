@@ -76,7 +76,7 @@ async fn list_devices(
     )
     .await?;
 
-    let now_ts = chrono::Utc::now().timestamp();
+    let now_ts = time::OffsetDateTime::now_utc().unix_timestamp();
     let items: Vec<DeviceListItem> = rows
         .into_iter()
         .map(|r| {
@@ -161,7 +161,7 @@ async fn get_device_detail(
     )
     .await?;
 
-    let now_ts = chrono::Utc::now().timestamp();
+    let now_ts = time::OffsetDateTime::now_utc().unix_timestamp();
     let online = device
         .last_active_at
         .clone()
@@ -259,7 +259,7 @@ async fn list_wallets(
     )
     .await?;
 
-    let now_ts = chrono::Utc::now().timestamp();
+    let now_ts = time::OffsetDateTime::now_utc().unix_timestamp();
 
     // 组装
     let chain_map: std::collections::HashMap<String, Vec<String>> =

@@ -32,7 +32,7 @@ export default function ServiceConfigScreen() {
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await api.get("/config/fee", { timeout: 8000 });
+      const res = await api.get("/config/all", { timeout: 8000 });
       if (res.status === 200) {
         setTestResult("✅ 连接正常");
       } else {

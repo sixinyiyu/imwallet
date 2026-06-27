@@ -22,20 +22,23 @@ const DENY_MARKER = 0xD4E6F28A;
 export const configService = {
   /**
    * 获取所有配置项（调用后端 GET /config/all）
-   * 注意：服务端已过滤掉 server_pwd / recharge_allowed_devices 等敏感项，
-   * 并注入 device_cap（XOR 掩码编码的充值权限标识）
+   * 包含 fee_rate、fee_mode、tx_restrict_wallet、device_cap 等
+   * 服务端已过滤掉 server_pwd / recharge_allowed_devices 等敏感项
    */
   async getAllConfigs(): Promise<ConfigItem[]> {
     const { data } = await api.get("/config/all");
     return data;
   },
 
-  /**
-   * 获取费率配置（每次从服务端实时获取，不缓存，因为费率可动态修改）
-   */
+  /** 从 getAllConfigs 结果中解析费率配置 */
   async getFeeConfig(): Promise<FeeConfig> {
-    const { data } = await api.get("/config/fee");
-    return data;
+    const configs = await this.getAllConfigs();
+    const feeRateItem = configs.find((c) => c.key === "fee_rate");
+    const feeModeItem = configs.find((c) => c.key === "fee_mode");
+    return {
+      feeRate: feeRateItem ? parseFloat(feeRateItem.value) : 0,
+      feeMode: feeModeItem?.value === "EXTRA" ? "EXTRA" : "DEDUCTED",
+    };
   },
 
   /**

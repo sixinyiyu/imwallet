@@ -62,14 +62,16 @@ export default function ConfigManageScreen() {
   const loadConfig = async () => {
     setLoading(true);
     try {
-      const [config, allConfigs, permitted] = await Promise.all([
-        configService.getFeeConfig(),
-        configService.getAllConfigs(),
-        configService.getRechargePermitted(),
-      ]);
-      setFeeConfig(config);
+      const allConfigs = await configService.getAllConfigs();
+      const feeRateItem = allConfigs.find((c) => c.key === "fee_rate");
+      const feeModeItem = allConfigs.find((c) => c.key === "fee_mode");
+      setFeeConfig({
+        feeRate: feeRateItem ? parseFloat(feeRateItem.value) : 0,
+        feeMode: feeModeItem?.value === "EXTRA" ? "EXTRA" : "DEDUCTED",
+      });
       const restrictItem = allConfigs.find((c) => c.key === "tx_restrict_wallet");
       setTxRestrictWallet(restrictItem?.value === "true");
+      const permitted = await configService.getRechargePermitted();
       setRechargePermitted(permitted);
     } catch {
       showToast("加载配置失败");

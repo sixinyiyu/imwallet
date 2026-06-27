@@ -15,37 +15,14 @@ use serde::{Deserialize, Serialize};
 const PERM_MARKER: u32 = 0x7B3A9C1F;
 const DENY_MARKER: u32 = 0xD4E6F28A;
 
-/// 不暴露给前端的配置项（敏感项 + 与 /config/fee 重复的项）
-const HIDDEN_KEYS: &[&str] = &[
-    "server_pwd",
-    "recharge_allowed_devices",
-    "fee_rate",
-    "fee_mode",
-];
+/// 不暴露给前端的配置项（仅敏感项）
+const HIDDEN_KEYS: &[&str] = &["server_pwd", "recharge_allowed_devices"];
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/config/fee", get(get_fee_config))
         .route("/config/all", get(get_all_configs))
         .route("/config/verify-password", post(verify_password))
         .route("/config/update", put(update_config))
-}
-
-#[derive(Debug, Serialize)]
-struct FeeConfigResponse {
-    fee_rate: f64,
-    fee_mode: String,
-}
-
-/// GET /config/fee — 获取费率配置
-async fn get_fee_config(
-    State(state): State<AppState>,
-) -> Result<Json<FeeConfigResponse>, AppError> {
-    let config = config_service::get_fee_config(state.db.clone(), &state.config).await?;
-    Ok(Json(FeeConfigResponse {
-        fee_rate: config.fee_rate,
-        fee_mode: config.fee_mode,
-    }))
 }
 
 #[derive(Debug, Serialize)]
