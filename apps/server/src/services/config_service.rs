@@ -88,32 +88,52 @@ pub async fn verify_service_password(rb: Arc<RBatis>, password: &str) -> Result<
 }
 
 /// Sync config.toml values to database app_configs table.
-/// Overwrites seed data defaults (e.g. CHANGE_ME) with actual config values.
-/// Uses UPSERT (ON CONFLICT DO UPDATE) so it's idempotent.
+/// For server_pwd: only overwrite when DB value is the seed default ("CHANGE_ME"),
+/// preserving any value manually set by ops.
+/// For other config items: always overwrite (they are not security-sensitive).
 pub async fn sync_config_to_db(rb: Arc<RBatis>, cfg: &AppConfig) -> Result<(), AppError> {
-    let items: Vec<(&str, String)> = vec![
-        ("server_pwd", cfg.server_pwd.clone()),
+    // server_pwd: 仅覆盖种子默认值，保留运维手动修改的值
+    let existing_pwd: Option<AppConfigEntity> = query_one(
+        &rb,
+        "SELECT * FROM app_configs WHERE key = $1",
+        vals!["server_pwd"],
+    )
+    .await?;
+    let should_sync_pwd = existing_pwd
+        .as_ref()
+        .map(|r| r.value == "CHANGE_ME")
+        .unwrap_or(true); // DB 无记录 → 需要写入
+    if should_sync_pwd {
+        let result: Option<AppConfigEntity> = query_one(
+            &rb,
+            "INSERT INTO app_configs (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW() RETURNING *",
+            vals!["server_pwd", &cfg.server_pwd],
+        )
+        .await?;
+        if result.is_some() {
+            log::info!("Synced config to DB: server_pwd = ***");
+        }
+    } else {
+        log::info!(
+            "Skipped syncing server_pwd: DB value is not seed default, preserving ops change"
+        );
+    }
+
+    // 其他配置项：始终覆盖（非安全敏感）
+    let other_items: Vec<(&str, String)> = vec![
         ("fee_rate", cfg.fee_rate.to_string()),
         ("fee_mode", cfg.fee_mode.clone()),
         ("tx_restrict_wallet", cfg.tx_restrict_wallet.to_string()),
     ];
-
-    for (key, value) in items {
-        let display_value = if key == "server_pwd" {
-            "***".to_string()
-        } else {
-            value.clone()
-        };
-
+    for (key, value) in other_items {
         let result: Option<AppConfigEntity> = query_one(
             &rb,
             "INSERT INTO app_configs (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW() RETURNING *",
-            vals![key, value],
+            vals![key, &value],
         )
         .await?;
-
         if result.is_some() {
-            log::info!("Synced config to DB: {} = {}", key, display_value);
+            log::info!("Synced config to DB: {} = {}", key, value);
         }
     }
 
