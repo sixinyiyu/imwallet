@@ -7,12 +7,13 @@ import {
   ActivityIndicator,
   FlatList,
 } from "react-native";
-import { useRoute } from "@react-navigation/native";
+import { useRoute, useNavigation } from "@react-navigation/native";
 import { adminService, type WalletAdminInfo, type WalletTransaction, type WalletRecharge } from "../services/adminService";
 import { ChevronRightIcon, AndroidIcon, IosIcon, WalletIcon, TronIcon, USDTIcon, EthIcon, BtcIcon } from "../components/icons";
 import { WalletListSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import { formatTime } from "../utils/date";
+import { getPlaintextPassword, clearAdminAuthCache } from "../utils/adminAuthCache";
 import type { RouteProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../types/navigation";
 
@@ -35,7 +36,13 @@ function PlatformIcon({ platform, size = 16 }: { platform: string; size?: number
 
 export default function DeviceManageScreen() {
   const route = useRoute<DeviceManageRoute>();
-  const adminPwd = route.params.password;
+  // 从缓存获取明文密码（验证成功后已缓存），不再从路由参数获取
+  const adminPwd = getPlaintextPassword();
+
+  // adminPwd 为 null 时显示空页面（等待返回上一页）
+  if (!adminPwd) {
+    return <View style={styles.container} />;
+  }
 
   const [wallets, setWallets] = useState<WalletAdminInfo[]>([]);
   const [walletsLoading, setWalletsLoading] = useState(true);
@@ -59,6 +66,16 @@ export default function DeviceManageScreen() {
     setTimeout(() => setToastVisible(false), 2000);
   }, []);
 
+  // 缓存过期守卫：密码缓存失效时提示并返回上一页
+  const navigation = useNavigation();
+  useEffect(() => {
+    if (!adminPwd) {
+      showToast("管理密码缓存已过期，请重新验证");
+      clearAdminAuthCache();
+      setTimeout(() => navigation.goBack(), 1500);
+    }
+  }, [adminPwd]);
+
   const loadWallets = useCallback(async (page: number, append = false) => {
     try {
       const list = await adminService.listWallets(adminPwd);
@@ -67,7 +84,7 @@ export default function DeviceManageScreen() {
       setWalletsPage(page);
     } catch (err: any) {
       const msg = err?.message || "加载钱包列表失败";
-      console.warn("[DeviceManage] loadWallets error:", msg);
+      if (__DEV__) console.warn("[DeviceManage] loadWallets error:", msg);
       showToast(msg);
     }
   }, [adminPwd]);
@@ -102,7 +119,7 @@ export default function DeviceManageScreen() {
       setRecharges(rechs);
     } catch (err: any) {
       const msg = err?.message || "加载钱包数据失败";
-      console.warn("[DeviceManage] loadWalletData error:", msg);
+      if (__DEV__) console.warn("[DeviceManage] loadWalletData error:", msg);
       showToast(msg);
     }
     setDataLoading(false);
@@ -123,7 +140,7 @@ export default function DeviceManageScreen() {
       }
     } catch (err: any) {
       const msg = err?.message || "加载更多失败";
-      console.warn("[DeviceManage] loadMore error:", msg);
+      if (__DEV__) console.warn("[DeviceManage] loadMore error:", msg);
       showToast(msg);
     }
     setDataLoading(false);

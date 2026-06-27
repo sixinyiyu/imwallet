@@ -136,8 +136,8 @@ pub async fn device_auth(
         return Err(AppError::Unauthorized("request expired".into()));
     }
 
-    // 防重放：只对写请求（非 GET）检查，GET 幂等无需防重放
-    if method != axum::http::Method::GET && !state.replay_cache.check_and_insert(sig_hex).await {
+    // 防重放：对所有请求检查（GET 请求虽幂等，但 /config/all 等返回敏感数据，需防重放）
+    if !state.replay_cache.check_and_insert(sig_hex).await {
         return Err(AppError::Unauthorized("duplicate request".into()));
     }
 

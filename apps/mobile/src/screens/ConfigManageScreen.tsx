@@ -21,6 +21,7 @@ import { ConfigManageSkeleton } from "../components/Skeleton";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
+import { cacheAdminAuth } from "../utils/adminAuthCache";
 
 export default function ConfigManageScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -187,9 +188,10 @@ export default function ConfigManageScreen() {
     setDevicePwdError(null);
     try {
       await adminService.listDevices(devicePwdInput.trim());
-      // 密码验证成功，跳转到设备管理页面
+      // 密码验证成功 → 缓存加密密码 + 跳转到设备管理页面
+      await cacheAdminAuth(devicePwdInput.trim());
       setShowDevicePwdDrawer(false);
-      navigation.navigate("DeviceManage", { password: devicePwdInput.trim() });
+      navigation.navigate("DeviceManage", { verified: true });
     } catch {
       setDevicePwdError("密码验证失败，请重试");
     }

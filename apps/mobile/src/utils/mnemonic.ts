@@ -64,7 +64,7 @@ export async function generateMnemonic(): Promise<string> {
 
   // 🔍 DIAG: log entropy hex to verify RNG uniqueness
   const entropyHex = Array.from(entropy).map(b => b.toString(16).padStart(2, "0")).join("");
-  console.warn(`[generateMnemonic] entropy=${entropyHex}`);
+  if (__DEV__) console.warn(`[generateMnemonic] entropy=${entropyHex}`);
 
   // Step 2: SHA-256 checksum
   let hashArray: Uint8Array;
@@ -104,7 +104,7 @@ export async function generateMnemonic(): Promise<string> {
   }
 
   // 🔍 DIAG: log generated mnemonic prefix
-  console.warn(`[generateMnemonic] mnemonic prefix=${result.slice(0, 30)}`);
+  if (__DEV__) console.warn(`[generateMnemonic] mnemonic prefix=${result.slice(0, 30)}`);
 
   return result;
 }

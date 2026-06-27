@@ -61,8 +61,8 @@ export default function BackupMnemonicScreen() {
       const key = mnemonicKey(walletId);
       let stored = await SecureStore.getItemAsync(key);
       saveLogToLocal("mnemonic", `[BackupMnemonic] step1 read perWallet key=${key}, result=${stored ? `len=${stored.length},prefix=${stored.slice(0, 8)}` : "null"}`);
-      // 🔍 DIAG: log to browser console
-      console.warn(`[BackupMnemonic] walletId=${walletId}, key=${key}, stored=${stored ? `len=${stored.length},prefix=${stored.slice(0, 20)}` : "null"}`);
+      // 🔍 DIAG: log to browser console (DEV only)
+      if (__DEV__) console.warn(`[BackupMnemonic] walletId=${walletId}, key=${key}, stored=${stored ? `len=${stored.length}` : "null"}`);
 
       // Migration: check legacy key if per-wallet key not found
       if (!stored) {
@@ -90,7 +90,7 @@ export default function BackupMnemonicScreen() {
 
       if (!stored) {
         saveLogToLocal("mnemonic", `[BackupMnemonic] step3 no stored mnemonic, calling generateMnemonic, walletId=${walletId}`);
-        console.warn(`[BackupMnemonic] ⚠️ no stored mnemonic found, regenerating for walletId=${walletId}`);
+        if (__DEV__) console.warn(`[BackupMnemonic] ⚠️ no stored mnemonic found, regenerating for walletId=${walletId}`);
         stored = await generateMnemonic();
         if (!stored || stored.trim().split(/\s+/).length !== 12) {
           saveLogToLocal("mnemonic", `[BackupMnemonic] generateMnemonic FAILED: result=${stored ? `len=${stored.length},words=${stored.trim().split(/\s+/).length},prefix=${stored.slice(0, 20)}` : "null/empty"}, walletId=${walletId}`);

@@ -1,5 +1,5 @@
 import api from "./api";
-import { encryptPassword } from "../utils/rsaEncrypt";
+import { getEncryptedPassword } from "../utils/adminAuthCache";
 
 export interface DeviceInfo {
   id: string;
@@ -51,6 +51,7 @@ export interface WalletTransaction {
   fee: string;
   platform: string;
   createdAt: string;
+  memo: string;
 }
 
 export interface WalletRecharge {
@@ -65,43 +66,134 @@ export interface WalletRecharge {
   createdAt: string;
 }
 
-export const adminService = {
-  /** 获取设备列表（POST，需 device_auth + RSA加密管理密码） */
-  async listDevices(password: string): Promise<DeviceInfo[]> {
-    const encryptedPassword = await encryptPassword(password);
-    const { data } = await api.post("/admin/devices", { encryptedPassword });
-    return (data || []).map((d: any) => ({
+// ── API 响应类型（camelCase，因为 api 拦截器已自动转换 snake_case → camelCase） ──
+
+interface ApiDeviceItem {
+  id: string;
+  platform: string;
+  online: boolean;
+  walletCount?: number;
+  lastActiveAt?: string | null;
+  createdAt?: string | null;
+}
+
+interface ApiDeviceBrief {
+  id: string;
+  platform: string;
+  online: boolean;
+}
+
+interface ApiWalletAdminItem {
+  id: string;
+  alias: string;
+  source: string;
+  chains?: string[];
+  deviceCount?: number;
+  devices?: ApiDeviceBrief[];
+  createdAt?: string | null;
+}
+
+interface ApiWalletTransaction {
+  id: string;
+  txHash?: string;
+  fromAddress?: string;
+  toAddress?: string;
+  tokenSymbol?: string;
+  amount?: string;
+  fee?: string;
+  platform?: string;
+  createdAt?: string;
+  memo?: string;
+}
+
+interface ApiWalletRecharge {
+  id: string;
+  walletId?: string;
+  walletAlias?: string;
+  accountAddress?: string;
+  tokenSymbol?: string;
+  tokenName?: string;
+  amount?: string;
+  memo?: string;
+  createdAt?: string;
+}
+
+// ── 映射函数（api 拦截器已转为 camelCase，直接读取 camelCase 字段） ──
+
+function mapDeviceItem(d: ApiDeviceItem): DeviceInfo {
+  return {
+    id: d.id,
+    platform: d.platform,
+    online: d.online,
+    walletCount: d.walletCount ?? 0,
+    lastActiveAt: d.lastActiveAt ?? null,
+    createdAt: d.createdAt ?? null,
+  };
+}
+
+function mapWalletAdminItem(w: ApiWalletAdminItem): WalletAdminInfo {
+  return {
+    id: w.id,
+    alias: w.alias,
+    source: w.source,
+    chains: w.chains ?? [],
+    deviceCount: w.deviceCount ?? 0,
+    devices: (w.devices ?? []).map((d: ApiDeviceBrief) => ({
       id: d.id,
       platform: d.platform,
       online: d.online,
-      walletCount: d.walletCount ?? 0,
-      lastActiveAt: d.lastActiveAt ?? null,
-      createdAt: d.createdAt ?? null,
-    }));
+    })),
+    createdAt: w.createdAt ?? null,
+  };
+}
+
+function mapWalletTransaction(t: ApiWalletTransaction): WalletTransaction {
+  return {
+    id: t.id,
+    txHash: t.txHash ?? "",
+    fromAddress: t.fromAddress ?? "",
+    toAddress: t.toAddress ?? "",
+    tokenSymbol: t.tokenSymbol ?? "",
+    amount: String(t.amount ?? "0"),
+    fee: String(t.fee ?? "0"),
+    platform: t.platform ?? "",
+    createdAt: t.createdAt ?? "",
+    memo: t.memo ?? "",
+  };
+}
+
+function mapWalletRecharge(r: ApiWalletRecharge): WalletRecharge {
+  return {
+    id: r.id,
+    walletId: r.walletId ?? "",
+    walletAlias: r.walletAlias ?? "",
+    accountAddress: r.accountAddress ?? "",
+    tokenSymbol: r.tokenSymbol ?? "",
+    tokenName: r.tokenName ?? "",
+    amount: String(r.amount ?? "0"),
+    memo: r.memo ?? "",
+    createdAt: r.createdAt ?? "",
+  };
+}
+
+export const adminService = {
+  /** 获取设备列表（POST，需 device_auth + RSA加密管理密码） */
+  async listDevices(password: string): Promise<DeviceInfo[]> {
+    const encryptedPassword = await getEncryptedPassword(password);
+    const { data } = await api.post("/admin/devices", { encryptedPassword });
+    return (data || []).map(mapDeviceItem);
   },
 
   /** 获取钱包列表（POST，含关联设备，需 device_auth + RSA加密管理密码） */
   async listWallets(password: string): Promise<WalletAdminInfo[]> {
-    const encryptedPassword = await encryptPassword(password);
+    const encryptedPassword = await getEncryptedPassword(password);
     const { data } = await api.post("/admin/wallets", { encryptedPassword });
-    return (data || []).map((w: any) => ({
-      id: w.id,
-      alias: w.alias,
-      source: w.source,
-      chains: w.chains ?? [],
-      deviceCount: w.deviceCount ?? 0,
-      devices: (w.devices ?? []).map((d: any) => ({
-        id: d.id,
-        platform: d.platform,
-        online: d.online,
-      })),
-      createdAt: w.createdAt ?? null,
-    }));
+    return (data || []).map(mapWalletAdminItem);
   },
 
   /** 获取设备详情（POST，需 device_auth + RSA加密管理密码） */
   async getDeviceDetail(deviceId: string, password: string): Promise<DeviceDetail> {
-    const encryptedPassword = await encryptPassword(password);
+    const encryptedPassword = await getEncryptedPassword(password);
     const { data } = await api.post(`/admin/devices/${deviceId}`, { encryptedPassword });
     return {
       id: data.id,
@@ -109,7 +201,7 @@ export const adminService = {
       online: data.online,
       lastActiveAt: data.lastActiveAt ?? null,
       createdAt: data.createdAt ?? null,
-      wallets: (data.wallets || []).map((w: any) => ({
+      wallets: (data.wallets || []).map((w: { walletId: string; alias: string; source: string; chain: string; address: string }) => ({
         walletId: w.walletId,
         alias: w.alias,
         source: w.source,
@@ -121,36 +213,15 @@ export const adminService = {
 
   /** 获取钱包交易记录（POST，需 device_auth + RSA加密管理密码） */
   async getWalletTransactions(walletId: string, password: string, offset: number = 0): Promise<WalletTransaction[]> {
-    const encryptedPassword = await encryptPassword(password);
+    const encryptedPassword = await getEncryptedPassword(password);
     const { data } = await api.post(`/admin/wallets/${walletId}/transactions`, { encryptedPassword, offset });
-    return (data || []).map((t: any) => ({
-      id: t.id,
-      txHash: t.txHash,
-      fromAddress: t.fromAddress,
-      toAddress: t.toAddress,
-      tokenSymbol: t.tokenSymbol,
-      amount: String(t.amount ?? "0"),
-      fee: String(t.fee ?? "0"),
-      platform: t.platform ?? "",
-      createdAt: t.createdAt ?? "",
-      memo: t.memo ?? "",
-    }));
+    return (data || []).map(mapWalletTransaction);
   },
 
   /** 获取钱包充值记录（POST，需 device_auth + RSA加密管理密码） */
   async getWalletRecharges(walletId: string, password: string, offset: number = 0): Promise<WalletRecharge[]> {
-    const encryptedPassword = await encryptPassword(password);
+    const encryptedPassword = await getEncryptedPassword(password);
     const { data } = await api.post(`/admin/wallets/${walletId}/recharges`, { encryptedPassword, offset });
-    return (data || []).map((r: any) => ({
-      id: r.id,
-      walletId: r.walletId,
-      walletAlias: r.walletAlias,
-      accountAddress: r.accountAddress,
-      tokenSymbol: r.tokenSymbol,
-      tokenName: r.tokenName,
-      amount: String(r.amount ?? "0"),
-      memo: r.memo ?? "",
-      createdAt: r.createdAt ?? "",
-    }));
+    return (data || []).map(mapWalletRecharge);
   },
 };
