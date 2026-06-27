@@ -15,8 +15,13 @@ use serde::{Deserialize, Serialize};
 const PERM_MARKER: u32 = 0x7B3A9C1F;
 const DENY_MARKER: u32 = 0xD4E6F28A;
 
-/// 不暴露给前端的敏感配置项
-const SENSITIVE_KEYS: &[&str] = &["server_pwd", "recharge_allowed_devices"];
+/// 不暴露给前端的配置项（敏感项 + 与 /config/fee 重复的项）
+const HIDDEN_KEYS: &[&str] = &[
+    "server_pwd",
+    "recharge_allowed_devices",
+    "fee_rate",
+    "fee_mode",
+];
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -67,10 +72,10 @@ async fn get_all_configs(
 ) -> Result<Json<Vec<ConfigItem>>, AppError> {
     let configs = config_service::get_all_configs(state.db.clone()).await?;
 
-    // 过滤敏感配置项
+    // 过滤不暴露的配置项
     let mut items: Vec<ConfigItem> = configs
         .into_iter()
-        .filter(|c| !SENSITIVE_KEYS.contains(&c.key.as_str()))
+        .filter(|c| !HIDDEN_KEYS.contains(&c.key.as_str()))
         .map(ConfigItem::from)
         .collect();
 

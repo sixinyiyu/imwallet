@@ -26,6 +26,7 @@ export default function ConfigManageScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [feeConfig, setFeeConfig] = useState<FeeConfig | null>(null);
   const [txRestrictWallet, setTxRestrictWallet] = useState(false);
+  const [rechargePermitted, setRechargePermitted] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // 编辑费率弹窗（含密码输入）
@@ -61,13 +62,15 @@ export default function ConfigManageScreen() {
   const loadConfig = async () => {
     setLoading(true);
     try {
-      const [config, allConfigs] = await Promise.all([
+      const [config, allConfigs, permitted] = await Promise.all([
         configService.getFeeConfig(),
         configService.getAllConfigs(),
+        configService.getRechargePermitted(),
       ]);
       setFeeConfig(config);
       const restrictItem = allConfigs.find((c) => c.key === "tx_restrict_wallet");
       setTxRestrictWallet(restrictItem?.value === "true");
+      setRechargePermitted(permitted);
     } catch {
       showToast("加载配置失败");
     }
@@ -248,15 +251,17 @@ export default function ConfigManageScreen() {
         </Text>
       </View>
 
-      {/* 充值管理入口 */}
-      <TouchableOpacity
-        style={[styles.infoCard, { marginTop: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}
-        onPress={() => navigation.navigate("Recharge")}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.infoLabel}>充值管理</Text>
-        <ChevronRightIcon size={18} color="#8899B8" />
-      </TouchableOpacity>
+      {/* 充值管理入口（仅充值权限设备可见） */}
+      {rechargePermitted && (
+        <TouchableOpacity
+          style={[styles.infoCard, { marginTop: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}
+          onPress={() => navigation.navigate("Recharge")}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.infoLabel}>充值管理</Text>
+          <ChevronRightIcon size={18} color="#8899B8" />
+        </TouchableOpacity>
+      )}
 
       {/* 代币管理入口 */}
       <TouchableOpacity

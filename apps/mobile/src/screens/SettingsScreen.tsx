@@ -23,7 +23,6 @@ import {
 } from "../services/logService";
 import { configService } from "../services/configService";
 import { GreenToggle } from "../components/GreenToggle";
-import { getDevicePublicKey } from "../services/api";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -37,7 +36,6 @@ export default function SettingsScreen() {
 
   // 服务配置
   const [serviceConfigEnabled, setServiceConfigEnabled] = useState(false);
-  const [rechargePermitted, setRechargePermitted] = useState(false);
   const [showPwdDrawer, setShowPwdDrawer] = useState(false);
   const [pwdInput, setPwdInput] = useState("");
   const [pwdVerifying, setPwdVerifying] = useState(false);
@@ -72,8 +70,6 @@ export default function SettingsScreen() {
   const loadServiceConfigEnabled = async () => {
     const enabled = await configService.getServiceConfigEnabled();
     setServiceConfigEnabled(enabled);
-    const permitted = await configService.getRechargePermitted();
-    setRechargePermitted(permitted);
   };
 
   const loadMultiAccountEnabled = async () => {
@@ -232,19 +228,17 @@ export default function SettingsScreen() {
         </View>
       )}
 
-      {/* 服务配置开关（仅充值权限设备可见） */}
-      {rechargePermitted && (
-        <View style={styles.menuItem}>
-          <View style={styles.menuLeft}>
-            <Text style={styles.menuLabel}>服务配置</Text>
-            <Text style={styles.menuHint}>开启后可查看服务配置详情</Text>
-          </View>
-          <GreenToggle value={serviceConfigEnabled} onValueChange={handleToggleServiceConfig} />
+      {/* 服务配置开关 */}
+      <View style={styles.menuItem}>
+        <View style={styles.menuLeft}>
+          <Text style={styles.menuLabel}>服务配置</Text>
+          <Text style={styles.menuHint}>开启后可查看服务配置详情</Text>
         </View>
-      )}
+        <GreenToggle value={serviceConfigEnabled} onValueChange={handleToggleServiceConfig} />
+      </View>
 
-      {/* 服务配置详情入口（仅在开关开启且有充值权限时显示） */}
-      {serviceConfigEnabled && rechargePermitted && (
+      {/* 服务配置详情入口（仅在开关开启时显示） */}
+      {serviceConfigEnabled && (
         <TouchableOpacity
           style={styles.menuItem}
           onPress={() => navigation.navigate("ServiceConfig")}
