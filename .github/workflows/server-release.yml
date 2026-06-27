@@ -27,7 +27,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            apps/server/target
+            target
           key: linux-musl-cargo-release-${{ hashFiles('apps/server/Cargo.lock') }}
           restore-keys: linux-musl-cargo-release-
 
@@ -36,11 +36,11 @@ jobs:
 
       - name: Strip binary
         run: |
-          BINARY=$(find apps/server/target/x86_64-unknown-linux-musl/release -maxdepth 1 -type f -executable -name 'rs-wallet' | head -1)
+          BINARY=$(find target/x86_64-unknown-linux-musl/release -maxdepth 1 -type f -executable -name 'rs-wallet' | head -1)
           if [ -z "$BINARY" ]; then
             echo "ERROR: rs-wallet binary not found"
-            find apps/server/target -name 'rs-wallet' -type f 2>/dev/null || echo "no rs-wallet found anywhere in target"
-            ls -la apps/server/target/x86_64-unknown-linux-musl/release/ 2>/dev/null || echo "musl release dir does not exist"
+            find target -name 'rs-wallet' -type f 2>/dev/null || echo "no rs-wallet found anywhere in target"
+            ls -la target/x86_64-unknown-linux-musl/release/ 2>/dev/null || echo "musl release dir does not exist"
             exit 1
           fi
           echo "Stripping: $BINARY"
@@ -49,7 +49,7 @@ jobs:
       - name: Create release archive
         run: |
           mkdir -p dist
-          cp apps/server/target/x86_64-unknown-linux-musl/release/rs-wallet dist/
+          cp target/x86_64-unknown-linux-musl/release/rs-wallet dist/
           cp apps/server/migrations/*.sql dist/
           cp apps/server/deploy/rs-wallet.service dist/
           cp apps/server/deploy/install.sh dist/
@@ -76,7 +76,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            apps/server/target
+            target
           key: windows-cargo-release-${{ hashFiles('apps/server/Cargo.lock') }}
           restore-keys: windows-cargo-release-
 
@@ -87,7 +87,7 @@ jobs:
         shell: pwsh
         run: |
           mkdir dist
-          Copy-Item apps/server/target/release/rs-wallet.exe dist/
+          Copy-Item target/release/rs-wallet.exe dist/
           Copy-Item apps/server/migrations/*.sql dist/
           Copy-Item apps/server/config.toml dist/config.toml.example
           Compress-Archive -Path dist/* -DestinationPath rs-wallet-${{ inputs.version }}-x86_64-windows.zip
