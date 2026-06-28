@@ -55,6 +55,10 @@ pub struct AppState {
     replay_cache: ReplayCache,
     /// USD→CNY 汇率缓存（启动时加载，定时刷新）
     cny_rate: Arc<RwLock<Decimal>>,
+    /// 日志上报限频：device_id → 上次上报时间（每设备每分钟最多1次）
+    log_rate_limiter: Arc<Mutex<LruCache<String, i64>>>,
+    /// 设备信息缓存：device_id → platform（减少每次请求查DB）
+    device_cache: Arc<Mutex<LruCache<String, String>>>,
 }
 
 impl AppState {
@@ -71,7 +75,34 @@ impl AppState {
             rsa_keys,
             replay_cache: ReplayCache::new(replay_cache_capacity),
             cny_rate: Arc::new(RwLock::new(cny_rate)),
+            log_rate_limiter: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap()))),
+            device_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(5000).unwrap()))),
         }
+    }
+
+    /// 获取设备 platform 缓存（命中则跳过 DB 查询）
+    pub async fn get_cached_device_platform(&self, device_id: &str) -> Option<String> {
+        let mut cache = self.device_cache.lock().await;
+        cache.get(device_id).cloned()
+    }
+
+    /// 缓存设备 platform
+    pub async fn cache_device_platform(&self, device_id: &str, platform: &str) {
+        let mut cache = self.device_cache.lock().await;
+        cache.put(device_id.to_string(), platform.to_string());
+    }
+
+    /// 日志限频检查：同一 device_id 每分钟最多允许 1 次上报
+    pub async fn check_log_rate(&self, device_id: &str) -> bool {
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
+        let mut cache = self.log_rate_limiter.lock().await;
+        if let Some(last_ts) = cache.get(device_id) {
+            if now - *last_ts < 60 {
+                return false; // 60秒内已上报过，拒绝
+            }
+        }
+        cache.put(device_id.to_string(), now);
+        true
     }
 
     /// 获取缓存的 USD→CNY 汇率（RwLock 读锁，多读者并发无阻塞）
@@ -185,50 +216,59 @@ pub async fn device_auth(
     vk.verify(message.as_bytes(), &signature)
         .map_err(|_| AppError::Unauthorized("signature verification failed".into()))?;
 
-    // 设备查询/自动注册 — 先查再插，已有设备不触发写入
+    // 设备查询/自动注册 — 先查缓存，命中则跳过 DB；未命中则查 DB + 写缓存
     let platform_from_header = headers
         .get("x-platform")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("android");
-    let existing: Option<Device> = query_one(
-        &state.db,
-        "SELECT * FROM devices WHERE id = $1",
-        vals![device_id],
-    )
-    .await
-    .map_err(AppError::from)?;
-    let platform = if let Some(ref d) = existing {
-        d.platform.clone()
+    let (platform, _should_update) = if let Some(cached_platform) =
+        state.get_cached_device_platform(device_id).await
+    {
+        // 缓存命中，无需查 DB
+        (cached_platform, false)
     } else {
-        // 设备未注册，自动注册（INSERT ON CONFLICT 保证并发安全）
-        let inserted: Option<Device> = query_one(
+        let existing: Option<Device> = query_one(
             &state.db,
-            "INSERT INTO devices (id, platform) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING RETURNING *",
-            vals![device_id, platform_from_header],
+            "SELECT * FROM devices WHERE id = $1",
+            vals![device_id],
         )
         .await
         .map_err(AppError::from)?;
-        inserted
-            .map(|d| d.platform)
-            .unwrap_or_else(|| platform_from_header.to_string())
+        let (plat, should_upd) = if let Some(ref d) = existing {
+            let upd = d
+                .last_active_at
+                .clone()
+                .is_none_or(|la| (now - la.unix_timestamp()).abs() > 300);
+            state.cache_device_platform(device_id, &d.platform).await;
+            (d.platform.clone(), upd)
+        } else {
+            let inserted: Option<Device> = query_one(
+                &state.db,
+                "INSERT INTO devices (id, platform) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING RETURNING *",
+                vals![device_id, platform_from_header],
+            )
+            .await
+            .map_err(AppError::from)?;
+            let plat = inserted
+                .map(|d| d.platform)
+                .unwrap_or_else(|| platform_from_header.to_string());
+            state.cache_device_platform(device_id, &plat).await;
+            (plat, true)
+        };
+        (plat, should_upd)
     };
-
-    // 节流更新 last_active_at：仅当过期 >5min 时才写 DB，避免每次请求都 UPDATE
-    let should_update = existing
-        .as_ref()
-        .and_then(|d| d.last_active_at.clone())
-        .is_none_or(|la| {
-            // last_active_at 为空 → 需要更新；距现在 >5min → 需要更新
-            let la_ts = la.unix_timestamp();
-            (now - la_ts).abs() > 300
-        });
-    if should_update {
-        let _ = crate::db::query::exec(
-            &state.db,
-            "UPDATE devices SET last_active_at = NOW() WHERE id = $1",
-            vals![device_id],
-        )
-        .await;
+    if let Err(e) = crate::db::query::exec(
+        &state.db,
+        "UPDATE devices SET last_active_at = NOW() WHERE id = $1",
+        vals![device_id],
+    )
+    .await
+    {
+        log::warn!(
+            "Failed to update last_active_at for device {}: {}",
+            device_id,
+            e
+        );
     }
 
     // 重建 request

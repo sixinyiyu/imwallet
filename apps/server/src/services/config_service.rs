@@ -7,6 +7,16 @@ use crate::models::AppConfigEntity;
 use rbatis::RBatis;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
+use std::time::Instant;
+
+/// 密码验证缓存（TTL 10 分钟）
+struct PwdCache {
+    hash: String,
+    instant: Instant,
+}
+const PWD_CACHE_TTL_SECS: u64 = 600;
+static PWD_CACHE: std::sync::OnceLock<std::sync::RwLock<Option<PwdCache>>> =
+    std::sync::OnceLock::new();
 
 pub async fn get_all_configs(rb: Arc<RBatis>) -> Result<Vec<AppConfigEntity>, AppError> {
     query(&rb, "SELECT * FROM app_configs ORDER BY key", vals![])
@@ -42,6 +52,20 @@ pub async fn is_recharge_permitted(rb: Arc<RBatis>, device_id: &str) -> Result<b
 }
 
 pub async fn verify_service_password(rb: Arc<RBatis>, password: &str) -> Result<bool, AppError> {
+    // 先查缓存
+    let cache = PWD_CACHE.get_or_init(|| std::sync::RwLock::new(None));
+    {
+        let guard = cache.read().unwrap();
+        if let Some(ref cached) = *guard {
+            if cached.instant.elapsed().as_secs() < PWD_CACHE_TTL_SECS {
+                // 缓存未过期，用 SHA256(password) 对比缓存 hash
+                let hash = hex::encode(Sha256::digest(password.as_bytes()));
+                return Ok(hash == cached.hash);
+            }
+        }
+    }
+
+    // 缓存过期或不存在，查 DB
     let row: Option<AppConfigEntity> = query_one(
         &rb,
         "SELECT * FROM app_configs WHERE key = $1",
@@ -52,7 +76,19 @@ pub async fn verify_service_password(rb: Arc<RBatis>, password: &str) -> Result<
     if stored_pwd.is_empty() {
         return Ok(false);
     }
-    Ok(password == stored_pwd)
+    let verified = password == stored_pwd;
+
+    // 更新缓存（存 SHA256 hash，不存明文密码）
+    let hash = hex::encode(Sha256::digest(stored_pwd.as_bytes()));
+    {
+        let mut guard = cache.write().unwrap();
+        *guard = Some(PwdCache {
+            hash,
+            instant: Instant::now(),
+        });
+    }
+
+    Ok(verified)
 }
 
 pub async fn get_activation_key(rb: Arc<RBatis>) -> Result<String, AppError> {

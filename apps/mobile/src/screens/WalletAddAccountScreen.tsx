@@ -17,7 +17,7 @@ import { useWalletStore } from "../stores/walletStore";
 import { accountService } from "../services/accountService";
 import { localAccountService } from "../services/localAccountService";
 import { LinearGradient } from "expo-linear-gradient";
-import { TronIcon, EthIcon, BtcIcon, USDTIcon } from "../components/icons";
+import { TOKEN_ICONS, renderTokenIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import type { ChainInfo } from "../types";
 import { useAlert } from "../hooks/useAlert";
 import { configService } from "../services/configService";
@@ -35,13 +35,6 @@ const CHAIN_ICONS: Record<string, React.FC<{ size?: number }>> = {
   Bitcoin: BtcIcon,
 };
 
-/** 代币图标映射 */
-const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
-  TRX: TronIcon,
-  ETH: EthIcon,
-  BTC: BtcIcon,
-  USDT: USDTIcon,
-};
 
 export default function WalletAddAccountScreen() {
   const alert = useAlert();

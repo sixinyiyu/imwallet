@@ -121,9 +121,10 @@ pub async fn subscribe_chain(
 
 /// 确保地址在该链的 assets_addresses 中有默认代币余额记录。
 /// 已有记录的跳过，只补缺失的（balance=0）。
+/// 使用批量 INSERT 代替逐条插入，减少 DB 往返。
 async fn ensure_asset_balances(
     rb: &Arc<RBatis>,
-    address_id: &str,
+    _address_id: &str,
     chain: &str,
 ) -> Result<(), AppError> {
     let assets: Vec<crate::models::Asset> = query(
@@ -133,15 +134,28 @@ async fn ensure_asset_balances(
     )
     .await?;
 
-    for asset in assets {
-        let id = uuid::Uuid::new_v4().to_string();
-        exec(
-            rb,
-            "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance) VALUES ($1, $2, $3, $4, 0) ON CONFLICT (address_id, asset_id) DO NOTHING",
-            vals![&id, address_id, &asset.id, chain],
-        )
-        .await?;
+    if assets.is_empty() {
+        return Ok(());
     }
+
+    // 批量构建 VALUES 子句
+    let values: Vec<String> = assets
+        .iter()
+        .map(|a| {
+            format!(
+                "('{}', '{}', '{}', '{}', 0)",
+                uuid::Uuid::new_v4(),
+                _address_id,
+                a.id,
+                chain
+            )
+        })
+        .collect();
+    let sql = format!(
+        "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance) VALUES {} ON CONFLICT (address_id, asset_id) DO NOTHING",
+        values.join(", ")
+    );
+    exec(rb, &sql, vals![]).await?;
     Ok(())
 }
 pub async fn get_wallet_addresses(

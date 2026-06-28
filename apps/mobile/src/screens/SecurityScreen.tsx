@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
-import * as Clipboard from "expo-clipboard";
+import { copyToClipboard } from "../utils/clipboard";
 import { getDevicePublicKey } from "../services/api";
 import { CopyIcon } from "../components/icons";
 
@@ -24,9 +24,11 @@ export default function SecurityScreen() {
 
   const handleCopy = useCallback(async () => {
     if (!deviceId) return;
-    await Clipboard.setStringAsync(deviceId);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const ok = await copyToClipboard(deviceId);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   }, [deviceId]);
 
   return (

@@ -15,33 +15,20 @@ import type { Transaction } from "../types";
 import { transactionService } from "../services/transactionService";
 import { localAddressService } from "../services/localAddressService";
 import { useWalletStore } from "../stores/walletStore";
-import { ShareIcon, CopyIcon } from "../components/icons";
+import { ShareIcon, CopyIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
 import { TradeDetailSkeleton } from "../components/Skeleton";
 import { useAlert } from "../hooks/useAlert";
 import SuccessIcon from "../components/icons/SuccessIcon";
 import FailureIcon from "../components/icons/FailureIcon";
 import PendingIcon from "../components/icons/PendingIcon";
-import { USDTIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import type { AddressEntry } from "../types";
 import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import { formatFullTime } from "../utils/date";
+import { copyToClipboard } from "../utils/clipboard";
 
 type Route = RouteProp<RootStackParamList, "TradeDetail">;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
-  TRX: TronIcon,
-  USDT: USDTIcon,
-  ETH: EthIcon,
-  BTC: BtcIcon,
-};
-
-function renderTokenIcon(symbol: string, size: number) {
-  const Icon = TOKEN_ICONS[symbol];
-  return Icon ? <Icon size={size} /> : null;
-}
-
 
 
 function shortenAddress(addr: string): string {
@@ -92,13 +79,8 @@ export default function TradeDetailScreen() {
   }, []);
 
   const handleCopyAddress = async (address: string) => {
-    try {
-      const Clipboard = require("expo-clipboard");
-      await Clipboard.setStringAsync(address);
-      showToast("地址已复制");
-    } catch {
-      showToast("复制失败");
-    }
+    const ok = await copyToClipboard(address);
+    showToast(ok ? "地址已复制" : "复制失败");
   };
 
   const handleShare = async () => {

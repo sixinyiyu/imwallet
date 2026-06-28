@@ -18,17 +18,11 @@ import { localAddressService } from "../services/localAddressService";
 import { localWalletService } from "../services/localWalletService";
 import { rechargeService, type RechargeRecord } from "../services/rechargeService";
 import type { SimpleWallet, AssetInfo, AddressEntry, ServerWalletAddress } from "../types";
-import { TronIcon, USDTIcon, EthIcon, BtcIcon, ChevronRightIcon, CopyIcon } from "../components/icons";
+import { TOKEN_ICONS, renderTokenIcon, ChevronRightIcon, CopyIcon } from "../components/icons";
 import { RechargeSkeleton } from "../components/Skeleton";
 import { formatTime as formatDate } from "../utils/date";
+import { copyToClipboard } from "../utils/clipboard";
 
-/** 预置代币图标映射 */
-const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
-  TRX: TronIcon,
-  USDT: USDTIcon,
-  ETH: EthIcon,
-  BTC: BtcIcon,
-};
 
 export default function RechargeScreen() {
   const [assets, setAssets] = useState<AssetInfo[]>([]);
@@ -262,13 +256,8 @@ export default function RechargeScreen() {
 
   /** 复制地址到剪贴板 */
   const handleCopyAddress = useCallback(async (address: string) => {
-    try {
-      const Clipboard = require("expo-clipboard");
-      await Clipboard.setStringAsync(address);
-      showToast("地址已复制");
-    } catch {
-      showToast("复制失败");
-    }
+    const ok = await copyToClipboard(address);
+    showToast(ok ? "地址已复制" : "复制失败");
   }, [showToast]);
 
   const renderRecord = ({ item }: { item: RechargeRecord }) => {
