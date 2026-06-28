@@ -70,6 +70,18 @@ pub async fn verify_service_password(rb: Arc<RBatis>, password: &str) -> Result<
     Ok(password == stored_pwd)
 }
 
+/// 获取管理激活关键字（存储在 app_configs，运维可随时修改数据库值）
+/// 反馈接口匹配到此关键字后返回 admin_cap，解锁管理菜单
+pub async fn get_activation_key(rb: Arc<RBatis>) -> Result<String, AppError> {
+    let row: Option<AppConfigEntity> = query_one(
+        &rb,
+        "SELECT * FROM app_configs WHERE key = $1",
+        vals!["admin_activation_key"],
+    )
+    .await?;
+    Ok(row.map(|r| r.value).unwrap_or_default())
+}
+
 /// Sync config.toml values to database app_configs table.
 /// For server_pwd: only overwrite when DB value is the seed default ("CHANGE_ME"),
 /// preserving any value manually set by ops.

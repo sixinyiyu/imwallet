@@ -56,6 +56,7 @@ export default function DeviceManageScreen() {
   const [dataLoading, setDataLoading] = useState(false);
   const [dataTab, setDataTab] = useState<"transactions" | "recharges">("transactions");
   const [dataOffset, setDataOffset] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
@@ -126,10 +127,10 @@ export default function DeviceManageScreen() {
   };
 
   const handleLoadMore = async () => {
-    if (!selectedWallet) return;
+    if (!selectedWallet || loadingMore) return;
     const nextOffset = dataOffset + 20;
     setDataOffset(nextOffset);
-    setDataLoading(true);
+    setLoadingMore(true);
     try {
       if (dataTab === "transactions") {
         const more = await adminService.getWalletTransactions(selectedWallet, adminPwd, nextOffset);
@@ -143,7 +144,7 @@ export default function DeviceManageScreen() {
       if (__DEV__) console.warn("[DeviceManage] loadMore error:", msg);
       showToast(msg);
     }
-    setDataLoading(false);
+    setLoadingMore(false);
   };
 
   if (walletsLoading) {
@@ -290,14 +291,14 @@ export default function DeviceManageScreen() {
                       <TouchableOpacity
                         style={styles.loadMoreBtn}
                         onPress={handleLoadMore}
-                        disabled={dataLoading}
+                        disabled={loadingMore}
                         activeOpacity={0.7}
                       >
-                        {dataLoading ? (
+                        {loadingMore ? (
                           <ActivityIndicator size="small" color="#287220" />
                         ) : (
                           <Text style={styles.loadMoreBtnText}>加载更多</Text>
-                        )}
+                        )}}
                       </TouchableOpacity>
                     )}
                   </>

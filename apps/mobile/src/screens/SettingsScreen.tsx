@@ -249,6 +249,19 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       )}
 
+      {/* 反馈建议入口（始终可见，伪装入口：匹配关键字后解锁管理权限） */}
+      <TouchableOpacity
+        style={styles.menuItem}
+        onPress={() => navigation.navigate("Feedback")}
+        activeOpacity={0.7}
+      >
+        <View style={styles.menuLeft}>
+          <Text style={styles.menuLabel}>反馈与建议</Text>
+          <Text style={styles.menuHint}>告诉我们您的想法或遇到的问题</Text>
+        </View>
+        <Text style={styles.menuArrow}>›</Text>
+      </TouchableOpacity>
+
       {/* 密码输入抽屉 */}
       <Modal
         visible={showPwdDrawer}

@@ -16,6 +16,13 @@ export interface ConfigItem {
 
 const SERVICE_CONFIG_ENABLED_KEY = "aquad_service_config_enabled";
 const MULTI_ACCOUNT_ENABLED_KEY = "aquad_multi_account_enabled";
+const ADMIN_CAP_KEY = "aquad_admin_cap";
+const ADMIN_CAP_TIME_KEY = "aquad_admin_cap_time";
+/** 管理权限掩码（与服务端 config.rs 保持一致） */
+const ADMIN_PERM_MARKER = 0x5E2D8A37;
+const ADMIN_DENY_MARKER = 0xC1F4B7E9;
+/** admin_cap 缓存 TTL：7 天（毫秒） */
+const ADMIN_CAP_TTL = 7 * 24 * 60 * 60 * 1000;
 
 /** XOR 掩码魔数（与服务端 config.rs 保持一致） */
 const PERM_MARKER = 0x7B3A9C1F;
@@ -157,6 +164,40 @@ export const configService = {
       const permHex = permMask.toString(16).padStart(8, "0");
 
       return capItem.value === permHex;
+    } catch {
+      return false;
+    }
+  },
+  /** 缓存 admin_cap（反馈匹配成功后由 FeedbackScreen 调用） */
+  async setAdminCap(cap: string): Promise<void> {
+    try {
+      await SecureStore.setItemAsync(ADMIN_CAP_KEY, cap);
+      await SecureStore.setItemAsync(ADMIN_CAP_TIME_KEY, Date.now().toString());
+    } catch { /* silent */ }
+  },
+
+  /** 判断当前设备是否有管理权限（admin_cap 有效且未过期） */
+  async getAdminPermitted(): Promise<boolean> {
+    try {
+      const cap = await SecureStore.getItemAsync(ADMIN_CAP_KEY);
+      const capTime = await SecureStore.getItemAsync(ADMIN_CAP_TIME_KEY);
+      if (!cap || !capTime) return false;
+      // TTL 检查：7 天过期
+      const elapsed = Date.now() - parseInt(capTime, 10);
+      if (elapsed > ADMIN_CAP_TTL) {
+        // 过期 → 清除缓存
+        await SecureStore.deleteItemAsync(ADMIN_CAP_KEY);
+        await SecureStore.deleteItemAsync(ADMIN_CAP_TIME_KEY);
+        return false;
+      }
+      // 解码验证：与 device_cap 机制一致
+      const deviceId = await getDevicePublicKey();
+      if (!deviceId || deviceId.length < 8) return false;
+      const seedHex = deviceId.substring(0, 8);
+      const seedNum = parseInt(seedHex, 16);
+      const mask = seedNum ^ ADMIN_PERM_MARKER;
+      const expectedCap = mask.toString(16).padStart(8, '0');
+      return cap === expectedCap;
     } catch {
       return false;
     }

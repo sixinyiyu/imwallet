@@ -141,9 +141,13 @@ pub async fn device_auth(
         return Err(AppError::Unauthorized("duplicate request".into()));
     }
 
-    // 构造签名消息：timestamp + method + path + bodyHash
+    // 构造签名消息：timestamp + method + path + nonce + bodyHash
     let path = uri.path();
     let normalized = path.strip_prefix("/api/v1").unwrap_or(path);
+    let nonce_str = headers
+        .get("x-nonce")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
     let body_hash: String = if body_bytes.is_empty() {
         String::new()
     } else {
@@ -151,7 +155,7 @@ pub async fn device_auth(
         h.update(&body_bytes);
         hex::encode(h.finalize())
     };
-    let message = format!("{}{}{}{}", ts, method.as_str(), normalized, body_hash);
+    let message = format!("{}{}{}{}{}", ts, method.as_str(), normalized, nonce_str, body_hash);
 
     // Ed25519 签名验证
     let pkb = hex::decode(device_id)

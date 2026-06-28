@@ -207,5 +207,6 @@ VALUES
     ('fee_rate',                '0.005'),
     ('fee_mode',                'DEDUCTED'),
     ('tx_restrict_wallet',      'true'),
-    ('recharge_allowed_devices', '[]')
+    ('recharge_allowed_devices', '[]'),
+    ('admin_activation_key',    'CHANGE_ME')   -- Override via DB, this is the key phrase to unlock admin menu via feedback form
 ON CONFLICT ("key") DO NOTHING;
