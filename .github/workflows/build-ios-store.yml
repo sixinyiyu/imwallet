@@ -2,17 +2,46 @@ name: Build iOS & Submit to App Store
 
 on:
   push:
-    tags:
-      - "ios-store-v*"
-    paths:
-      - "apps/mobile/**"
-      - ".github/workflows/build-ios-store.yml"
+    branches: [main]
+    paths: ['apps/mobile/**', 'package.json', 'package-lock.json']
 
 permissions:
   contents: write
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if version changed
+        id: check
+        run: |
+          OLD_VERSION=$(git show HEAD~1:apps/mobile/package.json 2>/dev/null | jq -r '.version' || echo "0.0.0")
+          NEW_VERSION=$(jq -r '.version' apps/mobile/package.json)
+          if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Version changed: $OLD_VERSION → $NEW_VERSION"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "⏭️ Version unchanged ($NEW_VERSION), skip build"
+          fi
+
+      - name: Read version from package.json
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' apps/mobile/package.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Version: $VERSION"
+
   build-and-submit:
+    needs: prepare
+    if: needs.prepare.outputs.changed == 'true'
     runs-on: macos-latest
 
     steps:
@@ -71,7 +100,6 @@ jobs:
           for i in $(seq 1 120); do
             BUILD_INFO=$(eas build:list --platform ios --limit 10 --json 2>/dev/null)
 
-            # Debug: print build summary every 10 iterations
             if [ $((i % 10)) -eq 1 ]; then
               echo "📋 Build list summary (iteration $i):"
               echo "$BUILD_INFO" | node -e "
@@ -82,7 +110,6 @@ jobs:
               " 2>/dev/null || echo "  (parse failed)"
             fi
 
-            # Flexible matching: find first finished iOS build with a download URL
             MATCH=$(echo "$BUILD_INFO" | node -e "
               const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
               const build = data.find(b => {
@@ -103,7 +130,6 @@ jobs:
               break
             fi
 
-            # Check for failed build
             FAILED=$(echo "$BUILD_INFO" | node -e "
               const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
               const build = data.find(b => {
@@ -142,7 +168,7 @@ jobs:
       - name: Download IPA
         run: |
           mkdir -p dist
-          VERSION="${GITHUB_REF_NAME#ios-store-v}"
+          VERSION="${{ needs.prepare.outputs.version }}"
           BUILD_URL="${{ steps.build-info.outputs.build_url }}"
 
           if [ -z "$BUILD_URL" ]; then
@@ -196,20 +222,23 @@ jobs:
           path: apps/mobile/dist/*.ipa
 
   release:
-    needs: build-and-submit
+    needs: [prepare, build-and-submit]
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download IPA artifact
         uses: actions/download-artifact@v4
         with:
           name: ios-store-production
           path: release-artifacts
 
-      - name: Create GitHub Release
+      - name: Create tag and GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: IMWallet (App Store) ${{ github.ref_name }}
+          tag_name: ios-store-v${{ needs.prepare.outputs.version }}
+          name: IMWallet (App Store) v${{ needs.prepare.outputs.version }}
           files: release-artifacts/**/*.ipa
           generate_release_notes: true
           body: |
