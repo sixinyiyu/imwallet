@@ -10,14 +10,9 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { assetService } from "../services/assetService";
 import type { AssetInfo } from "../types";
-import { TronIcon, USDTIcon } from "../components/icons";
+import { TOKEN_ICONS, renderTokenIcon } from "../components/icons";
 import { GreenToggle } from "../components/GreenToggle";
-
-/** 预置代币图标映射 */
-const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
-  TRX: TronIcon,
-  USDT: USDTIcon,
-};
+import { TokenManageSkeleton } from "../components/Skeleton";
 
 export default function TokenManageScreen() {
   const [assets, setAssets] = useState<AssetInfo[]>([]);
@@ -96,8 +91,8 @@ export default function TokenManageScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#287220" />
+      <View style={styles.container}>
+        <TokenManageSkeleton />
       </View>
     );
   }
@@ -131,7 +126,6 @@ export default function TokenManageScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F8" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F5F6F8" },
   listContent: { padding: 16 },
   item: {
     flexDirection: "row",

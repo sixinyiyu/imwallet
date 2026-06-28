@@ -7,7 +7,8 @@ import * as Sharing from "expo-sharing";
 import { useWalletStore } from "../stores/walletStore";
 import { ReceiveSkeleton } from "../components/Skeleton";
 import { saveLogToLocal } from "../services/logService";
-import { CopyIcon, ShareIcon, TronIcon, EthIcon, BtcIcon, USDTIcon } from "../components/icons";
+import { CopyIcon, ShareIcon, TronIcon, EthIcon, BtcIcon, USDTIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
+import { copyToClipboard } from "../utils/clipboard";
 import type { RootStackParamList } from "../types/navigation";
 
 type ReceiveRouteProp = RouteProp<RootStackParamList, "Receive">;
@@ -19,17 +20,6 @@ function renderNetworkIcon(network: string, size: number) {
   return null;
 }
 
-const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
-  TRX: TronIcon,
-  USDT: USDTIcon,
-  ETH: EthIcon,
-  BTC: BtcIcon,
-};
-
-function renderTokenIcon(symbol: string, size: number) {
-  const Icon = TOKEN_ICONS[symbol];
-  return Icon ? <Icon size={size} /> : null;
-}
 
 export default function ReceiveScreen() {
   const route = useRoute<ReceiveRouteProp>();
@@ -72,17 +62,10 @@ export default function ReceiveScreen() {
     return `aquad://transfer?address=${address}&token=${currentToken.symbol}&network=${network}`;
   }, [address, currentToken.symbol, network]);
 
-  const handleCopy = () => {
-    if (address) {
-      try {
-        const Clipboard = require("expo-clipboard");
-        Clipboard.setStringAsync(address);
-        showToast("地址已复制");
-      } catch (err: any) {
-        saveLogToLocal("crash", `[Receive] handleCopy failed: ${err?.message || String(err)}`);
-        showToast("复制失败");
-      }
-    }
+  const handleCopy = async () => {
+    if (!address) return;
+    const ok = await copyToClipboard(address);
+    showToast(ok ? "地址已复制" : "复制失败");
   };
 
   const handleShare = async () => {

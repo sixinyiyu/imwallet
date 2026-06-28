@@ -5,11 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Modal,
-  TextInput,
-  Pressable,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -23,6 +18,7 @@ import {
 } from "../services/logService";
 import { configService } from "../services/configService";
 import { GreenToggle } from "../components/GreenToggle";
+import PasswordDrawer from "../components/PasswordDrawer";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -38,7 +34,6 @@ export default function SettingsScreen() {
   const [serviceConfigEnabled, setServiceConfigEnabled] = useState(false);
   const [managePermitted, setManagePermitted] = useState(false);
   const [showPwdDrawer, setShowPwdDrawer] = useState(false);
-  const [pwdInput, setPwdInput] = useState("");
   const [pwdVerifying, setPwdVerifying] = useState(false);
   const [pwdError, setPwdError] = useState<string | null>(null);
 
@@ -112,31 +107,22 @@ export default function SettingsScreen() {
   // 服务配置开关：开启需密码验证，关闭直接关闭
   const handleToggleServiceConfig = (enabled: boolean) => {
     if (enabled) {
-      // 开启 → 弹出密码抽屉
-      setPwdInput("");
       setPwdError(null);
       setShowPwdDrawer(true);
     } else {
-      // 关闭 → 直接关闭
       setServiceConfigEnabled(false);
       configService.setServiceConfigEnabled(false);
     }
   };
 
-  const handleVerifyPwd = async () => {
-    if (!pwdInput.trim()) {
-      setPwdError("请输入密码");
-      return;
-    }
+  const handleVerifyPwd = async (password: string) => {
     setPwdVerifying(true);
     setPwdError(null);
     try {
-      await configService.verifyServerPassword(pwdInput.trim());
-      // 密码正确 → 启用服务配置
+      await configService.verifyServerPassword(password);
       setServiceConfigEnabled(true);
       await configService.setServiceConfigEnabled(true);
       setShowPwdDrawer(false);
-      setPwdInput("");
     } catch (err: any) {
       const status = err?.response?.status;
       if (status === 403) {
@@ -146,12 +132,6 @@ export default function SettingsScreen() {
       }
     }
     setPwdVerifying(false);
-  };
-
-  const handleClosePwdDrawer = () => {
-    setShowPwdDrawer(false);
-    setPwdInput("");
-    setPwdError(null);
   };
 
   const handleUploadLogs = async () => {
@@ -264,58 +244,15 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       )}
 
-
-      {/* 密码输入抽屉 */}
-      <Modal
+      {/* 密码输入抽屉（复用 PasswordDrawer 组件） */}
+      <PasswordDrawer
         visible={showPwdDrawer}
-        transparent
-        animationType="slide"
-        onRequestClose={handleClosePwdDrawer}
-      >
-        <KeyboardAvoidingView
-          style={styles.drawerOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <Pressable style={styles.drawerBackdrop} onPress={handleClosePwdDrawer} />
-          <View style={styles.drawerContent}>
-            <View style={styles.drawerHandle} />
-            <Text style={styles.drawerTitle}>请输入服务配置密码</Text>
-            <TextInput
-              style={styles.pwdInput}
-              value={pwdInput}
-              onChangeText={setPwdInput}
-              placeholder="请输入密码"
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoFocus
-              onSubmitEditing={handleVerifyPwd}
-            />
-            {pwdError && <Text style={styles.pwdError}>{pwdError}</Text>}
-            <View style={styles.drawerActions}>
-              <TouchableOpacity
-                style={styles.drawerCancelBtn}
-                onPress={handleClosePwdDrawer}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.drawerCancelText}>取消</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.drawerConfirmBtn, pwdVerifying && styles.drawerConfirmBtnDisabled]}
-                onPress={handleVerifyPwd}
-                disabled={pwdVerifying}
-                activeOpacity={0.7}
-              >
-                {pwdVerifying ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.drawerConfirmText}>确认</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        title="请输入服务配置密码"
+        error={pwdError}
+        verifying={pwdVerifying}
+        onConfirm={handleVerifyPwd}
+        onClose={() => setShowPwdDrawer(false)}
+      />
     </View>
   );
 }
@@ -348,52 +285,4 @@ const styles = StyleSheet.create({
   },
   resultText: { fontSize: 14, color: "#374151", lineHeight: 20 },
   menuArrow: { fontSize: 20, color: "#D1D5DB", fontWeight: "300" },
-  // 密码抽屉样式
-  drawerOverlay: { flex: 1, justifyContent: "flex-end" },
-  drawerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
-  drawerContent: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 24,
-    paddingBottom: Platform.OS === "ios" ? 40 : 24,
-    paddingTop: 12,
-  },
-  drawerHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#D1D5DB",
-    alignSelf: "center",
-    marginBottom: 20,
-  },
-  drawerTitle: { fontSize: 17, fontWeight: "600", color: "#1F2937", marginBottom: 16 },
-  pwdInput: {
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#1F2937",
-  },
-  pwdError: { fontSize: 13, color: "#EF4444", marginTop: 8 },
-  drawerActions: { flexDirection: "row", gap: 12, marginTop: 20 },
-  drawerCancelBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-  },
-  drawerCancelText: { color: "#6B7280", fontWeight: "600", fontSize: 15 },
-  drawerConfirmBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
-    backgroundColor: "#287220",
-    alignItems: "center",
-  },
-  drawerConfirmBtnDisabled: { opacity: 0.6 },
-  drawerConfirmText: { color: "#fff", fontWeight: "600", fontSize: 15 },
 });

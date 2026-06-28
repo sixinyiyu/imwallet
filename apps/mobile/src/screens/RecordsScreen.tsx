@@ -18,7 +18,7 @@ import EmptyState from "../components/EmptyState";
 import { transactionService, type TransactionFilter } from "../services/transactionService";
 import { localAddressService } from "../services/localAddressService";
 import type { Transaction, AddressEntry } from "../types";
-import { SearchIcon, USDTIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
+import { SearchIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
 import { formatTime } from "../utils/date";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -42,17 +42,6 @@ const TIME_OPTIONS: { label: string; value: TimeFilter }[] = [
 
 
 
-const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
-  TRX: TronIcon,
-  USDT: USDTIcon,
-  ETH: EthIcon,
-  BTC: BtcIcon,
-};
-
-function renderTokenIcon(symbol: string, size: number) {
-  const Icon = TOKEN_ICONS[symbol];
-  return Icon ? <Icon size={size} /> : null;
-}
 
 export default function RecordsScreen() {
   const navigation = useNavigation<Nav>();

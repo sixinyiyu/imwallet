@@ -22,22 +22,8 @@ import { transactionService } from "../services/transactionService";
 import { localAddressService } from "../services/localAddressService";
 import { configService } from "../services/configService";
 import type { FeeConfig } from "../services/configService";
-import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, TronIcon, EthIcon, BtcIcon, USDTIcon } from "../components/icons";
+import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
 
-/** 代币图标映射：根据 symbol 渲染对应代币 icon */
-const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
-  TRX: TronIcon,
-  USDT: USDTIcon,
-  ETH: EthIcon,
-  BTC: BtcIcon,
-};
-
-/** 根据代币 symbol 渲染图标，未知代币回退为 null */
-function renderTokenIcon(symbol: string | undefined, size: number) {
-  if (!symbol) return null;
-  const Icon = TOKEN_ICONS[symbol];
-  return Icon ? React.createElement(Icon, { size }) : null;
-}
 import type { AddressEntry, AssetBalance } from "../types";
 import { detectNetwork, isValidAddressFormat } from "../utils/address";
 import { useAlert } from "../hooks/useAlert";

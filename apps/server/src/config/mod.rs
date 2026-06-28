@@ -18,6 +18,8 @@ pub struct ConfigFile {
     pub security: SecurityConfig,
     #[serde(default)]
     pub rsa: RsaConfig,
+    #[serde(default)]
+    pub cors: CorsConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -131,6 +133,29 @@ fn default_rsa_public_key_path() -> String {
     "keys/rsa_public.pem".into()
 }
 
+fn default_cors_origins() -> Vec<String> {
+    vec![
+        "https://imwallet.dpdns.org".into(),
+        "http://localhost:8081".into(),
+        "http://localhost:19006".into(),
+        "http://localhost:3000".into(),
+    ]
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CorsConfig {
+    #[serde(default = "default_cors_origins")]
+    pub allowed_origins: Vec<String>,
+}
+
+impl Default for CorsConfig {
+    fn default() -> Self {
+        Self {
+            allowed_origins: default_cors_origins(),
+        }
+    }
+}
+
 /// 运行时可用的配置快照（启动配置，全量）
 #[derive(Debug, Clone)]
 pub struct AppConfig {
@@ -145,6 +170,7 @@ pub struct AppConfig {
     pub replay_cache_capacity: usize,
     pub rsa_private_key_path: String,
     pub rsa_public_key_path: String,
+    pub cors_allowed_origins: Vec<String>,
 }
 
 /// 运行时配置（仅含 AppState 需要的字段）
@@ -181,6 +207,7 @@ impl From<ConfigFile> for AppConfig {
             replay_cache_capacity: c.security.replay_cache_capacity,
             rsa_private_key_path: env_override("RSA_PRIVATE_KEY_PATH", &c.rsa.private_key_path),
             rsa_public_key_path: env_override("RSA_PUBLIC_KEY_PATH", &c.rsa.public_key_path),
+            cors_allowed_origins: c.cors.allowed_origins,
         }
     }
 }
@@ -214,6 +241,7 @@ pub fn init_config() -> anyhow::Result<AppConfig> {
             logging: LoggingConfig::default(),
             security: SecurityConfig::default(),
             rsa: RsaConfig::default(),
+            cors: CorsConfig::default(),
         }
     } else {
         toml::from_str(&content)

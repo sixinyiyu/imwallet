@@ -22,13 +22,6 @@ use log::Level;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 
-static ALLOWED_ORIGINS: &[&str] = &[
-    "https://imwallet.dpdns.org",
-    "http://localhost:8081",
-    "http://localhost:19006",
-    "http://localhost:3000",
-];
-
 static ALLOWED_HEADERS: &[&str] = &[
     "Content-Type",
     "Authorization",
@@ -61,10 +54,11 @@ async fn main() -> anyhow::Result<()> {
 
     // 5. 构建路由（RSA 初始化、RuntimeConfig 转换、AppState 构建均在内部完成）
     let port = config.port;
-    let app = routes::build_routes(db, config).await?.layer(
+    let app = routes::build_routes(db, config.clone()).await?.layer(
         CorsLayer::new()
             .allow_origin(
-                ALLOWED_ORIGINS
+                config
+                    .cors_allowed_origins
                     .iter()
                     .map(|s| s.parse().unwrap())
                     .collect::<Vec<_>>(),

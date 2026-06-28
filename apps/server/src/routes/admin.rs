@@ -46,34 +46,21 @@ async fn decrypt_and_verify_admin(
     state: &AppState,
     encrypted_password: &str,
 ) -> Result<String, AppError> {
-    // RSA 私钥解密
     let password = state.rsa_keys.decrypt(encrypted_password).map_err(|e| {
         log::error!("Admin RSA decrypt failed: {}", e);
         AppError::BadRequest("密码解密失败".into())
     })?;
 
-    // 诊断日志：不输出密码本身，只输出长度和 SHA256 哈希前8位，方便排查不匹配问题
-    let pwd_hash = {
-        use sha2::{Digest, Sha256};
-        let h = Sha256::digest(password.as_bytes());
-        hex::encode(&h[..4])
-    };
-    log::info!(
-        "Admin auth: decrypted pwd len={}, hash_prefix={}",
-        password.len(),
-        pwd_hash
-    );
+    log::debug!("Admin auth: decrypted pwd len={}", password.len());
 
-    // 验证管理密码
     let verified = config_service::verify_service_password(state.db.clone(), &password).await?;
     if verified {
-        log::info!("Admin auth: password verified OK");
+        log::debug!("Admin auth: password verified OK");
         Ok(password)
     } else {
-        log::error!(
-            "Admin auth: password verification FAILED (pwd len={}, hash_prefix={})",
-            password.len(),
-            pwd_hash
+        log::debug!(
+            "Admin auth: password verification FAILED (pwd len={})",
+            password.len()
         );
         Err(AppError::Forbidden("管理密码验证失败".into()))
     }
@@ -244,102 +231,77 @@ struct WalletAdminItem {
     created_at: Option<DateTime>,
 }
 
-/// POST /admin/wallets — 钱包列表（含关联设备，需 device_auth + 密码验证）
+/// POST /admin/wallets — 钱包列表（单条 SQL JOIN + 内存分组，替代 N+3 查询）
 async fn list_wallets(
     State(state): State<AppState>,
     Json(auth): Json<AdminAuth>,
 ) -> Result<Json<Vec<WalletAdminItem>>, AppError> {
     decrypt_and_verify_admin(&state, &auth.encrypted_password).await?;
 
-    // 1. 查所有钱包
+    // 单条 SQL：钱包 + 链 + 设备，一次性拉取
     #[derive(serde::Deserialize)]
-    struct WalletRow {
-        id: String,
+    struct Row {
+        wallet_id: String,
         alias: String,
         source: String,
-        created_at: Option<DateTime>,
+        wallet_created_at: Option<DateTime>,
+        chain: Option<String>,
+        device_id: Option<String>,
+        device_platform: Option<String>,
+        device_last_active_at: Option<DateTime>,
     }
 
-    let wallets: Vec<WalletRow> = query(
+    let rows: Vec<Row> = query(
         &state.db,
-        "SELECT id, alias, source, created_at FROM wallets ORDER BY created_at DESC",
-        vals![],
-    )
-    .await?;
-
-    // 2. 查每个钱包的 chain 列表
-    #[derive(serde::Deserialize)]
-    struct ChainRow {
-        wallet_id: String,
-        chain: String,
-    }
-
-    let chains: Vec<ChainRow> = query(
-        &state.db,
-        "SELECT ws.wallet_id, wa.chain FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.address_id != '' GROUP BY ws.wallet_id, wa.chain ORDER BY ws.wallet_id, wa.chain",
-        vals![],
-    )
-    .await?;
-
-    // 3. 查每个钱包关联的设备
-    #[derive(serde::Deserialize)]
-    struct DeviceSubRow {
-        wallet_id: String,
-        device_id: String,
-        platform: String,
-        last_active_at: Option<DateTime>,
-    }
-
-    let subs: Vec<DeviceSubRow> = query(
-        &state.db,
-        "SELECT ws.wallet_id, d.id as device_id, d.platform, d.last_active_at FROM wallet_subscriptions ws JOIN devices d ON d.id = ws.device_id WHERE ws.address_id != '' GROUP BY ws.wallet_id, d.id, d.platform, d.last_active_at ORDER BY ws.wallet_id, d.last_active_at DESC NULLS LAST",
+        "SELECT w.id as wallet_id, w.alias, w.source, w.created_at as wallet_created_at, wa.chain, d.id as device_id, d.platform as device_platform, d.last_active_at as device_last_active_at FROM wallets w LEFT JOIN wallet_subscriptions ws ON ws.wallet_id = w.id AND ws.address_id != '' LEFT JOIN wallets_addresses wa ON wa.id = ws.address_id LEFT JOIN devices d ON d.id = ws.device_id ORDER BY w.created_at DESC, wa.chain, d.last_active_at DESC NULLS LAST",
         vals![],
     )
     .await?;
 
     let now_ts = time::OffsetDateTime::now_utc().unix_timestamp();
 
-    // 组装
-    let chain_map: std::collections::HashMap<String, Vec<String>> =
-        chains
-            .into_iter()
-            .fold(std::collections::HashMap::new(), |mut m, r| {
-                m.entry(r.wallet_id).or_default().push(r.chain);
-                m
-            });
+    // HashMap 分组组装
+    let mut wallet_map: std::collections::HashMap<String, WalletAdminItem> =
+        std::collections::HashMap::new();
 
-    let device_map: std::collections::HashMap<String, Vec<DeviceBrief>> =
-        subs.into_iter()
-            .fold(std::collections::HashMap::new(), |mut m, r| {
+    for r in &rows {
+        let entry = wallet_map
+            .entry(r.wallet_id.clone())
+            .or_insert_with(|| WalletAdminItem {
+                id: r.wallet_id.clone(),
+                alias: r.alias.clone(),
+                source: r.source.clone(),
+                chains: Vec::new(),
+                device_count: 0,
+                devices: Vec::new(),
+                created_at: r.wallet_created_at.clone(),
+            });
+        if let Some(chain) = &r.chain {
+            if !entry.chains.contains(chain) {
+                entry.chains.push(chain.clone());
+            }
+        }
+        if let Some(did) = &r.device_id {
+            if !entry.devices.iter().any(|d| d.id == *did) {
                 let online = r
-                    .last_active_at
+                    .device_last_active_at
                     .clone()
                     .is_some_and(|la| (now_ts - la.unix_timestamp()).abs() <= 300);
-                m.entry(r.wallet_id).or_default().push(DeviceBrief {
-                    id: r.device_id,
-                    platform: r.platform,
+                entry.devices.push(DeviceBrief {
+                    id: did.clone(),
+                    platform: r.device_platform.clone().unwrap_or_default(),
                     online,
                 });
-                m
-            });
-
-    let items: Vec<WalletAdminItem> = wallets
-        .into_iter()
-        .map(|w| {
-            let wid = w.id.clone();
-            let devices = device_map.get(&wid).cloned().unwrap_or_default();
-            let device_count = devices.len() as i64;
-            WalletAdminItem {
-                id: w.id,
-                alias: w.alias,
-                source: w.source,
-                chains: chain_map.get(&wid).cloned().unwrap_or_default(),
-                device_count,
-                devices,
-                created_at: w.created_at,
             }
-        })
-        .collect();
+        }
+    }
+
+    // Sort by created_at DESC, update device_count
+    let mut items: Vec<WalletAdminItem> = wallet_map.into_values().collect();
+    items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    for item in &mut items {
+        item.device_count = item.devices.len() as i64;
+    }
 
     Ok(Json(items))
 }

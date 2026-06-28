@@ -28,3 +28,27 @@ export { default as BtcIcon } from "./BtcIcon";
 export { default as AddContactIcon } from "./AddContactIcon";
 export { default as AndroidIcon } from "./AndroidIcon";
 export { default as IosIcon } from "./IosIcon";
+
+import React from "react";
+import { Text } from "react-native";
+import TronIcon from "./TronIcon";
+import USDTIcon from "./USDTIcon";
+import EthIcon from "./EthIcon";
+import BtcIcon from "./BtcIcon";
+
+/** 预置代币图标映射（统一入口，避免各 Screen 重复定义） */
+export const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
+  TRX: TronIcon,
+  USDT: USDTIcon,
+  ETH: EthIcon,
+  BTC: BtcIcon,
+};
+
+/** 根据代币 symbol 渲染图标，未知代币回退为 null 或 emoji */
+export function renderTokenIcon(symbol: string | undefined, size: number, fallback: string | null = null) {
+  if (!symbol) return fallback ? <Text style={{ fontSize: size * 0.7 }}>{fallback}</Text> : null;
+  const Icon = TOKEN_ICONS[symbol];
+  if (Icon) return React.createElement(Icon, { size });
+  if (fallback) return <Text style={{ fontSize: size * 0.7 }}>{fallback}</Text>;
+  return null;
+}

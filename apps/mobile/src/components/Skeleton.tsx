@@ -268,6 +268,24 @@ export function ConfigManageSkeleton() {
   );
 }
 
+/** Token manage list skeleton */
+export function TokenManageSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <View style={s.page}>
+      {Array.from({ length: count }).map((_, i) => (
+        <View key={i} style={s.tokenCard}>
+          <SkeletonCircle size={40} />
+          <View style={s.tokenInfo}>
+            <SkeletonBar width="30%" height={16} />
+            <SkeletonBar width="55%" height={12} style={{ marginTop: 6 }} />
+          </View>
+          <SkeletonBar width={44} height={24} borderRadius={12} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /** Recharge screen skeleton */
 export function RechargeSkeleton() {
   return (
@@ -314,6 +332,16 @@ const s = StyleSheet.create({
   },
   walletRow: { flexDirection: "row", alignItems: "center" },
   walletInfo: { flex: 1, marginLeft: 12 },
+  // Token
+  tokenCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+  },
+  tokenInfo: { flex: 1, marginLeft: 12 },
   // Detail
   detailCard: {
     backgroundColor: "#fff",

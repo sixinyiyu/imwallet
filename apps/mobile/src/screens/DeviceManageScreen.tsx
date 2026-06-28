@@ -9,21 +9,13 @@ import {
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { adminService, type WalletAdminInfo, type WalletTransaction, type WalletRecharge } from "../services/adminService";
-import { ChevronRightIcon, AndroidIcon, IosIcon, WalletIcon, TronIcon, USDTIcon, EthIcon, BtcIcon } from "../components/icons";
+import { ChevronRightIcon, AndroidIcon, IosIcon, WalletIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
 import { WalletListSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import { formatTime } from "../utils/date";
 import { getPlaintextPassword, clearAdminAuthCache } from "../utils/adminAuthCache";
 import type { RouteProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../types/navigation";
-
-/** 预置代币图标映射 */
-const TOKEN_ICONS: Record<string, React.FC<{ size?: number }>> = {
-  TRX: TronIcon,
-  USDT: USDTIcon,
-  ETH: EthIcon,
-  BTC: BtcIcon,
-};
 
 type DeviceManageRoute = RouteProp<RootStackParamList, "DeviceManage">;
 

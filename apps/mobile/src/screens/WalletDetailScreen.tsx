@@ -35,6 +35,7 @@ import {
 } from "../components/icons";
 import type { Wallet, SimpleWallet } from "../types";
 import { formatDate } from "../utils/date";
+import { copyToClipboard } from "../utils/clipboard";
 
 /** 根据网络名获取对应图标组件（PascalCase） */
 function getNetworkIcon(network: string): React.FC<{ size?: number; color?: string }> | null {
@@ -335,14 +336,8 @@ export default function WalletDetailScreen() {
                   </Text>
                   <TouchableOpacity
                     onPress={async () => {
-                      try {
-                        const Clipboard = require("expo-clipboard");
-                        await Clipboard.setStringAsync(acc.address);
-                        showToast("地址已复制");
-                      } catch (err: any) {
-                        saveLogToLocal("crash", `[WalletDetail] account copy failed: ${err?.message || String(err)}`);
-                        showToast("复制失败");
-                      }
+                       const ok = await copyToClipboard(acc.address);
+                       showToast(ok ? "地址已复制" : "复制失败");
                     }}
                     activeOpacity={0.6}
                     style={styles.accountCopyBtn}

@@ -14,6 +14,7 @@ import { useAlert } from "../hooks/useAlert";
 import { detectNetwork } from "../utils/address";
 import { TronIcon, EthIcon, BtcIcon, ContactIcon, CopyIcon, AddContactIcon } from "../components/icons";
 import { saveLogToLocal } from "../services/logService";
+import { copyToClipboard } from "../utils/clipboard";
 import { AddressBookSkeleton } from "../components/Skeleton";
 import type { AddressEntry } from "../types";
 import EmptyState from "../components/EmptyState";
@@ -167,14 +168,8 @@ export default function AddressBookScreen() {
 
   /** 复制地址到剪贴板 */
   const handleCopyAddress = useCallback(async (address: string) => {
-    try {
-      const Clipboard = require("expo-clipboard");
-      await Clipboard.setStringAsync(address);
-      showToast("地址已复制");
-    } catch (err: any) {
-      saveLogToLocal("crash", `[AddressBook] handleCopyAddress failed: ${err?.message || String(err)}`);
-      showToast("复制失败");
-    }
+    const ok = await copyToClipboard(address);
+    showToast(ok ? "地址已复制" : "复制失败");
   }, [showToast]);
 
   if (loading && contacts.length === 0) {

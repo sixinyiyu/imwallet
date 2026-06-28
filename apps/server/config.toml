@@ -25,3 +25,14 @@ nonce_cache_capacity = 100000    # 防重放缓存大小
 [rsa]
 private_key_path = "keys/rsa_private.pem"   # RSA 私钥文件路径（不存在时自动生成）
 public_key_path  = "keys/rsa_public.pem"    # RSA 公钥文件路径（不存在时自动生成）
+
+[cors]
+# 允许的跨域来源列表（前端访问后端 API 的域名）
+# 生产环境只放正式域名，开发环境可加 localhost
+# 不配置时使用默认值：["https://imwallet.dpdns.org", "http://localhost:8081", "http://localhost:19006", "http://localhost:3000"]
+allowed_origins = [
+    "https://imwallet.dpdns.org",
+    "http://localhost:8081",
+    "http://localhost:19006",
+    "http://localhost:3000",
+]
