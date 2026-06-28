@@ -75,8 +75,8 @@ export default function ConfigManageScreen() {
       setTxRestrictWallet(restrictItem?.value === "true");
       const permitted = await configService.getRechargePermitted();
       setRechargePermitted(permitted);
-      const adminPerm = await configService.getAdminPermitted();
-      setAdminPermitted(adminPerm);
+      const managePerm = await configService.getManagePermitted();
+      setAdminPermitted(managePerm);
     } catch {
       showToast("加载配置失败");
     }

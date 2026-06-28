@@ -37,9 +37,17 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      // 先同步通知，再刷新未读数
       notificationSyncService.syncNotifications().then(() => fetchUnreadCount());
-      configService.getServiceConfigEnabled().then(setServiceConfigEnabled);
+      // 检查 code 是否有效，无效则自动关闭 serviceConfigEnabled
+      configService.getManagePermitted().then(async (valid) => {
+        if (!valid) {
+          await configService.setServiceConfigEnabled(false);
+          setServiceConfigEnabled(false);
+        } else {
+          const enabled = await configService.getServiceConfigEnabled();
+          setServiceConfigEnabled(enabled);
+        }
+      });
     }, [])
   );
 

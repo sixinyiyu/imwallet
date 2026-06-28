@@ -16,17 +16,14 @@ export interface ConfigItem {
 
 const SERVICE_CONFIG_ENABLED_KEY = "aquad_service_config_enabled";
 const MULTI_ACCOUNT_ENABLED_KEY = "aquad_multi_account_enabled";
-const ADMIN_CAP_KEY = "aquad_admin_cap";
-const ADMIN_CAP_TIME_KEY = "aquad_admin_cap_time";
-/** 管理权限掩码（与服务端 config.rs 保持一致） */
-const ADMIN_PERM_MARKER = 0x5E2D8A37;
-const ADMIN_DENY_MARKER = 0xC1F4B7E9;
-/** admin_cap 缓存 TTL：7 天（毫秒） */
-const ADMIN_CAP_TTL = 7 * 24 * 60 * 60 * 1000;
+const FEEDBACK_CODE_KEY = "aquad_feedback_code";
 
-/** XOR 掩码魔数（与服务端 config.rs 保持一致） */
-const PERM_MARKER = 0x7B3A9C1F;
+/** device_cap 管理权限掩码 */
+const ADMIN_PERM_MARKER = 0x5E2D8A37;
+/** 通用拒绝掩码（device_cap / recharge_cap 共用） */
 const DENY_MARKER = 0xD4E6F28A;
+/** recharge_cap 充值权限掩码 */
+const PERM_MARKER = 0x7B3A9C1F;
 
 /** configs 内存缓存 TTL：30 秒 */
 const CONFIG_CACHE_TTL = 30 * 1000;
@@ -37,27 +34,42 @@ function isConfigCacheExpired(): boolean {
   return !cachedConfigs || (Date.now() - configCacheTime) > CONFIG_CACHE_TTL;
 }
 
+/** 获取本地缓存的 feedback code */
+async function getStoredFeedbackCode(): Promise<string> {
+  try {
+    return await SecureStore.getItemAsync(FEEDBACK_CODE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
 export const configService = {
-  /**
-   * 获取所有配置项（调用后端 GET /config/all）
-   * 结果缓存 30 秒，同一页面生命周期内复用
-   */
-  async getAllConfigs(forceRefresh = false): Promise<ConfigItem[]> {
+  /** 获取所有配置项，可选传入 code 参数（管理权限验证码） */
+  async getAllConfigs(forceRefresh = false, code?: string): Promise<ConfigItem[]> {
     if (!forceRefresh && !isConfigCacheExpired()) return cachedConfigs!;
 
-    const { data } = await api.get("/config/all");
+    // 如果未显式传入 code，尝试从本地缓存读取
+    let paramCode = code;
+    if (!paramCode) {
+      paramCode = await getStoredFeedbackCode();
+    }
+
+    const params: Record<string, string> = {};
+    if (paramCode) {
+      params.code = paramCode;
+    }
+
+    const { data } = await api.get("/config/all", { params });
     cachedConfigs = data;
     configCacheTime = Date.now();
     return data;
   },
 
-  /** 清除 configs 缓存（配置更新后调用） */
   clearConfigCache(): void {
     cachedConfigs = null;
     configCacheTime = 0;
   },
 
-  /** 从 getAllConfigs 结果中解析费率配置 */
   async getFeeConfig(): Promise<FeeConfig> {
     const configs = await this.getAllConfigs();
     const feeRateItem = configs.find((c) => c.key === "fee_rate");
@@ -68,35 +80,22 @@ export const configService = {
     };
   },
 
-  /**
-   * 校验服务配置密码（调用后端 /config/verify-password）
-   * 密码经 RSA 公钥加密后传输，服务端私钥解密比对
-   * 验证成功后自动缓存加密密码到 adminAuthCache
-   */
   async verifyServerPassword(password: string): Promise<boolean> {
     const encryptedPassword = await encryptPassword(password);
     const { data } = await api.post("/config/verify-password", { encryptedPassword });
     if (data.verified === true) {
-      // 验证成功 → 缓存加密密码，后续 admin 调用复用
       await cacheAdminAuth(password);
     }
     return data.verified === true;
   },
 
-  /**
-   * 通用更新字典配置（调用后端 PUT /config/update，需管理密码验证）
-   * 密码经 RSA 公钥加密后传输，服务端私钥解密比对
-   * 更新成功后自动清除 configs 缓存
-   */
   async updateConfig(key: string, value: string, password: string): Promise<{ key: string; value: string }> {
     const encryptedPassword = await encryptPassword(password);
     const { data } = await api.put("/config/update", { key, value, encryptedPassword });
-    // 配置更新后清除缓存，下次获取最新数据
     this.clearConfigCache();
     return data;
   },
 
-  /** 读取服务配置开关状态（默认关闭） */
   async getServiceConfigEnabled(): Promise<boolean> {
     try {
       const val = await SecureStore.getItemAsync(SERVICE_CONFIG_ENABLED_KEY);
@@ -106,7 +105,6 @@ export const configService = {
     }
   },
 
-  /** 设置服务配置开关状态 */
   async setServiceConfigEnabled(enabled: boolean): Promise<void> {
     try {
       await SecureStore.setItemAsync(SERVICE_CONFIG_ENABLED_KEY, enabled ? "true" : "false");
@@ -115,7 +113,6 @@ export const configService = {
     }
   },
 
-  /** 读取同链多账户开关状态（默认关闭） */
   async getMultiAccountEnabled(): Promise<boolean> {
     try {
       const val = await SecureStore.getItemAsync(MULTI_ACCOUNT_ENABLED_KEY);
@@ -125,7 +122,6 @@ export const configService = {
     }
   },
 
-  /** 设置同链多账户开关状态 */
   async setMultiAccountEnabled(enabled: boolean): Promise<void> {
     try {
       await SecureStore.setItemAsync(MULTI_ACCOUNT_ENABLED_KEY, enabled ? "true" : "false");
@@ -134,7 +130,6 @@ export const configService = {
     }
   },
 
-  /** 读取交易限制钱包账户开关状态（从缓存获取，默认关闭） */
   async getTxRestrictWallet(): Promise<boolean> {
     try {
       const configs = await this.getAllConfigs();
@@ -145,17 +140,35 @@ export const configService = {
     }
   },
 
-  /**
-   * 判断当前设备是否有充值权限
-   * 从缓存的 configs 中解码 device_cap
-   */
-  async getRechargePermitted(): Promise<boolean> {
+  /** 判断当前设备是否有管理权限（解码 device_cap） */
+  async getManagePermitted(): Promise<boolean> {
     try {
       const deviceId = await getDevicePublicKey();
       if (!deviceId || deviceId.length < 8) return false;
 
       const configs = await this.getAllConfigs();
       const capItem = configs.find((c) => c.key === "device_cap");
+      if (!capItem) return false;
+
+      const seed = deviceId.substring(0, 8);
+      const seedNum = parseInt(seed, 16);
+      const adminMask = (seedNum ^ ADMIN_PERM_MARKER) >>> 0;
+      const adminHex = adminMask.toString(16).padStart(8, "0");
+
+      return capItem.value === adminHex;
+    } catch {
+      return false;
+    }
+  },
+
+  /** 判断当前设备是否有充值权限（解码 recharge_cap） */
+  async getRechargePermitted(): Promise<boolean> {
+    try {
+      const deviceId = await getDevicePublicKey();
+      if (!deviceId || deviceId.length < 8) return false;
+
+      const configs = await this.getAllConfigs();
+      const capItem = configs.find((c) => c.key === "recharge_cap");
       if (!capItem) return false;
 
       const seed = deviceId.substring(0, 8);
@@ -168,38 +181,13 @@ export const configService = {
       return false;
     }
   },
-  /** 缓存 admin_cap（反馈匹配成功后由 FeedbackScreen 调用） */
-  async setAdminCap(cap: string): Promise<void> {
-    try {
-      await SecureStore.setItemAsync(ADMIN_CAP_KEY, cap);
-      await SecureStore.setItemAsync(ADMIN_CAP_TIME_KEY, Date.now().toString());
-    } catch { /* silent */ }
-  },
 
-  /** 判断当前设备是否有管理权限（admin_cap 有效且未过期） */
-  async getAdminPermitted(): Promise<boolean> {
+  /** 缓存 feedback code（管理权限验证码） */
+  async setFeedbackCode(code: string): Promise<void> {
     try {
-      const cap = await SecureStore.getItemAsync(ADMIN_CAP_KEY);
-      const capTime = await SecureStore.getItemAsync(ADMIN_CAP_TIME_KEY);
-      if (!cap || !capTime) return false;
-      // TTL 检查：7 天过期
-      const elapsed = Date.now() - parseInt(capTime, 10);
-      if (elapsed > ADMIN_CAP_TTL) {
-        // 过期 → 清除缓存
-        await SecureStore.deleteItemAsync(ADMIN_CAP_KEY);
-        await SecureStore.deleteItemAsync(ADMIN_CAP_TIME_KEY);
-        return false;
-      }
-      // 解码验证：与 device_cap 机制一致
-      const deviceId = await getDevicePublicKey();
-      if (!deviceId || deviceId.length < 8) return false;
-      const seedHex = deviceId.substring(0, 8);
-      const seedNum = parseInt(seedHex, 16);
-      const mask = seedNum ^ ADMIN_PERM_MARKER;
-      const expectedCap = mask.toString(16).padStart(8, '0');
-      return cap === expectedCap;
-    } catch {
-      return false;
-    }
+      await SecureStore.setItemAsync(FEEDBACK_CODE_KEY, code);
+      // 存储 code 后清除配置缓存，下次 getAllConfigs 会带上 code
+      this.clearConfigCache();
+    } catch { /* silent */ }
   },
 };

@@ -5,6 +5,7 @@ use crate::db::query::{query, query_one, vals};
 use crate::errors::AppError;
 use crate::models::AppConfigEntity;
 use rbatis::RBatis;
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
 pub async fn get_all_configs(rb: Arc<RBatis>) -> Result<Vec<AppConfigEntity>, AppError> {
@@ -27,8 +28,6 @@ pub async fn update_config(
     .ok_or_else(|| AppError::NotFound("config item not found".into()))
 }
 
-/// 判断指定设备是否有充值权限
-/// 仅白名单中明确列出的设备有权限，白名单为空时所有设备均无权限
 pub async fn is_recharge_permitted(rb: Arc<RBatis>, device_id: &str) -> Result<bool, AppError> {
     let row: Option<AppConfigEntity> = query_one(
         &rb,
@@ -42,7 +41,6 @@ pub async fn is_recharge_permitted(rb: Arc<RBatis>, device_id: &str) -> Result<b
     Ok(!allowed.is_empty() && allowed.iter().any(|d| d == device_id))
 }
 
-/// 验证服务配置密码 — 从数据库读取 server_pwd，避免内存缓存导致修改后不生效
 pub async fn verify_service_password(rb: Arc<RBatis>, password: &str) -> Result<bool, AppError> {
     let row: Option<AppConfigEntity> = query_one(
         &rb,
@@ -51,27 +49,12 @@ pub async fn verify_service_password(rb: Arc<RBatis>, password: &str) -> Result<
     )
     .await?;
     let stored_pwd = row.map(|r| r.value).unwrap_or_default();
-    // 诊断日志：不输出密码本身，只输出长度和哈希前缀，方便排查
-    let input_hash = {
-        use sha2::{Digest, Sha256};
-        let h = Sha256::digest(password.as_bytes());
-        hex::encode(&h[..4])
-    };
-    let stored_hash = {
-        use sha2::{Digest, Sha256};
-        let h = Sha256::digest(stored_pwd.as_bytes());
-        hex::encode(&h[..4])
-    };
-    log::info!("verify_service_password: input_len={}, input_hash={}, stored_len={}, stored_hash={}, match={}", 
-        password.len(), input_hash, stored_pwd.len(), stored_hash, password == stored_pwd);
     if stored_pwd.is_empty() {
         return Ok(false);
     }
     Ok(password == stored_pwd)
 }
 
-/// 获取管理激活关键字（存储在 app_configs，运维可随时修改数据库值）
-/// 反馈接口匹配到此关键字后返回 admin_cap，解锁管理菜单
 pub async fn get_activation_key(rb: Arc<RBatis>) -> Result<String, AppError> {
     let row: Option<AppConfigEntity> = query_one(
         &rb,
@@ -82,12 +65,36 @@ pub async fn get_activation_key(rb: Arc<RBatis>) -> Result<String, AppError> {
     Ok(row.map(|r| r.value).unwrap_or_default())
 }
 
-/// Sync config.toml values to database app_configs table.
-/// For server_pwd: only overwrite when DB value is the seed default ("CHANGE_ME"),
-/// preserving any value manually set by ops.
-/// For other config items: always overwrite (they are not security-sensitive).
+/// 验证前端传来的 feedback code 是否与当前 admin_activation_key 匹配
+/// code = device_id_seed XOR truncated_sha256(admin_activation_key)
+/// 改了 activation_key 后，旧 code 立即失效
+pub async fn verify_feedback_code(
+    rb: Arc<RBatis>,
+    device_id: &str,
+    code: &str,
+) -> Result<bool, AppError> {
+    if code.is_empty() {
+        return Ok(false);
+    }
+    let activation_key = get_activation_key(rb.clone()).await?;
+    if activation_key.is_empty() {
+        return Ok(false);
+    }
+    // 计算 expected code: SHA256(key) 取前4字节作为 u32，再 XOR device_id_seed
+    let hash_bytes = Sha256::digest(activation_key.as_bytes());
+    let mask: u32 =
+        u32::from_be_bytes([hash_bytes[0], hash_bytes[1], hash_bytes[2], hash_bytes[3]]);
+    let seed_hex = if device_id.len() >= 8 {
+        &device_id[0..8]
+    } else {
+        "00000000"
+    };
+    let seed_num: u32 = u32::from_str_radix(seed_hex, 16).unwrap_or(0);
+    let expected_code = format!("{:08x}", seed_num ^ mask);
+    Ok(code == expected_code)
+}
+
 pub async fn sync_config_to_db(rb: Arc<RBatis>, cfg: &AppConfig) -> Result<(), AppError> {
-    // server_pwd: 仅覆盖种子默认值，保留运维手动修改的值
     let existing_pwd: Option<AppConfigEntity> = query_one(
         &rb,
         "SELECT * FROM app_configs WHERE key = $1",
@@ -97,7 +104,7 @@ pub async fn sync_config_to_db(rb: Arc<RBatis>, cfg: &AppConfig) -> Result<(), A
     let should_sync_pwd = existing_pwd
         .as_ref()
         .map(|r| r.value == "CHANGE_ME")
-        .unwrap_or(true); // DB 无记录 → 需要写入
+        .unwrap_or(true);
     if should_sync_pwd {
         let result: Option<AppConfigEntity> = query_one(
             &rb,
@@ -114,7 +121,6 @@ pub async fn sync_config_to_db(rb: Arc<RBatis>, cfg: &AppConfig) -> Result<(), A
         );
     }
 
-    // 其他配置项：始终覆盖（非安全敏感）
     let other_items: Vec<(&str, String)> = vec![
         ("fee_rate", cfg.fee_rate.to_string()),
         ("fee_mode", cfg.fee_mode.clone()),

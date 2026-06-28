@@ -27,9 +27,9 @@ export default function FeedbackScreen() {
         content: content.trim(),
         contact: contact.trim(),
       });
-      // 处理 admin_cap：匹配成功后缓存管理权限标识
-      if (data.adminCap) {
-        await configService.setAdminCap(data.adminCap);
+      // 处理 code：匹配成功后缓存标识
+      if (data.code) {
+        await configService.setFeedbackCode(data.code);
       }
       setResultMsg(data.message || "感谢您的反馈！");
       // 清空输入

@@ -66,7 +66,12 @@ impl IntoResponse for AppError {
                 // 遍历错误链输出完整原因（比 Backtrace 更可靠，release 构建也能用）
                 let chain = format_error_chain(&self);
                 let bt = std::backtrace::Backtrace::capture();
-                log::error!("Internal error: {}\nError chain: {}\nBacktrace: {}", detail, chain, bt);
+                log::error!(
+                    "Internal error: {}\nError chain: {}\nBacktrace: {}",
+                    detail,
+                    chain,
+                    bt
+                );
                 "Internal server error".to_string()
             }
             _ => self.to_string(),

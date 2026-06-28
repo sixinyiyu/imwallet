@@ -14,6 +14,7 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use lru::LruCache;
 use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -155,7 +156,20 @@ pub async fn device_auth(
         h.update(&body_bytes);
         hex::encode(h.finalize())
     };
-    let message = format!("{}{}{}{}{}", ts, method.as_str(), normalized, nonce_str, body_hash);
+    let message = format!(
+        "{}{}{}{}{}",
+        ts,
+        method.as_str(),
+        normalized,
+        nonce_str,
+        body_hash
+    );
+
+    // Debug: 打印签名验证细节（排查 signature verification failed 问题）
+    ::log::debug!(
+        "device_auth: uri_path={}, normalized={}, method={}, nonce={}, body_hash_len={}, message_len={}, device_id_len={}",
+        path, normalized, method.as_str(), nonce_str, body_hash.len(), message.len(), device_id.len()
+    );
 
     // Ed25519 签名验证
     let pkb = hex::decode(device_id)

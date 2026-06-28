@@ -47,12 +47,9 @@ async fn decrypt_and_verify_admin(
     encrypted_password: &str,
 ) -> Result<String, AppError> {
     // RSA 私钥解密
-    let password = state
-        .rsa_keys
-        .decrypt(encrypted_password)
-        .map_err(|e| {
-            log::error!("Admin RSA decrypt failed: {}", e);
-            AppError::BadRequest("密码解密失败".into())
+    let password = state.rsa_keys.decrypt(encrypted_password).map_err(|e| {
+        log::error!("Admin RSA decrypt failed: {}", e);
+        AppError::BadRequest("密码解密失败".into())
     })?;
 
     // 诊断日志：不输出密码本身，只输出长度和 SHA256 哈希前8位，方便排查不匹配问题
@@ -61,7 +58,11 @@ async fn decrypt_and_verify_admin(
         let h = Sha256::digest(password.as_bytes());
         hex::encode(&h[..4])
     };
-    log::info!("Admin auth: decrypted pwd len={}, hash_prefix={}", password.len(), pwd_hash);
+    log::info!(
+        "Admin auth: decrypted pwd len={}, hash_prefix={}",
+        password.len(),
+        pwd_hash
+    );
 
     // 验证管理密码
     let verified = config_service::verify_service_password(state.db.clone(), &password).await?;
@@ -69,7 +70,11 @@ async fn decrypt_and_verify_admin(
         log::info!("Admin auth: password verified OK");
         Ok(password)
     } else {
-        log::error!("Admin auth: password verification FAILED (pwd len={}, hash_prefix={})", password.len(), pwd_hash);
+        log::error!(
+            "Admin auth: password verification FAILED (pwd len={}, hash_prefix={})",
+            password.len(),
+            pwd_hash
+        );
         Err(AppError::Forbidden("管理密码验证失败".into()))
     }
 }
