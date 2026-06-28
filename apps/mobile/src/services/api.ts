@@ -94,8 +94,8 @@ function buildSignMessage(
   timestamp: string,
   method: string,
   path: string,
-  bodyHash: string,
-  nonce: string
+  nonce: string,
+  bodyHash: string
 ): string {
   return `${timestamp}${method}${path}${nonce}${bodyHash}`;
 }

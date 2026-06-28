@@ -6,18 +6,19 @@ use crate::errors::AppError;
 use crate::middleware::{AppState, DevicePayload};
 use crate::services::config_service;
 use axum::{
-    extract::State,
+    extract::{Query, State},
     routing::{get, post, put},
     Extension, Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 
-/// XOR 掩码魔数（无规律常量，用于编码充值权限）
-const PERM_MARKER: u32 = 0x7B3A9C1F;
-const DENY_MARKER: u32 = 0xD4E6F28A;
-/// 管理权限掩码（与 device_cap 机制一致，用于编码管理功能解锁标识）
+/// XOR 掩码魔数（无规律常量）
+/// device_cap: 管理权限 — 匹配 code → ADMIN_PERM_MARKER，不匹配 → DENY_MARKER
 const ADMIN_PERM_MARKER: u32 = 0x5E2D8A37;
-const ADMIN_DENY_MARKER: u32 = 0xC1F4B7E9;
+const DENY_MARKER: u32 = 0xD4E6F28A;
+/// recharge_cap: 充值权限 — permitted → PERM_MARKER，not permitted → DENY_MARKER
+const PERM_MARKER: u32 = 0x7B3A9C1F;
 
 /// 不暴露给前端的配置项（仅敏感项）
 const HIDDEN_KEYS: &[&str] = &[
@@ -49,12 +50,22 @@ impl From<crate::models::AppConfigEntity> for ConfigItem {
     }
 }
 
+/// GET /config/all 可选 query 参数
+#[derive(Debug, Deserialize, Default)]
+struct ConfigAllQuery {
+    /// 可选：反馈匹配后返回的 code，用于验证管理权限
+    #[serde(default)]
+    code: String,
+}
+
 /// GET /config/all — 获取所有配置项
 /// - 过滤掉 server_pwd / recharge_allowed_devices / admin_activation_key 等敏感项
-/// - 注入 device_cap：基于设备 ID XOR 掩码编码的充值权限标识
+/// - 注入 device_cap：基于 code 验证结果 XOR 掩码编码管理权限（两级）
+/// - 注入 recharge_cap：基于充值白名单 XOR 掩码编码充值权限（两级）
 async fn get_all_configs(
     State(state): State<AppState>,
     Extension(device): Extension<DevicePayload>,
+    Query(query): Query<ConfigAllQuery>,
 ) -> Result<Json<Vec<ConfigItem>>, AppError> {
     let configs = config_service::get_all_configs(state.db.clone()).await?;
 
@@ -65,24 +76,43 @@ async fn get_all_configs(
         .map(ConfigItem::from)
         .collect();
 
-    // 计算 device_cap：取设备 ID 前 8 位 hex 作为 seed，XOR 掩码编码权限
-    let permitted =
-        config_service::is_recharge_permitted(state.db.clone(), &device.device_id).await?;
+    // 设备 ID 前 8 位 hex 作为 seed
     let seed_hex = if device.device_id.len() >= 8 {
         &device.device_id[0..8]
     } else {
         "00000000"
     };
     let seed_num: u32 = u32::from_str_radix(seed_hex, 16).unwrap_or(0);
-    let mask: u32 = if permitted {
+
+    // ── device_cap：管理权限（两级）──
+    // 如果传了 code，用 admin_activation_key SHA256 截断 XOR 验证
+    let manage_permitted = if !query.code.is_empty() {
+        config_service::verify_feedback_code(state.db.clone(), &device.device_id, &query.code)
+            .await?
+    } else {
+        false
+    };
+    let device_cap_mask: u32 = if manage_permitted {
+        seed_num ^ ADMIN_PERM_MARKER
+    } else {
+        seed_num ^ DENY_MARKER
+    };
+    items.push(ConfigItem {
+        key: "device_cap".to_string(),
+        value: format!("{:08x}", device_cap_mask),
+    });
+
+    // ── recharge_cap：充值权限（两级）──
+    let recharge_permitted =
+        config_service::is_recharge_permitted(state.db.clone(), &device.device_id).await?;
+    let recharge_cap_mask: u32 = if recharge_permitted {
         seed_num ^ PERM_MARKER
     } else {
         seed_num ^ DENY_MARKER
     };
-    let cap_value = format!("{:08x}", mask);
     items.push(ConfigItem {
-        key: "device_cap".to_string(),
-        value: cap_value,
+        key: "recharge_cap".to_string(),
+        value: format!("{:08x}", recharge_cap_mask),
     });
 
     Ok(Json(items))
@@ -141,7 +171,11 @@ async fn update_config(
     Json(body): Json<UpdateConfigRequest>,
 ) -> Result<Json<UpdateConfigResponse>, AppError> {
     // 黑名单：不允许通过 API 修改的配置项
-    const PROTECTED_KEYS: &[&str] = &["server_pwd", "recharge_allowed_devices", "admin_activation_key"];
+    const PROTECTED_KEYS: &[&str] = &[
+        "server_pwd",
+        "recharge_allowed_devices",
+        "admin_activation_key",
+    ];
     if PROTECTED_KEYS.contains(&body.key.as_str()) {
         return Err(AppError::Forbidden(format!(
             "配置项 '{}' 仅允许运维人员通过数据库直接修改",
@@ -167,7 +201,7 @@ async fn update_config(
     }))
 }
 
-// ── 反馈建议（伪装入口：匹配激活关键字后返回管理权限标识） ──
+// ── 反馈建议 ──
 
 #[derive(Debug, Deserialize)]
 struct FeedbackRequest {
@@ -180,16 +214,13 @@ struct FeedbackRequest {
 
 #[derive(Debug, Serialize)]
 struct FeedbackResponse {
-    /// 通用回复（无论匹配与否都返回感谢信息，不泄露匹配结果）
     message: String,
-    /// 管理权限标识（仅匹配成功时返回，类似 device_cap 的掩码编码）
-    /// 前端收到后本地缓存，用于决定是否显示管理菜单项
-    admin_cap: Option<String>,
+    /// 匹配关键词后返回 code（SHA256(admin_activation_key) 截断 XOR device_id_seed）
+    /// 不匹配时为 None
+    code: Option<String>,
 }
 
 /// POST /config/feedback — 提交反馈建议
-/// 伪装入口：匹配到 admin_activation_key 关键字后返回 admin_cap，
-/// 不知道关键信息的人看到的就是普通反馈表单
 async fn submit_feedback(
     State(state): State<AppState>,
     Extension(device): Extension<DevicePayload>,
@@ -197,41 +228,29 @@ async fn submit_feedback(
 ) -> Result<Json<FeedbackResponse>, AppError> {
     // 1. 读取激活关键字（存储在 app_configs，运维可随时修改）
     let activation_key = config_service::get_activation_key(state.db.clone()).await?;
-    let matched = !activation_key.is_empty()
-        && body
-            .content
-            .trim()
-            .contains(&activation_key);
+    let matched = !activation_key.is_empty() && body.content.trim().contains(&activation_key);
 
-    // 2. 计算 admin_cap（与 device_cap 机制一致：设备 ID seed XOR 掩码）
-    let admin_cap = if matched {
-        log::info!(
-            "Admin activation matched for device {}",
-            device.device_id
-        );
+    // 2. 匹配时计算 code（与 verify_feedback_code 同算法：SHA256(key) 截断 XOR seed）
+    let code = if matched {
+        log::info!("Admin activation matched for device {}", device.device_id);
+        // 使用 SHA256(admin_activation_key) 截断作为掩码，与 device_id_seed XOR
+        let hash_bytes = sha2::Sha256::digest(activation_key.as_bytes());
+        let mask: u32 =
+            u32::from_be_bytes([hash_bytes[0], hash_bytes[1], hash_bytes[2], hash_bytes[3]]);
         let seed_hex = if device.device_id.len() >= 8 {
             &device.device_id[0..8]
         } else {
             "00000000"
         };
         let seed_num: u32 = u32::from_str_radix(seed_hex, 16).unwrap_or(0);
-        let mask: u32 = seed_num ^ ADMIN_PERM_MARKER;
-        Some(format!("{:08x}", mask))
+        Some(format!("{:08x}", seed_num ^ mask))
     } else {
-        // 不匹配 → 返回 deny 掩码，前端计算后不会解锁
-        let seed_hex = if device.device_id.len() >= 8 {
-            &device.device_id[0..8]
-        } else {
-            "00000000"
-        };
-        let seed_num: u32 = u32::from_str_radix(seed_hex, 16).unwrap_or(0);
-        let mask: u32 = seed_num ^ ADMIN_DENY_MARKER;
-        Some(format!("{:08x}", mask))
+        None
     };
 
-    // 3. 无论匹配与否，都返回感谢信息（不泄露匹配结果）
+    // 3. 返回感谢信息
     Ok(Json(FeedbackResponse {
         message: "感谢您的反馈，我们会认真阅读并持续改进产品！".to_string(),
-        admin_cap,
+        code,
     }))
 }

@@ -11,7 +11,7 @@ use crate::db::query::vals;
 use crate::errors::AppError;
 use flyway::{
     ChangelogFile, MigrationExecutor, MigrationRunner, MigrationState, MigrationStateManager,
-    MigrationStatus, MigrationsError, MigrationStore,
+    MigrationStatus, MigrationStore, MigrationsError,
 };
 use log::info;
 use rbatis::RBatis;
@@ -225,7 +225,9 @@ pub async fn migrate(db: Arc<RBatis>) -> std::result::Result<(), AppError> {
     }
     if changelogs.is_empty() {
         log::error!("No embedded migrations found — this should never happen if migrations/ directory has V*.sql files at compile time");
-        return Err(AppError::Internal("No migrations found in embedded store".into()));
+        return Err(AppError::Internal(
+            "No migrations found in embedded store".into(),
+        ));
     }
 
     // 2. 状态管理 —— _flyway_schema_history 表

@@ -287,20 +287,26 @@ export default function DeviceManageScreen() {
                       )
                     )}
 
-                    {(dataTab === "transactions" ? transactions.length : recharges.length) > 0 && (
-                      <TouchableOpacity
-                        style={styles.loadMoreBtn}
-                        onPress={handleLoadMore}
-                        disabled={loadingMore}
-                        activeOpacity={0.7}
-                      >
-                        {loadingMore ? (
-                          <ActivityIndicator size="small" color="#287220" />
-                        ) : (
-                          <Text style={styles.loadMoreBtnText}>加载更多</Text>
-                        )}}
-                      </TouchableOpacity>
-                    )}
+                    {(dataTab === "transactions" ? transactions.length : recharges.length) > 0 && (() => {
+                      const items = dataTab === "transactions" ? transactions : recharges;
+                      const hasMore = items.length >= 20;
+                      return hasMore ? (
+                        <TouchableOpacity
+                          style={styles.loadMoreBtn}
+                          onPress={handleLoadMore}
+                          disabled={loadingMore}
+                          activeOpacity={0.7}
+                        >
+                          {loadingMore ? (
+                            <ActivityIndicator size="small" color="#287220" />
+                          ) : (
+                            <Text style={styles.loadMoreBtnText}>加载更多</Text>
+                          )}
+                        </TouchableOpacity>
+                      ) : (
+                        <Text style={styles.endHint}>— 已加载全部 —</Text>
+                      );
+                    })()}
                   </>
                 )}
               </View>

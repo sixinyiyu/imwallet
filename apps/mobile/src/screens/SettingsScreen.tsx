@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useFiatStore } from "../stores/fiatStore";
@@ -36,6 +36,7 @@ export default function SettingsScreen() {
 
   // 服务配置
   const [serviceConfigEnabled, setServiceConfigEnabled] = useState(false);
+  const [managePermitted, setManagePermitted] = useState(false);
   const [showPwdDrawer, setShowPwdDrawer] = useState(false);
   const [pwdInput, setPwdInput] = useState("");
   const [pwdVerifying, setPwdVerifying] = useState(false);
@@ -45,13 +46,16 @@ export default function SettingsScreen() {
   const [multiAccountEnabled, setMultiAccountEnabled] = useState(false);
   const [togglingMulti, setTogglingMulti] = useState(false);
 
-  useEffect(() => {
-    loadCurrency();
-    loadPendingCount();
-    loadLogUploadEnabled();
-    loadServiceConfigEnabled();
-    loadMultiAccountEnabled();
-  }, []);
+  useFocusEffect(
+    React.useCallback(() => {
+      loadCurrency();
+      loadPendingCount();
+      loadLogUploadEnabled();
+      loadServiceConfigEnabled();
+      loadMultiAccountEnabled();
+      loadManagePermitted();
+    }, [])
+  );
 
   const loadPendingCount = async () => {
     try {
@@ -70,6 +74,15 @@ export default function SettingsScreen() {
   const loadServiceConfigEnabled = async () => {
     const enabled = await configService.getServiceConfigEnabled();
     setServiceConfigEnabled(enabled);
+  };
+
+  const loadManagePermitted = async () => {
+    const valid = await configService.getManagePermitted();
+    setManagePermitted(valid);
+    if (!valid) {
+      setServiceConfigEnabled(false);
+      await configService.setServiceConfigEnabled(false);
+    }
   };
 
   const loadMultiAccountEnabled = async () => {
@@ -228,7 +241,8 @@ export default function SettingsScreen() {
         </View>
       )}
 
-      {/* 服务配置开关 */}
+      {/* 服务配置开关（仅管理权限有效时可见） */}
+      {managePermitted && (
       <View style={styles.menuItem}>
         <View style={styles.menuLeft}>
           <Text style={styles.menuLabel}>服务配置</Text>
@@ -236,6 +250,7 @@ export default function SettingsScreen() {
         </View>
         <GreenToggle value={serviceConfigEnabled} onValueChange={handleToggleServiceConfig} />
       </View>
+      )}
 
       {/* 服务配置详情入口（仅在开关开启时显示） */}
       {serviceConfigEnabled && (
@@ -249,18 +264,6 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       )}
 
-      {/* 反馈建议入口（始终可见，伪装入口：匹配关键字后解锁管理权限） */}
-      <TouchableOpacity
-        style={styles.menuItem}
-        onPress={() => navigation.navigate("Feedback")}
-        activeOpacity={0.7}
-      >
-        <View style={styles.menuLeft}>
-          <Text style={styles.menuLabel}>反馈与建议</Text>
-          <Text style={styles.menuHint}>告诉我们您的想法或遇到的问题</Text>
-        </View>
-        <Text style={styles.menuArrow}>›</Text>
-      </TouchableOpacity>
 
       {/* 密码输入抽屉 */}
       <Modal
