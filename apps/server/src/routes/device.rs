@@ -58,7 +58,7 @@ async fn register_device(
     let (device, created) = device_service::register_device(
         state.db.clone(),
         &body.device_id,
-        body.platform.as_deref().unwrap_or("android"),
+        body.platform.as_deref().unwrap_or("ios"),
     )
     .await?;
     let status = if created {

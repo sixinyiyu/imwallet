@@ -58,6 +58,12 @@ echo "Replacing binary ..."
 cp "${TMPDIR}/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
 chown rs-wallet:rs-wallet "${INSTALL_DIR}/${BIN_NAME}"
 
+# 4b. 确保 keys 目录权限正确（防止手动上传密钥后权限不对导致启动失败）
+chown -R rs-wallet:rs-wallet "${INSTALL_DIR}/keys"
+chmod 700 "${INSTALL_DIR}/keys"
+chmod 600 "${INSTALL_DIR}/keys/rsa_private.pem" 2>/dev/null || true
+chmod 644 "${INSTALL_DIR}/keys/rsa_public.pem" 2>/dev/null || true
+
 # 5. 清理临时目录
 rm -rf "${TMPDIR}"
 

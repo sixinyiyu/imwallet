@@ -198,6 +198,7 @@ api.interceptors.request.use(async (config) => {
   config.headers["x-signature"] = signature;
   config.headers["x-timestamp"] = timestamp;
   config.headers["x-nonce"] = nonce;
+  config.headers["x-platform"] = Platform.OS === "ios" ? "ios" : Platform.OS === "android" ? "android" : "web";
 
   return config;
 });

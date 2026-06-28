@@ -1,6 +1,6 @@
 {
   "name": "mobile",
-  "version": "1.0.7",
+  "version": "1.2.2",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~56.0.15",
@@ -32,6 +32,7 @@
     "react-native-screens": "4.25.2",
     "react-native-svg": "15.15.4",
     "react-native-view-shot": "5.1.0",
+    "react-native-web": "^0.21.2",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

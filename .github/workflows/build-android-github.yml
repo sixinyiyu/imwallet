@@ -2,14 +2,46 @@ name: Build Android (GitHub Actions)
 
 on:
   push:
-    tags:
-      - "android-github-v*"
+    branches: [main]
+    paths: ['apps/mobile/**', 'package.json', 'package-lock.json']
 
 permissions:
   contents: write
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if version changed
+        id: check
+        run: |
+          OLD_VERSION=$(git show HEAD~1:apps/mobile/package.json 2>/dev/null | jq -r '.version' || echo "0.0.0")
+          NEW_VERSION=$(jq -r '.version' apps/mobile/package.json)
+          if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Version changed: $OLD_VERSION → $NEW_VERSION"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "⏭️ Version unchanged ($NEW_VERSION), skip build"
+          fi
+
+      - name: Read version from package.json
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' apps/mobile/package.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Version: $VERSION"
+
   build:
+    needs: prepare
+    if: needs.prepare.outputs.changed == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -163,7 +195,7 @@ jobs:
       - name: Prepare APK for release
         working-directory: apps/mobile
         run: |
-          VERSION="${GITHUB_REF_NAME#android-github-v}"
+          VERSION="${{ needs.prepare.outputs.version }}"
           APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
 
           if [ -z "$APK_PATH" ]; then
@@ -185,19 +217,22 @@ jobs:
           path: apps/mobile/dist/*.apk
 
   release:
-    needs: build
+    needs: [prepare, build]
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all APK artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
           pattern: android-*
 
-      - name: Create GitHub Release
+      - name: Create tag and GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: IMWallet ${{ github.ref_name }}
+          tag_name: android-github-v${{ needs.prepare.outputs.version }}
+          name: IMWallet v${{ needs.prepare.outputs.version }}
           files: release-artifacts/**/*.apk
           generate_release_notes: true
