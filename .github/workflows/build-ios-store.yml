@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
     paths: ['apps/mobile/**', 'package.json', 'package-lock.json']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (reads from package.json if empty)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -22,21 +28,32 @@ jobs:
       - name: Check if version changed
         id: check
         run: |
-          OLD_VERSION=$(git show HEAD~1:apps/mobile/package.json 2>/dev/null | jq -r '.version' || echo "0.0.0")
-          NEW_VERSION=$(jq -r '.version' apps/mobile/package.json)
-          if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "✅ Version changed: $OLD_VERSION → $NEW_VERSION"
+            echo "✅ Manual trigger, force build"
           else
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "⏭️ Version unchanged ($NEW_VERSION), skip build"
+            OLD_VERSION=$(git show HEAD~1:apps/mobile/package.json 2>/dev/null | jq -r '.version' || echo "0.0.0")
+            NEW_VERSION=$(jq -r '.version' apps/mobile/package.json)
+            if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
+              echo "changed=true" >> $GITHUB_OUTPUT
+              echo "✅ Version changed: $OLD_VERSION → $NEW_VERSION"
+            else
+              echo "changed=false" >> $GITHUB_OUTPUT
+              echo "⏭️ Version unchanged ($NEW_VERSION), skip build"
+            fi
           fi
 
       - name: Read version from package.json
         id: version
         run: |
-          VERSION=$(jq -r '.version' apps/mobile/package.json)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+            echo "✅ Version from input: ${{ inputs.version }}"
+          else
+            VERSION=$(jq -r '.version' apps/mobile/package.json)
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "✅ Version from package.json: $VERSION"
+          fi
           echo "✅ Version: $VERSION"
 
   build-and-submit:
