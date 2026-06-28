@@ -14,7 +14,6 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use lru::LruCache;
 use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::RwLock;

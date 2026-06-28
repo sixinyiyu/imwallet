@@ -209,6 +209,7 @@ struct FeedbackRequest {
     content: String,
     /// 可选联系方式
     #[serde(default)]
+    #[allow(dead_code)]
     contact: String,
 }
 
