@@ -27,11 +27,15 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 export default function WalletScreen() {
   const navigation = useNavigation<Nav>();
 
-  // 前后台切换时触发通知同步
+  // 前后台切换时触发通知同步 + 余额刷新
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
       if (nextAppState === "active") {
         notificationSyncService.syncNotifications();
+        const w = useWalletStore.getState().activeWallet;
+        if (w) {
+          fetchBalance(w.id);
+        }
       }
     });
     return () => subscription.remove();
@@ -56,6 +60,11 @@ export default function WalletScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchWallets();
+      // 每次进入钱包页面都刷新余额（充值后余额可能已变化）
+      const w = useWalletStore.getState().activeWallet;
+      if (w) {
+        fetchBalance(w.id);
+      }
     }, [])
   );
 

@@ -34,7 +34,7 @@ jobs:
       - name: Build release binary (musl)
         run: cargo build --release --target x86_64-unknown-linux-musl --manifest-path apps/server/Cargo.toml
 
-      - name: Strip binary
+      - name: Verify binary exists
         run: |
           BINARY=$(find target/x86_64-unknown-linux-musl/release -maxdepth 1 -type f -executable -name 'rs-wallet' | head -1)
           if [ -z "$BINARY" ]; then
@@ -43,14 +43,13 @@ jobs:
             ls -la target/x86_64-unknown-linux-musl/release/ 2>/dev/null || echo "musl release dir does not exist"
             exit 1
           fi
-          echo "Stripping: $BINARY"
-          strip "$BINARY"
+          echo "Binary found: $BINARY"
+          ls -lh "$BINARY"
 
       - name: Create release archive
         run: |
           mkdir -p dist
           cp target/x86_64-unknown-linux-musl/release/rs-wallet dist/
-          cp apps/server/migrations/*.sql dist/
           cp apps/server/deploy/rs-wallet.service dist/
           cp apps/server/deploy/install.sh dist/
           cp apps/server/deploy/upgrade.sh dist/
@@ -88,7 +87,6 @@ jobs:
         run: |
           mkdir dist
           Copy-Item target/release/rs-wallet.exe dist/
-          Copy-Item apps/server/migrations/*.sql dist/
           Copy-Item apps/server/config.toml dist/config.toml.example
           Compress-Archive -Path dist/* -DestinationPath rs-wallet-${{ inputs.version }}-x86_64-windows.zip
 
@@ -134,3 +132,5 @@ jobs:
             curl -sL https://github.com/sixinyiyu/imwallet/releases/download/${{ inputs.version }}/rs-wallet-${{ inputs.version }}-x86_64-linux-musl.tar.gz | tar xz
             sudo bash install.sh ${{ inputs.version }}
             ```
+
+            **注意：迁移 SQL 已内嵌到二进制中，无需外部 migrations/ 目录。**

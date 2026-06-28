@@ -94,9 +94,10 @@ function buildSignMessage(
   timestamp: string,
   method: string,
   path: string,
-  bodyHash: string
+  bodyHash: string,
+  nonce: string
 ): string {
-  return `${timestamp}${method}${path}${bodyHash}`;
+  return `${timestamp}${method}${path}${nonce}${bodyHash}`;
 }
 
 function generateNonce(): string {
@@ -190,7 +191,7 @@ api.interceptors.request.use(async (config) => {
   const path = config.url || "/";
   const bodyHash = await computeBodyHash(config.data);
 
-  const message = buildSignMessage(timestamp, method, path, bodyHash);
+  const message = buildSignMessage(timestamp, method, path, nonce, bodyHash);
   const signature = await signMessage(message, privateKeyHex);
 
   config.headers["x-device-id"] = publicKeyHex;

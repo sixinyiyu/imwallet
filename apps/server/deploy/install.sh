@@ -5,6 +5,9 @@
 #       sudo bash install.sh latest
 #
 # 仅用于首次部署，升级请用 upgrade.sh
+#
+# 注意：自 v0.2.0 起，迁移 SQL 已内嵌到二进制中（#[migrations] 宏），
+# 不再依赖外部 migrations/ 目录。该目录仅作为参考保留。
 
 set -euo pipefail
 
@@ -27,7 +30,6 @@ id -u rs-wallet &>/dev/null || useradd -r -s /bin/false rs-wallet
 
 # 3. 创建安装目录
 mkdir -p "${INSTALL_DIR}/keys"
-mkdir -p "${INSTALL_DIR}/migrations"
 
 # 4. 下载二进制
 if [ "${VERSION}" = "latest" ]; then
@@ -47,24 +49,18 @@ echo "Downloading ${DOWNLOAD_URL} ..."
 TMPDIR=$(mktemp -d)
 curl -sL "${DOWNLOAD_URL}" | tar xz -C "${TMPDIR}"
 
-# 5. 安装二进制
+# 5. 安装二进制（迁移 SQL 已内嵌，无需外部文件）
 cp "${TMPDIR}/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
 chmod +x "${INSTALL_DIR}/${BIN_NAME}"
 
-# 6. 安装迁移文件
-find "${TMPDIR}" -name 'V*.sql' -exec cp {} "${INSTALL_DIR}/migrations/" \; 2>/dev/null || true
-# 仓库兜底
-curl -sL "https://raw.githubusercontent.com/${REPO}/main/migrations/V1_init.sql" \
-    -o "${INSTALL_DIR}/migrations/V1_init.sql" 2>/dev/null || true
-
-# 7. 清理临时目录
+# 6. 清理临时目录
 rm -rf "${TMPDIR}"
 
-# 8. 安装 systemd unit
-curl -sL "https://raw.githubusercontent.com/${REPO}/main/deploy/rs-wallet.service" \
+# 7. 安装 systemd unit
+curl -sL "https://raw.githubusercontent.com/${REPO}/main/apps/server/deploy/rs-wallet.service" \
     -o /etc/systemd/system/rs-wallet.service
 
-# 9. 创建 env 文件（仅首次）
+# 8. 创建 env 文件（仅首次）
 if [ ! -f "${INSTALL_DIR}/env" ]; then
     cat > "${INSTALL_DIR}/env" << 'ENVFILE'
 DATABASE_URL=postgresql://imwallet:CHANGE_ME@localhost:5432/imwallet
@@ -78,15 +74,15 @@ ENVFILE
     echo ""
 fi
 
-# 10. 设置权限
+# 9. 设置权限
 chown -R rs-wallet:rs-wallet "${INSTALL_DIR}"
 
-# 11. 启用并启动
+# 10. 启用并启动
 systemctl daemon-reload
 systemctl enable rs-wallet
 systemctl start rs-wallet
 
-# 12. 确认
+# 11. 确认
 sleep 2
 if systemctl is-active --quiet rs-wallet; then
     echo "=== rs-wallet ${VERSION} installed and running ==="

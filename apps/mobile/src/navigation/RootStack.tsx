@@ -24,6 +24,7 @@ import RechargeScreen from "../screens/RechargeScreen";
 import TokenManageScreen from "../screens/TokenManageScreen";
 import SecurityScreen from "../screens/SecurityScreen";
 import AboutScreen from "../screens/AboutScreen";
+import FeedbackScreen from "../screens/FeedbackScreen";
 import ScanScreen from "../screens/ScanScreen";
 import TradeDetailScreen from "../screens/TradeDetailScreen";
 import NotificationScreen from "../screens/NotificationScreen";
@@ -174,6 +175,11 @@ export function RootStack() {
         name="About"
         component={AboutScreen}
         options={{ ...CENTERED_HEADER, title: "关于我们" }}
+      />
+      <Stack.Screen
+        name="Feedback"
+        component={FeedbackScreen}
+        options={{ ...CENTERED_HEADER, title: "反馈与建议" }}
       />
       <Stack.Screen
         name="Notifications"

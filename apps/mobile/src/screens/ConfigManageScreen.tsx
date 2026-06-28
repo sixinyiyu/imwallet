@@ -28,6 +28,7 @@ export default function ConfigManageScreen() {
   const [feeConfig, setFeeConfig] = useState<FeeConfig | null>(null);
   const [txRestrictWallet, setTxRestrictWallet] = useState(false);
   const [rechargePermitted, setRechargePermitted] = useState(false);
+  const [adminPermitted, setAdminPermitted] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // 编辑费率弹窗（含密码输入）
@@ -74,6 +75,8 @@ export default function ConfigManageScreen() {
       setTxRestrictWallet(restrictItem?.value === "true");
       const permitted = await configService.getRechargePermitted();
       setRechargePermitted(permitted);
+      const adminPerm = await configService.getAdminPermitted();
+      setAdminPermitted(adminPerm);
     } catch {
       showToast("加载配置失败");
     }
@@ -214,7 +217,8 @@ export default function ConfigManageScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 费率配置卡片 */}
+      {/* 费率配置卡片（仅管理权限设备可见） */}
+      {adminPermitted && (
       <View style={styles.infoCard}>
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>费率</Text>
@@ -240,8 +244,10 @@ export default function ConfigManageScreen() {
           例如：费率 0.005 表示 0.5% 的手续费。
         </Text>
       </View>
+      )}
 
-      {/* 交易限制开关卡片 */}
+      {/* 交易限制开关卡片（仅管理权限设备可见） */}
+      {adminPermitted && (
       <View style={[styles.infoCard, { marginTop: 16 }]}>
         <View style={styles.infoRow}>
           <View style={{ flex: 1 }}>
@@ -254,6 +260,7 @@ export default function ConfigManageScreen() {
           开启后，仅支持向系统内账户转账，不支持外部链上地址。
         </Text>
       </View>
+      )}
 
       {/* 充值管理入口（仅充值权限设备可见） */}
       {rechargePermitted && (
@@ -283,7 +290,8 @@ export default function ConfigManageScreen() {
         </Text>
       </TouchableOpacity>
 
-      {/* 设备管理入口 */}
+      {/* 设备管理入口（仅管理权限设备可见） */}
+      {adminPermitted && (
       <TouchableOpacity
         style={[styles.infoCard, { marginTop: 12 }]}
         onPress={handleOpenDeviceManage}
@@ -298,6 +306,7 @@ export default function ConfigManageScreen() {
           可以查看钱包具体活跃情况以及钱包的设备信息包含充值，交易等数据。
         </Text>
       </TouchableOpacity>
+      )}
 
       {/* Toast */}
       {toastVisible && (

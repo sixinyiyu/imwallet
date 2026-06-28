@@ -23,12 +23,16 @@ RUN cargo build --release
 # ── Runtime Stage ──
 FROM gcr.io/distroless/cc-debian12:nonroot
 
+WORKDIR /etc/rs-wallet
+
 COPY --from=builder /build/target/release/rs-wallet /usr/local/bin/rs-wallet
 COPY --from=builder /build/migrations/ /etc/rs-wallet/migrations/
+COPY --from=builder /build/config.toml* /etc/rs-wallet/config.toml*
 
 EXPOSE 3000
 
 ENV DATABASE_URL=postgresql://imwallet:CHANGE_ME@db:5432/imwallet
 ENV PORT=3000
+ENV MIGRATION_DIR=/etc/rs-wallet/migrations
 
 CMD ["rs-wallet"]

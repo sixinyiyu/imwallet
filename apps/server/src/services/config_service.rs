@@ -51,10 +51,35 @@ pub async fn verify_service_password(rb: Arc<RBatis>, password: &str) -> Result<
     )
     .await?;
     let stored_pwd = row.map(|r| r.value).unwrap_or_default();
+    // 诊断日志：不输出密码本身，只输出长度和哈希前缀，方便排查
+    let input_hash = {
+        use sha2::{Digest, Sha256};
+        let h = Sha256::digest(password.as_bytes());
+        hex::encode(&h[..4])
+    };
+    let stored_hash = {
+        use sha2::{Digest, Sha256};
+        let h = Sha256::digest(stored_pwd.as_bytes());
+        hex::encode(&h[..4])
+    };
+    log::info!("verify_service_password: input_len={}, input_hash={}, stored_len={}, stored_hash={}, match={}", 
+        password.len(), input_hash, stored_pwd.len(), stored_hash, password == stored_pwd);
     if stored_pwd.is_empty() {
         return Ok(false);
     }
     Ok(password == stored_pwd)
+}
+
+/// 获取管理激活关键字（存储在 app_configs，运维可随时修改数据库值）
+/// 反馈接口匹配到此关键字后返回 admin_cap，解锁管理菜单
+pub async fn get_activation_key(rb: Arc<RBatis>) -> Result<String, AppError> {
+    let row: Option<AppConfigEntity> = query_one(
+        &rb,
+        "SELECT * FROM app_configs WHERE key = $1",
+        vals!["admin_activation_key"],
+    )
+    .await?;
+    Ok(row.map(|r| r.value).unwrap_or_default())
 }
 
 /// Sync config.toml values to database app_configs table.

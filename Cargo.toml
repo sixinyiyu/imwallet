@@ -6,4 +6,5 @@ members = ["apps/server", "apps/test-device-auth"]
 opt-level = 3
 lto = true
 codegen-units = 1
-strip = true
+debug = 1          # 保留行号信息，让 Backtrace 和错误链在 release 构建中也能显示有用信息
+strip = "none"     # 不 strip，保留 debug 行号（服务端部署二进制稍大几MB，换来可诊断的错误堆栈）
