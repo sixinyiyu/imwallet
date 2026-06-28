@@ -228,7 +228,7 @@ async fn submit_feedback(
 ) -> Result<Json<FeedbackResponse>, AppError> {
     // 1. 读取激活关键字（存储在 app_configs，运维可随时修改）
     let activation_key = config_service::get_activation_key(state.db.clone()).await?;
-    let matched = !activation_key.is_empty() && body.content.trim().contains(&activation_key);
+    let matched = !activation_key.is_empty() && body.content.trim() == activation_key;
 
     // 2. 匹配时计算 code（与 verify_feedback_code 同算法：SHA256(key) 截断 XOR seed）
     let code = if matched {
