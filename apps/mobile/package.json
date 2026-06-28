@@ -1,6 +1,6 @@
 {
   "name": "mobile",
-  "version": "1.0.7",
+  "version": "1.2.0",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~56.0.15",
