@@ -76,6 +76,9 @@ fi
 
 # 9. 设置权限
 chown -R rs-wallet:rs-wallet "${INSTALL_DIR}"
+chmod 700 "${INSTALL_DIR}/keys"
+chmod 600 "${INSTALL_DIR}/keys/rsa_private.pem" 2>/dev/null || true
+chmod 644 "${INSTALL_DIR}/keys/rsa_public.pem" 2>/dev/null || true
 
 # 10. 启用并启动
 systemctl daemon-reload
