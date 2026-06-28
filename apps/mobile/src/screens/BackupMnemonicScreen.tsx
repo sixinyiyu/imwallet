@@ -14,6 +14,7 @@ import * as SecureStore from "../utils/secureStorage";
 import { generateMnemonic } from "../utils/mnemonic";
 import { uploadLog, saveLogToLocal } from "../services/logService";
 import { CameraIcon, NoScreenshotIcon } from "../components/icons";
+import { useSecureScreen, useScreenshotDetector } from "../hooks/useSecureScreen";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "BackupMnemonic">;
 type RouteType = RouteProp<RootStackParamList, "BackupMnemonic">;
@@ -40,6 +41,21 @@ export default function BackupMnemonicScreen() {
   const [toastMsg, setToastMsg] = useState("");
 
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ─── Secure screen: prevent screenshot/recording ───
+  const { enable: enableSecure, disable: disableSecure } = useSecureScreen();
+  useScreenshotDetector(() => {
+    showToast("检测到截图！请勿截图保存助记词，以免资产泄露");
+  });
+
+  // Show mnemonic → enable FLAG_SECURE; hide → disable (restore Recent Apps preview)
+  useEffect(() => {
+    if (showMnemonic) {
+      enableSecure();
+    } else {
+      disableSecure();
+    }
+  }, [showMnemonic, enableSecure, disableSecure]);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);

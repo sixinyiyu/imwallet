@@ -10,6 +10,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { useAlert } from "../hooks/useAlert";
+import { useSecureScreen, useScreenshotDetector } from "../hooks/useSecureScreen";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "ConfirmMnemonic">;
 type RouteType = RouteProp<RootStackParamList, "ConfirmMnemonic">;
@@ -21,6 +22,12 @@ export default function ConfirmMnemonicScreen() {
   const walletId = route.params?.walletId;
   const mnemonicStr = route.params?.mnemonic || "";
   const { backupWallet } = useWalletStore();
+
+  // ─── Secure screen: prevent screenshot/recording ───
+  useSecureScreen();
+  useScreenshotDetector(() => {
+    showToast("检测到截图！请勿截图保存助记词，以免资产泄露");
+  });
 
   const correctWords = useMemo(() => mnemonicStr.split(/\s+/), [mnemonicStr]);
 
