@@ -235,6 +235,25 @@ export default function WalletDetailScreen() {
           </View>
           <View style={styles.infoDivider} />
 
+          {/* 标识符 */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>标识符</Text>
+            <View style={styles.identifierRight}>
+              <Text style={styles.identifierValue} selectable>{wallet.id}</Text>
+              <TouchableOpacity
+                onPress={async () => {
+                  const ok = await copyToClipboard(wallet.id);
+                  showToast(ok ? "标识符已复制" : "复制失败");
+                }}
+                activeOpacity={0.6}
+                style={styles.identifierCopyBtn}
+              >
+                <CopyIcon size={16} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.infoDivider} />
+
           {/* 账户数 */}
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>账户数</Text>
@@ -759,6 +778,24 @@ const styles = StyleSheet.create({
   infoDivider: {
     height: 1,
     backgroundColor: "#F3F4F6",
+  },
+  // 标识符行（值较长，允许换行）
+  identifierRight: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    maxWidth: "70%",
+  },
+  identifierValue: {
+    fontSize: 13,
+    color: "#6B7280",
+    fontFamily: "monospace",
+    lineHeight: 18,
+    flex: 1,
+  },
+  identifierCopyBtn: {
+    padding: 4,
+    marginTop: 2,
   },
   hintRight: {
     flexDirection: "row",
