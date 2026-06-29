@@ -77,10 +77,10 @@ export default function DeviceManageScreen() {
 
   const loadWallets = useCallback(async (page: number, append = false) => {
     try {
-      const list = await adminService.listWallets(adminPwd);
-      setWalletsTotal(list.length);
-      setWallets((prev) => (append ? [...prev, ...list] : list));
-      setWalletsPage(page);
+      const res = await adminService.listWallets(adminPwd, page, 10);
+      setWalletsTotal(res.total);
+      setWallets((prev) => (append ? [...prev, ...res.wallets] : res.wallets));
+      setWalletsPage(res.page);
     } catch (err: any) {
       const msg = err?.message || "加载钱包列表失败";
       if (__DEV__) console.warn("[DeviceManage] loadWallets error:", msg);

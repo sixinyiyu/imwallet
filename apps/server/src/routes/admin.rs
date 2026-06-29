@@ -41,6 +41,22 @@ struct AdminDataAuth {
     offset: i64,
 }
 
+#[derive(Debug, Deserialize)]
+struct AdminListAuth {
+    encrypted_password: String,
+    #[serde(default = "default_page")]
+    page: u64,
+    #[serde(default = "default_limit")]
+    limit: u64,
+}
+
+fn default_page() -> u64 {
+    1
+}
+fn default_limit() -> u64 {
+    10
+}
+
 /// RSA 解密密码后验证管理员身份
 async fn decrypt_and_verify_admin(
     state: &AppState,
@@ -244,14 +260,28 @@ struct AssetBalanceBrief {
     cny_value: String,
 }
 
-/// POST /admin/wallets — 钱包列表（单条 SQL JOIN + 内存分组，替代 N+3 查询）
+/// POST /admin/wallets — 钱包列表（分页，单条 SQL JOIN + 内存分组，替代 N+3 查询）
+#[derive(Debug, Serialize)]
+struct WalletListResponse {
+    wallets: Vec<WalletAdminItem>,
+    total: u64,
+    page: u64,
+    limit: u64,
+}
+
 async fn list_wallets(
     State(state): State<AppState>,
-    Json(auth): Json<AdminAuth>,
-) -> Result<Json<Vec<WalletAdminItem>>, AppError> {
+    Json(auth): Json<AdminListAuth>,
+) -> Result<Json<WalletListResponse>, AppError> {
     decrypt_and_verify_admin(&state, &auth.encrypted_password).await?;
 
-    // 单条 SQL：钱包 + 链 + 设备，一次性拉取
+    // 先查总数
+    let total: u64 =
+        crate::db::query::query_count(&state.db, "SELECT COUNT(*) as cnt FROM wallets", vals![])
+            .await?;
+
+    // 单条 SQL：钱包 + 链 + 设备，一次性拉取（分页）
+    let offset = (auth.page - 1) * auth.limit;
     #[derive(serde::Deserialize)]
     struct Row {
         wallet_id: String,
@@ -266,8 +296,8 @@ async fn list_wallets(
 
     let rows: Vec<Row> = query(
         &state.db,
-        "SELECT w.id as wallet_id, w.alias, w.source, w.created_at as wallet_created_at, wa.chain, d.id as device_id, d.platform as device_platform, d.last_active_at as device_last_active_at FROM wallets w LEFT JOIN wallet_subscriptions ws ON ws.wallet_id = w.id AND ws.address_id != '' LEFT JOIN wallets_addresses wa ON wa.id = ws.address_id LEFT JOIN devices d ON d.id = ws.device_id ORDER BY w.created_at DESC, wa.chain, d.last_active_at DESC NULLS LAST",
-        vals![],
+        "SELECT w.id as wallet_id, w.alias, w.source, w.created_at as wallet_created_at, wa.chain, d.id as device_id, d.platform as device_platform, d.last_active_at as device_last_active_at FROM wallets w LEFT JOIN wallet_subscriptions ws ON ws.wallet_id = w.id AND ws.address_id != '' LEFT JOIN wallets_addresses wa ON wa.id = ws.address_id LEFT JOIN devices d ON d.id = ws.device_id WHERE w.id IN (SELECT id FROM wallets ORDER BY created_at DESC LIMIT $1 OFFSET $2) ORDER BY w.created_at DESC, wa.chain, d.last_active_at DESC NULLS LAST",
+        vals![auth.limit as i64, offset as i64],
     )
     .await?;
 
@@ -377,7 +407,12 @@ async fn list_wallets(
         }
     }
 
-    Ok(Json(items))
+    Ok(Json(WalletListResponse {
+        wallets: items,
+        total,
+        page: auth.page,
+        limit: auth.limit,
+    }))
 }
 
 // ── 钱包交易记录 ──

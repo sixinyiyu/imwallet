@@ -218,11 +218,16 @@ export const adminService = {
     return (data || []).map(mapDeviceItem);
   },
 
-  /** 获取钱包列表（POST，含关联设备，需 device_auth + RSA加密管理密码） */
-  async listWallets(password: string): Promise<WalletAdminInfo[]> {
+  /** 获取钱包列表（POST，含关联设备+余额，需 device_auth + RSA加密管理密码，分页） */
+  async listWallets(password: string, page: number = 1, limit: number = 10): Promise<{ wallets: WalletAdminInfo[]; total: number; page: number; limit: number }> {
     const encryptedPassword = await getEncryptedPassword(password);
-    const { data } = await api.post("/admin/wallets", { encryptedPassword });
-    return (data || []).map(mapWalletAdminItem);
+    const { data } = await api.post("/admin/wallets", { encryptedPassword, page, limit });
+    return {
+      wallets: (data.wallets || []).map(mapWalletAdminItem),
+      total: data.total || 0,
+      page: data.page || page,
+      limit: data.limit || limit,
+    };
   },
 
   /** 获取设备详情（POST，需 device_auth + RSA加密管理密码） */
