@@ -166,6 +166,7 @@ export default function DeviceManageScreen() {
               </View>
               <View style={styles.walletInfo}>
                 <Text style={styles.walletAlias}>{w.alias}</Text>
+                <Text style={styles.walletIdentifier} selectable>{w.id}</Text>
                 <Text style={styles.walletMeta}>
                   {w.chains.length > 0 ? w.chains.join(" · ") : "无链"} · {w.deviceCount} 个设备关联
                 </Text>
@@ -363,6 +364,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "90deg" }],
   },
   walletAlias: { fontSize: 16, fontWeight: "600", color: "1F2937" },
+  walletIdentifier: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
   walletMeta: { fontSize: 13, color: "#9CA3AF", marginTop: 4 },
 
   // ── 关联设备（默认显示） ──
