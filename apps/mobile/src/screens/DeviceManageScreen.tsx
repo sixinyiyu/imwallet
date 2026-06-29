@@ -171,15 +171,14 @@ export default function DeviceManageScreen() {
                 <WalletIcon size={24} color="#287220" />
               </View>
               <View style={styles.walletInfo}>
-                <Text style={styles.walletAlias}>{w.alias}</Text>
+                <View style={styles.walletNameRow}>
+                  <Text style={styles.walletAlias}>{w.alias}</Text>
+                  <Text style={styles.walletBalanceValue}>¥{formatCny(w.totalBalanceCny)}</Text>
+                </View>
                 <Text style={styles.walletIdentifier} selectable>{w.id}</Text>
                 <Text style={styles.walletMeta}>
                   {w.chains.length > 0 ? w.chains.join(" · ") : "无链"} · {w.deviceCount} 个设备关联
                 </Text>
-              </View>
-              <View style={styles.walletBalanceWrap}>
-                <Text style={styles.walletBalanceLabel}>总余额</Text>
-                <Text style={styles.walletBalanceValue}>¥{formatCny(w.totalBalanceCny)}</Text>
               </View>
               <View style={[styles.chevronWrap, selectedWallet === w.id && styles.chevronExpanded]}>
                 <ChevronRightIcon size={18} color="#8899B8" />
@@ -396,12 +395,10 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "90deg" }],
   },
   walletAlias: { fontSize: 16, fontWeight: "600", color: "1F2937" },
+  walletNameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  walletBalanceValue: { fontSize: 14, fontWeight: "700", color: "#1F2937" },
   walletIdentifier: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
   walletMeta: { fontSize: 13, color: "#9CA3AF", marginTop: 4 },
-  // 总余额（卡片头部右侧）
-  walletBalanceWrap: { alignItems: "flex-end", marginLeft: 8 },
-  walletBalanceLabel: { fontSize: 11, color: "#9CA3AF" },
-  walletBalanceValue: { fontSize: 16, fontWeight: "700", color: "#1F2937" },
 
   // ── 关联设备（默认显示） ──
   deviceSection: {
