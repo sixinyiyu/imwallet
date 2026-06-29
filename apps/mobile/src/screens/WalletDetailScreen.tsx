@@ -236,9 +236,9 @@ export default function WalletDetailScreen() {
           <View style={styles.infoDivider} />
 
           {/* 标识符 */}
-          <View style={styles.infoRow}>
+          <View style={styles.identifierSection}>
             <Text style={styles.infoLabel}>标识符</Text>
-            <View style={styles.identifierRight}>
+            <View style={styles.identifierRow}>
               <Text style={styles.identifierValue} selectable>{wallet.id}</Text>
               <TouchableOpacity
                 onPress={async () => {
@@ -246,7 +246,6 @@ export default function WalletDetailScreen() {
                   showToast(ok ? "标识符已复制" : "复制失败");
                 }}
                 activeOpacity={0.6}
-                style={styles.identifierCopyBtn}
               >
                 <CopyIcon size={16} color="#9CA3AF" />
               </TouchableOpacity>
@@ -779,12 +778,15 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#F3F4F6",
   },
-  // 标识符行（值较长，允许换行）
-  identifierRight: {
+  // 标识符行（竖排布局：标签在上，值在下，允许换行）
+  identifierSection: {
+    paddingVertical: 10,
+  },
+  identifierRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 6,
-    maxWidth: "70%",
+    gap: 8,
+    marginTop: 4,
   },
   identifierValue: {
     fontSize: 13,
@@ -792,10 +794,6 @@ const styles = StyleSheet.create({
     fontFamily: "monospace",
     lineHeight: 18,
     flex: 1,
-  },
-  identifierCopyBtn: {
-    padding: 4,
-    marginTop: 2,
   },
   hintRight: {
     flexDirection: "row",
