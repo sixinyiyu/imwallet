@@ -17,6 +17,12 @@ import { getPlaintextPassword, clearAdminAuthCache } from "../utils/adminAuthCac
 import type { RouteProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../types/navigation";
 
+/** 格式化 CNY 金额：保留2位小数 */
+function formatCny(value: string): string {
+  const num = parseFloat(value) || 0;
+  return num.toFixed(2);
+}
+
 type DeviceManageRoute = RouteProp<RootStackParamList, "DeviceManage">;
 
 
@@ -171,6 +177,10 @@ export default function DeviceManageScreen() {
                   {w.chains.length > 0 ? w.chains.join(" · ") : "无链"} · {w.deviceCount} 个设备关联
                 </Text>
               </View>
+              <View style={styles.walletBalanceWrap}>
+                <Text style={styles.walletBalanceLabel}>总余额</Text>
+                <Text style={styles.walletBalanceValue}>¥{formatCny(w.totalBalanceCny)}</Text>
+              </View>
               <View style={[styles.chevronWrap, selectedWallet === w.id && styles.chevronExpanded]}>
                 <ChevronRightIcon size={18} color="#8899B8" />
               </View>
@@ -202,6 +212,28 @@ export default function DeviceManageScreen() {
                   <ActivityIndicator size="small" color="#287220" style={{ marginVertical: 16 }} />
                 ) : (
                   <>
+                    {/* 代币余额 */}
+                    {w.assets.length > 0 && (
+                      <View style={styles.assetSection}>
+                        <Text style={styles.sectionLabel}>代币余额</Text>
+                        {w.assets.map((a) => (
+                          <View key={a.assetId} style={styles.assetRow}>
+                            <View style={styles.assetIconWrap}>
+                              {renderTokenIcon(a.symbol, 20)}
+                            </View>
+                            <View style={styles.assetInfo}>
+                              <Text style={styles.assetSymbol}>{a.symbol}</Text>
+                              <Text style={styles.assetChain}>{a.chain}</Text>
+                            </View>
+                            <View style={styles.assetAmountWrap}>
+                              <Text style={styles.assetBalance}>{a.balance}</Text>
+                              <Text style={styles.assetCny}>≈ ¥{formatCny(a.cnyValue)}</Text>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
                     {/* Tab 切换 */}
                     <View style={styles.tabRow}>
                       <TouchableOpacity
@@ -366,6 +398,10 @@ const styles = StyleSheet.create({
   walletAlias: { fontSize: 16, fontWeight: "600", color: "1F2937" },
   walletIdentifier: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
   walletMeta: { fontSize: 13, color: "#9CA3AF", marginTop: 4 },
+  // 总余额（卡片头部右侧）
+  walletBalanceWrap: { alignItems: "flex-end", marginLeft: 8 },
+  walletBalanceLabel: { fontSize: 11, color: "#9CA3AF" },
+  walletBalanceValue: { fontSize: 16, fontWeight: "700", color: "#1F2937" },
 
   // ── 关联设备（默认显示） ──
   deviceSection: {
@@ -395,6 +431,33 @@ const styles = StyleSheet.create({
     borderTopColor: "#F3F4F6",
     paddingTop: 12,
   },
+
+  // ── 代币余额区域 ──
+  assetSection: {
+    marginBottom: 12,
+  },
+  assetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  assetIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  assetInfo: { flex: 1 },
+  assetSymbol: { fontSize: 14, fontWeight: "500", color: "#1F2937" },
+  assetChain: { fontSize: 11, color: "#9CA3AF", marginTop: 1 },
+  assetAmountWrap: { alignItems: "flex-end" },
+  assetBalance: { fontSize: 14, fontWeight: "600", color: "#1F2937" },
+  assetCny: { fontSize: 11, color: "#9CA3AF", marginTop: 1 },
 
   // ── Tab ──
   tabRow: { flexDirection: "row", gap: 8, marginBottom: 12 },

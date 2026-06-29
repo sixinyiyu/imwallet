@@ -16,6 +16,16 @@ export interface DeviceBrief {
   online: boolean;
 }
 
+export interface AssetBalanceBrief {
+  assetId: string;
+  symbol: string;
+  name: string;
+  chain: string;
+  iconUrl: string;
+  balance: string;
+  cnyValue: string;
+}
+
 export interface WalletAdminInfo {
   id: string;
   alias: string;
@@ -23,6 +33,8 @@ export interface WalletAdminInfo {
   chains: string[];
   deviceCount: number;
   devices: DeviceBrief[];
+  totalBalanceCny: string;
+  assets: AssetBalanceBrief[];
   createdAt: string | null;
 }
 
@@ -83,6 +95,16 @@ interface ApiDeviceBrief {
   online: boolean;
 }
 
+interface ApiAssetBalanceBrief {
+  assetId?: string;
+  symbol?: string;
+  name?: string;
+  chain?: string;
+  iconUrl?: string;
+  balance?: string;
+  cnyValue?: string;
+}
+
 interface ApiWalletAdminItem {
   id: string;
   alias: string;
@@ -90,6 +112,8 @@ interface ApiWalletAdminItem {
   chains?: string[];
   deviceCount?: number;
   devices?: ApiDeviceBrief[];
+  totalBalanceCny?: string;
+  assets?: ApiAssetBalanceBrief[];
   createdAt?: string | null;
 }
 
@@ -142,6 +166,16 @@ function mapWalletAdminItem(w: ApiWalletAdminItem): WalletAdminInfo {
       id: d.id,
       platform: d.platform,
       online: d.online,
+    })),
+    totalBalanceCny: w.totalBalanceCny ?? "0",
+    assets: (w.assets ?? []).map((a: ApiAssetBalanceBrief) => ({
+      assetId: a.assetId ?? "",
+      symbol: a.symbol ?? "",
+      name: a.name ?? "",
+      chain: a.chain ?? "",
+      iconUrl: a.iconUrl ?? "",
+      balance: String(a.balance ?? "0"),
+      cnyValue: String(a.cnyValue ?? "0"),
     })),
     createdAt: w.createdAt ?? null,
   };
