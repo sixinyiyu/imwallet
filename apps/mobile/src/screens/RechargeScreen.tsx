@@ -351,7 +351,7 @@ export default function RechargeScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={selectedWallet ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
-                  {selectedWallet ? `${selectedWallet.name}` : "请选择钱包"}
+                  {selectedWallet ? `${selectedWallet.name}(${shortAddr(selectedWallet.id)})` : "请选择钱包"}
                 </Text>
                 <ChevronRightIcon size={18} color="#9CA3AF" />
               </TouchableOpacity>
@@ -460,7 +460,7 @@ export default function RechargeScreen() {
                   onPress={() => handleSelectWallet(item)}
                 >
                   <View>
-                    <Text style={styles.pickerItemName}>{item.name}</Text>
+                    <Text style={styles.pickerItemName}>{item.name}({shortAddr(item.id)})</Text>
                   </View>
                 </TouchableOpacity>
               )}
