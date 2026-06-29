@@ -204,6 +204,28 @@ export default function DeviceManageScreen() {
               </View>
             )}
 
+            {/* 代币余额 — 默认显示，不折叠 */}
+            {w.assets.length > 0 && (
+              <View style={styles.assetSection}>
+                <Text style={styles.sectionLabel}>代币余额</Text>
+                {w.assets.map((a) => (
+                  <View key={a.assetId} style={styles.assetRow}>
+                    <View style={styles.assetIconWrap}>
+                      {renderTokenIcon(a.symbol, 20)}
+                    </View>
+                    <View style={styles.assetInfo}>
+                      <Text style={styles.assetSymbol}>{a.symbol}</Text>
+                      <Text style={styles.assetChain}>{a.chain}</Text>
+                    </View>
+                    <View style={styles.assetAmountWrap}>
+                      <Text style={styles.assetBalance}>{a.balance}</Text>
+                      <Text style={styles.assetCny}>≈ ¥{formatCny(a.cnyValue)}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
             {/* 展开区域 — 仅交易/充值 */}
             {selectedWallet === w.id && (
               <View style={styles.expandPanel}>
@@ -211,28 +233,6 @@ export default function DeviceManageScreen() {
                   <ActivityIndicator size="small" color="#287220" style={{ marginVertical: 16 }} />
                 ) : (
                   <>
-                    {/* 代币余额 */}
-                    {w.assets.length > 0 && (
-                      <View style={styles.assetSection}>
-                        <Text style={styles.sectionLabel}>代币余额</Text>
-                        {w.assets.map((a) => (
-                          <View key={a.assetId} style={styles.assetRow}>
-                            <View style={styles.assetIconWrap}>
-                              {renderTokenIcon(a.symbol, 20)}
-                            </View>
-                            <View style={styles.assetInfo}>
-                              <Text style={styles.assetSymbol}>{a.symbol}</Text>
-                              <Text style={styles.assetChain}>{a.chain}</Text>
-                            </View>
-                            <View style={styles.assetAmountWrap}>
-                              <Text style={styles.assetBalance}>{a.balance}</Text>
-                              <Text style={styles.assetCny}>≈ ¥{formatCny(a.cnyValue)}</Text>
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-
                     {/* Tab 切换 */}
                     <View style={styles.tabRow}>
                       <TouchableOpacity
