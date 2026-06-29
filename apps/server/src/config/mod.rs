@@ -142,8 +142,14 @@ fn default_cors_origins() -> Vec<String> {
     ]
 }
 
+fn default_cors_permissive() -> bool {
+    false
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct CorsConfig {
+    #[serde(default = "default_cors_permissive")]
+    pub permissive: bool,
     #[serde(default = "default_cors_origins")]
     pub allowed_origins: Vec<String>,
 }
@@ -151,6 +157,7 @@ pub struct CorsConfig {
 impl Default for CorsConfig {
     fn default() -> Self {
         Self {
+            permissive: default_cors_permissive(),
             allowed_origins: default_cors_origins(),
         }
     }
@@ -171,6 +178,7 @@ pub struct AppConfig {
     pub rsa_private_key_path: String,
     pub rsa_public_key_path: String,
     pub cors_allowed_origins: Vec<String>,
+    pub cors_permissive: bool,
 }
 
 /// 运行时配置（仅含 AppState 需要的字段）
@@ -208,6 +216,7 @@ impl From<ConfigFile> for AppConfig {
             rsa_private_key_path: env_override("RSA_PRIVATE_KEY_PATH", &c.rsa.private_key_path),
             rsa_public_key_path: env_override("RSA_PUBLIC_KEY_PATH", &c.rsa.public_key_path),
             cors_allowed_origins: c.cors.allowed_origins,
+            cors_permissive: c.cors.permissive,
         }
     }
 }
