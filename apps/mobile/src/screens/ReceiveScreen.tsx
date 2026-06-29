@@ -1,6 +1,7 @@
-import React, { useMemo, useRef, useState, useCallback } from "react";
+import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { useRoute, RouteProp } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import QRCode from "react-native-qrcode-svg";
 import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
@@ -9,9 +10,12 @@ import { ReceiveSkeleton } from "../components/Skeleton";
 import { saveLogToLocal } from "../services/logService";
 import { CopyIcon, ShareIcon, TronIcon, EthIcon, BtcIcon, USDTIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
 import { copyToClipboard } from "../utils/clipboard";
+import { useBackupGuard } from "../hooks/useBackupGuard";
+import BackupGuardModal from "../components/BackupGuardModal";
 import type { RootStackParamList } from "../types/navigation";
 
 type ReceiveRouteProp = RouteProp<RootStackParamList, "Receive">;
+type Nav = NativeStackNavigationProp<RootStackParamList, "Receive">;
 
 function renderNetworkIcon(network: string, size: number) {
   if (network === "Tron") return <TronIcon size={size} />;
@@ -22,11 +26,18 @@ function renderNetworkIcon(network: string, size: number) {
 
 
 export default function ReceiveScreen() {
+  const navigation = useNavigation<Nav>();
   const route = useRoute<ReceiveRouteProp>();
   const { activeWallet, activeAccount, assets } = useWalletStore();
+  const { guardCheck, showGuard, closeGuard, goToBackup } = useBackupGuard(activeWallet?.id);
   // 使用 Account.address（链上地址）而非 Wallet.address（内部标识）
   const address = activeAccount?.address ?? "";
   const qrWrapperRef = useRef<View>(null);
+
+  // 进入收款页时检查备份状态
+  useEffect(() => {
+    guardCheck();
+  }, []);
 
   // Toast state
   const [toastVisible, setToastVisible] = useState(false);
@@ -151,6 +162,13 @@ export default function ReceiveScreen() {
           仅支持当前网络地址，请确认对方网络一致，否则资产可能丢失
         </Text>
       </View>
+
+      {/* 备份提示弹窗 */}
+      <BackupGuardModal
+        visible={showGuard}
+        onClose={closeGuard}
+        onBackup={() => goToBackup(navigation)}
+      />
 
       {/* Toast */}
       {toastVisible && (

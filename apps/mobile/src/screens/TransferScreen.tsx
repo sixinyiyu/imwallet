@@ -27,6 +27,8 @@ import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, TOKEN_ICONS
 import type { AddressEntry, AssetBalance } from "../types";
 import { detectNetwork, isValidAddressFormat } from "../utils/address";
 import { useAlert } from "../hooks/useAlert";
+import { useBackupGuard } from "../hooks/useBackupGuard";
+import BackupGuardModal from "../components/BackupGuardModal";
 
 /** 根据错误信息给出针对性建议 */
 function getSuggestion(error?: string): string {
@@ -58,8 +60,14 @@ export default function TransferScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const { activeWallet, assets, accounts } = useWalletStore();
+  const { guardCheck, showGuard, closeGuard, goToBackup } = useBackupGuard(activeWallet?.id);
   const [toAddress, setToAddress] = useState("");
   const [selectedToken, setSelectedToken] = useState<AssetBalance | null>(null);
+
+  // 进入转账页时检查备份状态
+  useEffect(() => {
+    guardCheck();
+  }, []);
 
   // 根据路由参数初始化选中的代币
   useEffect(() => {
@@ -661,6 +669,13 @@ export default function TransferScreen() {
           </View>
         </View>
       )}
+
+      {/* 备份提示弹窗 */}
+      <BackupGuardModal
+        visible={showGuard}
+        onClose={closeGuard}
+        onBackup={() => goToBackup(navigation)}
+      />
     </React.Fragment>
     );
 }
