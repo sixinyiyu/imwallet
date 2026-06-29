@@ -20,7 +20,7 @@ mod services;
 
 use log::Level;
 use std::sync::Arc;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 static ALLOWED_HEADERS: &[&str] = &[
     "Content-Type",
@@ -30,6 +30,7 @@ static ALLOWED_HEADERS: &[&str] = &[
     "x-timestamp",
     "x-nonce",
     "x-app-version",
+    "x-platform",
 ];
 
 #[tokio::main]
@@ -54,15 +55,28 @@ async fn main() -> anyhow::Result<()> {
 
     // 5. 构建路由（RSA 初始化、RuntimeConfig 转换、AppState 构建均在内部完成）
     let port = config.port;
+
+    // 5.1 CORS 配置：permissive 模式回显任意 Origin，strict 模式仅允许白名单
+    let cors_origin = if config.cors_permissive {
+        // 开发模式：回显请求 Origin，允许任意来源（兼容 allow_credentials）
+        log::warn!(
+            "CORS permissive mode enabled — any origin is accepted. Do NOT use in production!"
+        );
+        AllowOrigin::mirror_request()
+    } else {
+        // 生产模式：仅允许配置文件中列出的来源
+        AllowOrigin::list(
+            config
+                .cors_allowed_origins
+                .iter()
+                .map(|s| s.parse().unwrap())
+                .collect::<Vec<_>>(),
+        )
+    };
+
     let app = routes::build_routes(db, config.clone()).await?.layer(
         CorsLayer::new()
-            .allow_origin(
-                config
-                    .cors_allowed_origins
-                    .iter()
-                    .map(|s| s.parse().unwrap())
-                    .collect::<Vec<_>>(),
-            )
+            .allow_origin(cors_origin)
             .allow_methods([
                 axum::http::Method::GET,
                 axum::http::Method::POST,
