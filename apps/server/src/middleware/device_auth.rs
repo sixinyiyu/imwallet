@@ -229,7 +229,7 @@ pub async fn device_auth(
     let platform_from_header = headers
         .get("x-platform")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("android");
+        .unwrap_or("ios");
     let (platform, _should_update) = if let Some(cached_platform) =
         state.get_cached_device_platform(device_id).await
     {
