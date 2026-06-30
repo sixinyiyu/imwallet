@@ -11,12 +11,11 @@ import {
   Pressable,
   RefreshControl,
 } from "react-native";
-import { getPlaintextPassword } from "../utils/adminAuthCache";
 import { useFocusEffect } from "@react-navigation/native";
-import { walletService } from "../services/walletService";
 import { assetService } from "../services/assetService";
 import { localAddressService } from "../services/localAddressService";
 import { localWalletService } from "../services/localWalletService";
+import { walletService } from "../services/walletService";
 import { rechargeService, type RechargeRecord } from "../services/rechargeService";
 import type { SimpleWallet, AssetInfo, AddressEntry, ServerWalletAddress } from "../types";
 import { TOKEN_ICONS, renderTokenIcon, ChevronRightIcon, CopyIcon } from "../components/icons";
@@ -66,10 +65,6 @@ export default function RechargeScreen() {
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2000);
   }, []);
-
-  // 密码缓存：过期时仅提示，不强制返回（充值操作本身只需device_auth）
-  const adminPwd = getPlaintextPassword();
-  const pwdExpired = !adminPwd;
 
   const loadData = async () => {
     setLoading(true);
@@ -179,15 +174,9 @@ export default function RechargeScreen() {
 
   const loadRecords = async (page = 1, append = false) => {
     if (recordsLoading) return;
-    if (pwdExpired) {
-      // 密码过期时无法查充值记录，显示提示
-      if (!append) setRecords([]);
-      setRecordsLoading(false);
-      return;
-    }
     setRecordsLoading(true);
     try {
-      const res = await rechargeService.getRechargeRecords(adminPwd!, page, 20);
+      const res = await rechargeService.getMyRechargeRecords(page, 20, selectedWallet?.id);
       setRecords((prev) => (append ? [...prev, ...res.recharges] : res.recharges));
       setRecordsTotal(res.total);
       setRecordsPage(page);
@@ -436,13 +425,11 @@ export default function RechargeScreen() {
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.emptyWrap}>
-            {pwdExpired ? (
-              <Text style={styles.emptyText}>密码缓存已过期，充值记录无法加载{"\n"}请返回配置页重新验证密码</Text>
-            ) : (
+          recordsLoading || loading ? null : (
+            <View style={styles.emptyWrap}>
               <Text style={styles.emptyText}>暂无充值记录</Text>
-            )}
-          </View>
+            </View>
+          )
         }
         ListFooterComponent={
           recordsLoading && records.length > 0 ? (

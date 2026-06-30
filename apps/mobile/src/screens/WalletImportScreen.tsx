@@ -9,12 +9,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Modal,
+  Pressable,
+  Keyboard,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
-import { validateMnemonic, cleanMnemonic, validateMnemonicWords } from "../utils/mnemonic";
+import { validateMnemonic, cleanMnemonic, validateMnemonicWords, generateIdentifier } from "../utils/mnemonic";
 import { useAlert } from "../hooks/useAlert";
 import { EyeIcon, EyeOffIcon } from "../components/icons";
 
@@ -39,11 +42,14 @@ function getPasswordStrength(pwd: string): { level: number; label: string; color
 export default function WalletImportScreen() {
   const alert = useAlert();
   const navigation = useNavigation<Nav>();
-  const { importWallet } = useWalletStore();
+  const { importWallet, wallets } = useWalletStore();
 
   // Step state: 1 = mnemonic input, 2 = wallet settings
   const [step, setStep] = useState(1);
   const [validatedMnemonic, setValidatedMnemonic] = useState("");
+
+  // 重复助记词提示弹窗
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
 
   // Step 1: mnemonic
   const [mnemonic, setMnemonic] = useState("");
@@ -107,6 +113,15 @@ export default function WalletImportScreen() {
       return;
     }
 
+    // 检查助记词是否已在当前设备上导入过
+    // generateIdentifier 是确定性函数：同一助记词 → 同一 walletId
+    const walletId = generateIdentifier(cleaned);
+    if (wallets.some((w) => w.id === walletId)) {
+      setValidating(false);
+      setShowDuplicateModal(true);
+      return;
+    }
+
     setValidatedMnemonic(cleaned);
     setValidating(false);
     setStep(2);
@@ -141,8 +156,11 @@ export default function WalletImportScreen() {
   // ─── Step 1: Mnemonic Input (white background) ───
   if (step === 1) {
     return (
-      <View style={s1.container}>
-        <View style={s1.header}>
+      <KeyboardAvoidingView style={s1.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <ScrollView contentContainerStyle={s1.scrollContent} keyboardShouldPersistTaps="handled">
+          {/* 点击空白区域收起键盘 */}
+          <Pressable style={s1.inner} onPress={Keyboard.dismiss}>
+            <View style={s1.header}>
           <Text style={s1.title}>导入助记词</Text>
           <Text style={s1.desc}>
             输入助记词来添加或恢复你的钱包。导入的助记词将被加密并安全存储在你的设备上。为了你的资产安全，AquaD 不会存储你的助记词。
@@ -178,7 +196,26 @@ export default function WalletImportScreen() {
             )}
           </TouchableOpacity>
         </View>
-      </View>
+
+        {/* 重复助记词提示弹窗 */}
+        <Modal visible={showDuplicateModal} transparent animationType="fade">
+          <Pressable style={s1.modalOverlay} onPress={() => setShowDuplicateModal(false)}>
+            <View style={s1.modalCard}>
+              <Text style={s1.modalTitle}>提示</Text>
+              <Text style={s1.modalMsg}>相同的助记词已经导入过，无法再次导入</Text>
+              <TouchableOpacity
+                style={s1.modalBtn}
+                onPress={() => setShowDuplicateModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={s1.modalBtnText}>我知道了</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Modal>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -295,8 +332,15 @@ const s1 = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFFFFF",
+  },
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 24,
+    paddingBottom: 32,
+  },
+  inner: {
+    flex: 1,
   },
   header: {
     marginBottom: 24,
@@ -329,7 +373,7 @@ const s1 = StyleSheet.create({
     textAlignVertical: "top",
   },
   footer: {
-    paddingBottom: 32,
+    paddingTop: 16,
   },
   button: {
     backgroundColor: "#287220",
@@ -339,6 +383,40 @@ const s1 = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  // 重复助记词弹窗
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 24,
+    width: "80%",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1F2937",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  modalMsg: {
+    fontSize: 15,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  modalBtn: {
+    backgroundColor: "#287220",
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  modalBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
 });
 
 // ─── Step 2 Styles (white background) ───

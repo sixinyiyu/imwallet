@@ -196,8 +196,14 @@ export default function ConfigManageScreen() {
       await cacheAdminAuth(devicePwdInput.trim());
       setShowDevicePwdDrawer(false);
       navigation.navigate("DeviceManage", { verified: true, rechargePermitted });
-    } catch {
-      setDevicePwdError("密码验证失败，请重试");
+    } catch (err: any) {
+      // 后端返回的错误信息（如密码验证失败）直接展示给用户
+      // 前端内部错误（RSA加密失败、路由前缀缺失等）不暴露技术细节，统一提示网络/验证问题
+      if (err?.response?.data?.error) {
+        setDevicePwdError(err.response.data.error);
+      } else {
+        setDevicePwdError("验证请求发送失败，请检查网络后重试");
+      }
     }
     setDevicePwdVerifying(false);
   };

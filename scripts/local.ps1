@@ -75,15 +75,15 @@ function Wait-ForPort {
 function Start-Server {
   $existingPid = Get-ServerPid
   if ($existingPid -and (Is-ProcessRunning $existingPid)) {
-    Write-Host "  ⏭  Server 已在运行 (PID=$existingPid, http://localhost:3000)" -ForegroundColor Cyan
+    Write-Host "  ⏭  Server 已在运行 (PID=$existingPid, http://localhost:9000)" -ForegroundColor Cyan
     return
   }
 
   # Kill any leftover process on port 3000
-  Kill-ByPort 3000
+  Kill-ByPort 9000
   Start-Sleep -Seconds 1
 
-  Write-Host "  🚀 启动 Server (Rust, http://localhost:3000) ..." -ForegroundColor Green
+  Write-Host "  🚀 启动 Server (Rust, http://localhost:9000) ..." -ForegroundColor Green
 
   $configFile = Join-Path $ProjectRoot "apps\server\config.toml"
   if (!(Test-Path $configFile)) {
@@ -100,7 +100,7 @@ function Start-Server {
   $proc.Id | Set-Content (Join-Path $PidDir "server.pid")
 
   # Wait for server to be ready (release build may take longer on first run)
-  if (Wait-ForPort 3000 60000) {
+  if (Wait-ForPort 9000 60000) {
     Write-Host "  ✅ Server 已就绪 (PID=$($proc.Id))" -ForegroundColor Green
   } else {
     Write-Host "  ⚠️  Server 启动超时，请检查日志（首次 release 编译需要较长时间）" -ForegroundColor Yellow
@@ -156,7 +156,7 @@ function Stop-All {
   }
 
   # Also kill by port as fallback
-  Kill-ByPort 3000
+  Kill-ByPort 9000
   Kill-ByPort 8081
 
   # Clean PID files
@@ -173,10 +173,10 @@ function Show-Status {
   # Server
   $serverPid = Get-ServerPid
   $serverRunning = $serverPid -and (Is-ProcessRunning $serverPid)
-  $serverPort = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
+  $serverPort = Get-NetTCPConnection -LocalPort 9000 -State Listen -ErrorAction SilentlyContinue
   if ($serverRunning -or $serverPort) {
     $pid = if ($serverRunning) { $serverPid } else { $serverPort.OwningProcess | Select-Object -First 1 }
-    Write-Host "  Server:  ✅ 运行中  PID=$pid  http://localhost:3000" -ForegroundColor Green
+    Write-Host "  Server:  ✅ 运行中  PID=$pid  http://localhost:9000" -ForegroundColor Green
   } else {
     Write-Host "  Server:  ❌ 未运行" -ForegroundColor Red
   }

@@ -2,10 +2,13 @@
 # 环境相关配置可通过环境变量覆盖（DATABASE_URL, PORT 等）
 
 [server]
-port = 3000
+port = 9000
 
 [database]
-url = "postgresql://postgres:****@localhost:5432/imwallet"  # 实际密码请通过环境变量 DATABASE_URL 覆盖，勿提交真实密码
+type = "postgresql"
+user_name = "postgres"
+password = "****"                    # 实际密码请通过环境变量 DATABASE_PASSWORD 覆盖，勿提交真实密码
+url = "****"  # 实际连接地址请通过环境变量 DATABASE_URL 覆盖，勿提交真实地址
 
 [fee]
 rate = 0.005
@@ -21,6 +24,9 @@ default_level = "info"           # trace | debug | info | warn | error
 [security]
 timestamp_window_secs = 300      # Ed25519 签名时间窗口
 nonce_cache_capacity = 100000    # 防重放缓存大小
+
+[admin]
+route_prefix = "vault"              # 管理路由前缀（可随时更换，无需重新打包 App）
 
 [rsa]
 private_key_path = "keys/rsa_private.pem"   # RSA 私钥文件路径（不存在时自动生成）

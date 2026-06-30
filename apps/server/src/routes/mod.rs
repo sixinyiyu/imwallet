@@ -9,7 +9,6 @@ pub mod fiat;
 pub mod health;
 pub mod log;
 pub mod notification;
-pub mod recharge;
 pub mod rsa;
 pub mod transaction;
 pub mod wallet;
@@ -26,6 +25,7 @@ pub async fn build_routes(db: Arc<rbatis::RBatis>, config: AppConfig) -> anyhow:
         &config.rsa_public_key_path,
     )?);
     let replay_cache_capacity = config.replay_cache_capacity;
+    let admin_route_prefix = config.admin_route_prefix.clone();
     let runtime_config = Arc::new(RuntimeConfig::from(config));
 
     // 启动时加载汇率缓存
@@ -37,6 +37,7 @@ pub async fn build_routes(db: Arc<rbatis::RBatis>, config: AppConfig) -> anyhow:
         rsa_keys,
         replay_cache_capacity,
         cny_rate,
+        admin_route_prefix.clone(),
     );
 
     // 启动汇率定时刷新（每 5 分钟）
@@ -56,8 +57,7 @@ pub async fn build_routes(db: Arc<rbatis::RBatis>, config: AppConfig) -> anyhow:
         .merge(account::router())
         .merge(config::router())
         .merge(notification::router())
-        .merge(recharge::router())
-        .merge(admin::router())
+        .merge(admin::router(&admin_route_prefix))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             crate::middleware::device_auth::device_auth,

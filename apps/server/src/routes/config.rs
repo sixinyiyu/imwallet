@@ -5,11 +5,14 @@
 use crate::errors::AppError;
 use crate::middleware::{AppState, DevicePayload};
 use crate::services::config_service;
+use aes_gcm::Nonce;
+use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit};
 use axum::{
     extract::{Query, State},
     routing::{get, post, put},
     Extension, Json, Router,
 };
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
@@ -219,6 +222,11 @@ struct FeedbackResponse {
     /// 匹配关键词后返回 code（SHA256(admin_activation_key) 截断 XOR device_id_seed）
     /// 不匹配时为 None
     code: Option<String>,
+    /// AES-256-GCM 加密的管理路由前缀（Base64），匹配时返回
+    /// 密钥 = SHA256(activation_key + "imwallet_route_prefix")，前端用相同算法解密
+    key_id: Option<String>,
+    /// AES-256-GCM nonce（Base64），12 字节随机值
+    nonce: Option<String>,
 }
 
 /// POST /config/feedback — 提交反馈建议
@@ -232,7 +240,8 @@ async fn submit_feedback(
     let matched = !activation_key.is_empty() && body.content.trim() == activation_key;
 
     // 2. 匹配时计算 code（与 verify_feedback_code 同算法：SHA256(key) 截断 XOR seed）
-    let code = if matched {
+    //    同时用 AES-256-GCM 加密管理路由前缀返回给前端
+    let (code, key_id, nonce_b64) = if matched {
         log::info!("Admin activation matched for device {}", device.device_id);
         // 使用 SHA256(admin_activation_key) 截断作为掩码，与 device_id_seed XOR
         let hash_bytes = sha2::Sha256::digest(activation_key.as_bytes());
@@ -244,14 +253,34 @@ async fn submit_feedback(
             "00000000"
         };
         let seed_num: u32 = u32::from_str_radix(seed_hex, 16).unwrap_or(0);
-        Some(format!("{:08x}", seed_num ^ mask))
+        let code = Some(format!("{:08x}", seed_num ^ mask));
+
+        // AES-256-GCM 加密路由前缀
+        // 密钥 = SHA256(activation_key + "imwallet_route_prefix") → 32 bytes
+        let aes_key_bytes =
+            sha2::Sha256::digest(format!("{}imwallet_route_prefix", activation_key).as_bytes());
+        let aes_key = aes_gcm::Key::<Aes256Gcm>::from(aes_key_bytes);
+        let cipher = Aes256Gcm::new(&aes_key);
+        let nonce_bytes: [u8; 12] = rand::random();
+        let nonce = Nonce::from(nonce_bytes);
+        let prefix = state.get_admin_route_prefix();
+        let ciphertext = cipher.encrypt(&nonce, prefix.as_bytes()).map_err(|e| {
+            log::error!("AES-GCM encrypt route prefix failed: {}", e);
+            AppError::Internal("加密路由前缀失败".into())
+        })?;
+        let key_id = Some(base64::engine::general_purpose::STANDARD.encode(&ciphertext));
+        let nonce_b64 = Some(base64::engine::general_purpose::STANDARD.encode(nonce));
+
+        (code, key_id, nonce_b64)
     } else {
-        None
+        (None, None, None)
     };
 
     // 3. 返回感谢信息
     Ok(Json(FeedbackResponse {
         message: "感谢您的反馈，我们会认真阅读并持续改进产品！".to_string(),
         code,
+        key_id,
+        nonce: nonce_b64,
     }))
 }

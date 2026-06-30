@@ -5,6 +5,7 @@ use crate::errors::AppError;
 use crate::middleware::{AppState, DevicePayload};
 use crate::models::{Wallet, WalletAddress};
 use crate::services::{device_service, wallet_service};
+use crate::db::query::vals;
 use axum::{
     extract::{Path, Query, State},
     routing::{delete, get},
@@ -28,6 +29,7 @@ pub fn router() -> Router<AppState> {
             "/wallets/{id}/addresses/{address_id}",
             delete(delete_address),
         )
+        .route("/recharges/my", get(get_my_recharges))
 }
 
 // ── Response DTOs ──
@@ -337,4 +339,96 @@ async fn delete_address(
 ) -> Result<axum::http::StatusCode, AppError> {
     wallet_service::delete_address(state.db.clone(), &address_id).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
+}
+// ── 充值记录查询（白名单设备，无需管理密码） ──
+
+/// GET /recharges/my — 查询当前设备关联钱包的充值记录
+/// 仅需 device_auth + 充值白名单，不需要管理密码
+/// 与管理视角的 POST /{prefix}/recharges 不同，此接口只返回当前设备有权查看的数据
+#[derive(Debug, Deserialize)]
+struct MyRechargesQuery {
+    #[serde(default = "default_page")]
+    page: u64,
+    #[serde(default = "default_limit")]
+    limit: u64,
+    #[serde(default)]
+    wallet_id: Option<String>,
+}
+
+fn default_page() -> u64 { 1 }
+fn default_limit() -> u64 { 20 }
+
+#[derive(Debug, Serialize)]
+struct MyRechargesResponse {
+    recharges: Vec<crate::models::Recharge>,
+    total: u64,
+    page: u64,
+    limit: u64,
+}
+
+async fn get_my_recharges(
+    State(state): State<AppState>,
+    Extension(device): Extension<DevicePayload>,
+    Query(query): Query<MyRechargesQuery>,
+) -> Result<Json<MyRechargesResponse>, AppError> {
+    // 校验充值白名单：只有白名单中的设备才能查看充值记录
+    let permitted = crate::services::config_service::is_recharge_permitted(state.db.clone(), &device.device_id).await?;
+    if !permitted {
+        return Err(AppError::Forbidden("该设备不在充值白名单中，无权查看充值记录".into()));
+    }
+
+    let offset = (query.page - 1) * query.limit;
+
+    // 查询当前设备关联的所有钱包ID
+    #[derive(serde::Deserialize)]
+    struct WId { wallet_id: String }
+    let wallet_ids: Vec<WId> = crate::db::query::query(
+        &state.db,
+        "SELECT DISTINCT ws.wallet_id FROM wallet_subscriptions ws WHERE ws.device_id = $1 AND ws.address_id != ''",
+        vals![&device.device_id],
+    ).await?;
+
+    let wid_list: Vec<String> = wallet_ids.into_iter().map(|w| w.wallet_id).collect();
+
+    // 如果指定了 wallet_id，还需校验该钱包属于当前设备
+    let filtered_wids: Vec<String> = if let Some(ref wid) = query.wallet_id {
+        if !wid_list.contains(wid) {
+            return Err(AppError::Forbidden("该钱包不属于当前设备".into()));
+        }
+        vec![wid.clone()]
+    } else {
+        wid_list
+    };
+
+    if filtered_wids.is_empty() {
+        return Ok(Json(MyRechargesResponse {
+            recharges: vec![],
+            total: 0,
+            page: query.page,
+            limit: query.limit,
+        }));
+    }
+
+    // 构建 IN 子句
+    let in_clause: Vec<String> = filtered_wids.iter().map(|w| format!("'{}'", w.replace("'", "''"))).collect();
+    let in_sql = in_clause.join(",");
+
+    let total: u64 = crate::db::query::query_count(
+        &state.db,
+        &format!("SELECT COUNT(*) as cnt FROM recharges WHERE wallet_id IN ({})", in_sql),
+        vals![],
+    ).await?;
+
+    let rows: Vec<crate::models::Recharge> = crate::db::query::query(
+        &state.db,
+        &format!("SELECT * FROM recharges WHERE wallet_id IN ({}) ORDER BY created_at DESC LIMIT $1 OFFSET $2", in_sql),
+        vals![query.limit as i64, offset as i64],
+    ).await?;
+
+    Ok(Json(MyRechargesResponse {
+        recharges: rows,
+        total,
+        page: query.page,
+        limit: query.limit,
+    }))
 }

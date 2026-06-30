@@ -8,7 +8,8 @@ import {
   FlatList,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
-import { adminService, type WalletAdminInfo, type WalletTransaction, type WalletRecharge } from "../services/adminService";
+import { adminService, type WalletAdminInfo, type WalletTransaction } from "../services/adminService";
+import { rechargeService, type RechargeRecord } from "../services/rechargeService";
 import { walletService } from "../services/walletService";
 import { configService, type FeeConfig } from "../services/configService";
 import { ChevronRightIcon, AndroidIcon, IosIcon, WalletIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
@@ -53,7 +54,7 @@ export default function DeviceManageScreen() {
   // 手续费配置（用于计算实到金额）
   const [feeConfig, setFeeConfig] = useState<FeeConfig>({ feeRate: 0.005, feeMode: "DEDUCTED" });
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
-  const [recharges, setRecharges] = useState<WalletRecharge[]>([]);
+  const [recharges, setRecharges] = useState<RechargeRecord[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataTab, setDataTab] = useState<"transactions" | "recharges">("transactions");
   const [dataPage, setDataPage] = useState(1);
@@ -126,9 +127,9 @@ export default function DeviceManageScreen() {
         walletService.getWalletAddresses(walletId).catch(() => ({ addresses: [] })),
         configService.getFeeConfig().catch(() => null),
       ];
-      // 仅充值权限设备才加载充值数据
+      // 仅充值权限设备才加载充值数据（使用白名单接口，无需管理密码）
       if (rechargePermitted) {
-        fetches.push(adminService.getRechargeRecords(adminPwd, 1, 20, walletId));
+        fetches.push(rechargeService.getMyRechargeRecords(1, 20, walletId));
       }
       const results = await Promise.all(fetches);
       setTransactions(results[0].transactions);
@@ -157,7 +158,7 @@ export default function DeviceManageScreen() {
         const more = await adminService.getWalletTransactions(selectedWallet, adminPwd, nextPage, 20);
         setTransactions((prev) => [...prev, ...more.transactions]);
       } else {
-        const more = await adminService.getRechargeRecords(adminPwd, nextPage, 20, selectedWallet);
+        const more = await rechargeService.getMyRechargeRecords(nextPage, 20, selectedWallet);
         setRecharges((prev) => [...prev, ...more.recharges]);
       }
     } catch (err: any) {
@@ -316,7 +317,10 @@ export default function DeviceManageScreen() {
                               </Text>
                             </View>
                             <View style={styles.txBottomRow}>
-                              <Text style={styles.txTime}>{formatTime(t.createdAt)}</Text>
+                              <View style={styles.txBottomLeft}>
+                                <PlatformIcon platform={t.platform} size={14} />
+                                <Text style={styles.txTime}>{formatTime(t.createdAt)}</Text>
+                              </View>
                               {/* 发送方显示手续费+实到，接收方不显示手续费 */}
                               {isSend && feeNum > 0 && (
                                 <Text style={styles.txFee}>手续费 {feeNum.toFixed(6)} · 实到 {receivedNum.toFixed(6)}</Text>
@@ -532,6 +536,7 @@ const styles = StyleSheet.create({
   txAddrLabel: { fontSize: 13, fontWeight: "500", color: "#374151", marginRight: 6 },
   txArrow: { fontSize: 13, color: "#9CA3AF", fontWeight: "500" },
   txBottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 },
+  txBottomLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
   txTime: { fontSize: 12, color: "#9CA3AF" },
   txPlatform: {
     fontSize: 11,

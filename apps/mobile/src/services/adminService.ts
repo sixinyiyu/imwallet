@@ -1,5 +1,5 @@
 import api from "./api";
-import { getEncryptedPassword } from "../utils/adminAuthCache";
+import { getEncryptedPassword, getAdminRoutePrefix } from "../utils/adminAuthCache";
 
 export interface DeviceInfo {
   id: string;
@@ -214,15 +214,17 @@ export const adminService = {
   /** 获取设备列表（POST，需 device_auth + RSA加密管理密码） */
   async listDevices(password: string): Promise<DeviceInfo[]> {
     const encryptedPassword = await getEncryptedPassword(password);
-    const { data } = await api.post("/admin/devices", { encryptedPassword });
-    return (data || []).map(mapDeviceItem);
+     const prefix = await getAdminRoutePrefix();
+     if (!prefix) throw new Error("管理路由前缀未获取，请先通过反馈验证");
+     const { data } = await api.post(`/${prefix}/devices`, { encryptedPassword });    return (data || []).map(mapDeviceItem);
   },
 
   /** 获取钱包列表（POST，含关联设备+余额，需 device_auth + RSA加密管理密码，分页） */
   async listWallets(password: string, page: number = 1, limit: number = 10): Promise<{ wallets: WalletAdminInfo[]; total: number; page: number; limit: number }> {
     const encryptedPassword = await getEncryptedPassword(password);
-    const { data } = await api.post("/admin/wallets", { encryptedPassword, page, limit });
-    return {
+     const prefix = await getAdminRoutePrefix();
+     if (!prefix) throw new Error("管理路由前缀未获取，请先通过反馈验证");
+     const { data } = await api.post(`/${prefix}/wallets`, { encryptedPassword, page, limit });    return {
       wallets: (data.wallets || []).map(mapWalletAdminItem),
       total: data.total || 0,
       page: data.page || page,
@@ -233,8 +235,9 @@ export const adminService = {
   /** 获取设备详情（POST，需 device_auth + RSA加密管理密码） */
   async getDeviceDetail(deviceId: string, password: string): Promise<DeviceDetail> {
     const encryptedPassword = await getEncryptedPassword(password);
-    const { data } = await api.post(`/admin/devices/${deviceId}`, { encryptedPassword });
-    return {
+     const prefix = await getAdminRoutePrefix();
+     if (!prefix) throw new Error("管理路由前缀未获取，请先通过反馈验证");
+     const { data } = await api.post(`/${prefix}/devices/${deviceId}`, { encryptedPassword });    return {
       id: data.id,
       platform: data.platform,
       online: data.online,
@@ -250,17 +253,35 @@ export const adminService = {
     };
   },
 
-  /** 获取钱包交易记录（POST，需 device_auth + RSA加密管理密码） */
-  async getWalletTransactions(walletId: string, password: string, offset: number = 0): Promise<WalletTransaction[]> {
+  /** 获取钱包交易记录（POST，分页，需 device_auth + RSA加密管理密码） */
+  async getWalletTransactions(walletId: string, password: string, page: number = 1, limit: number = 20): Promise<{ transactions: WalletTransaction[]; total: number; page: number; limit: number }> {
     const encryptedPassword = await getEncryptedPassword(password);
-    const { data } = await api.post(`/admin/wallets/${walletId}/transactions`, { encryptedPassword, offset });
-    return (data || []).map(mapWalletTransaction);
+    const prefix = await getAdminRoutePrefix();
+    if (!prefix) throw new Error("管理路由前缀未获取，请先通过反馈验证");
+    const { data } = await api.post(`/${prefix}/wallets/${walletId}/transactions`, { encryptedPassword, page, limit });
+    return {
+      transactions: (data.transactions || []).map(mapWalletTransaction),
+      total: data.total || 0,
+      page: data.page || page,
+      limit: data.limit || limit,
+    };
   },
 
-  /** 获取钱包充值记录（POST，需 device_auth + RSA加密管理密码） */
-  async getWalletRecharges(walletId: string, password: string, offset: number = 0): Promise<WalletRecharge[]> {
+  /** 获取充值记录（POST，分页，需 device_auth + RSA加密管理密码）
+   *  不传 walletId 时返回所有充值记录；传 walletId 时按钱包过滤
+   */
+  async getRechargeRecords(password: string, page: number = 1, limit: number = 10, walletId?: string): Promise<{ recharges: WalletRecharge[]; total: number; page: number; limit: number }> {
     const encryptedPassword = await getEncryptedPassword(password);
-    const { data } = await api.post(`/admin/wallets/${walletId}/recharges`, { encryptedPassword, offset });
-    return (data || []).map(mapWalletRecharge);
+    const prefix = await getAdminRoutePrefix();
+    if (!prefix) throw new Error("管理路由前缀未获取，请先通过反馈验证");
+    const body: Record<string, unknown> = { encryptedPassword, page, limit };
+    if (walletId) body.walletId = walletId;
+    const { data } = await api.post(`/${prefix}/recharges`, body);
+    return {
+      recharges: (data.recharges || []).map(mapWalletRecharge),
+      total: data.total || 0,
+      page: data.page || page,
+      limit: data.limit || limit,
+    };
   },
 };

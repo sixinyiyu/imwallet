@@ -59,6 +59,8 @@ pub struct AppState {
     log_rate_limiter: Arc<Mutex<LruCache<String, i64>>>,
     /// 设备信息缓存：device_id → platform（减少每次请求查DB）
     device_cache: Arc<Mutex<LruCache<String, String>>>,
+    /// 管理路由前缀（从 config.toml [admin].route_prefix 读取，如 "vault"）
+    admin_route_prefix: String,
 }
 
 impl AppState {
@@ -68,6 +70,7 @@ impl AppState {
         rsa_keys: Arc<RsaKeys>,
         replay_cache_capacity: usize,
         cny_rate: Decimal,
+        admin_route_prefix: String,
     ) -> Self {
         Self {
             db,
@@ -77,6 +80,7 @@ impl AppState {
             cny_rate: Arc::new(RwLock::new(cny_rate)),
             log_rate_limiter: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap()))),
             device_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(5000).unwrap()))),
+            admin_route_prefix,
         }
     }
 
@@ -103,6 +107,11 @@ impl AppState {
         }
         cache.put(device_id.to_string(), now);
         true
+    }
+
+    /// 获取管理路由前缀（如 "vault"）
+    pub fn get_admin_route_prefix(&self) -> &str {
+        &self.admin_route_prefix
     }
 
     /// 获取缓存的 USD→CNY 汇率（RwLock 读锁，多读者并发无阻塞）

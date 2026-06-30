@@ -10,6 +10,8 @@ import {
   Modal,
   Pressable,
   Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import EmptyState from "../components/EmptyState";
@@ -236,20 +238,20 @@ export default function WalletDetailScreen() {
           <View style={styles.infoDivider} />
 
           {/* 标识符 */}
-          <View style={styles.identifierSection}>
+          <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>标识符</Text>
-            <View style={styles.identifierRow}>
-              <Text style={styles.identifierValue} selectable>{wallet.id}</Text>
-              <TouchableOpacity
-                onPress={async () => {
-                  const ok = await copyToClipboard(wallet.id);
-                  showToast(ok ? "标识符已复制" : "复制失败");
-                }}
-                activeOpacity={0.6}
-              >
+            <TouchableOpacity
+              onPress={async () => {
+                const ok = await copyToClipboard(wallet.id);
+                showToast(ok ? "标识符已复制" : "复制失败");
+              }}
+              activeOpacity={0.6}
+            >
+              <View style={styles.identifierRow}>
+                <Text style={styles.identifierValue} selectable>{wallet.id}</Text>
                 <CopyIcon size={16} color="#9CA3AF" />
-              </TouchableOpacity>
-            </View>
+              </View>
+            </TouchableOpacity>
           </View>
           <View style={styles.infoDivider} />
 
@@ -469,6 +471,8 @@ export default function WalletDetailScreen() {
         animationType="slide"
         onRequestClose={() => setShowRemoveDrawer(false)}
       >
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <Pressable style={styles.drawerOverlay} onPress={() => setShowRemoveDrawer(false)}>
           <Pressable style={styles.drawerContent} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.drawerPasswordTitle}>密码</Text>
@@ -529,10 +533,14 @@ export default function WalletDetailScreen() {
             </TouchableOpacity>
           </Pressable>
         </Pressable>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Password verification modal (for backup) */}
       <Modal visible={showPasswordModal} transparent animationType="fade">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <Pressable style={styles.modalOverlay} onPress={() => Keyboard.dismiss()}>
           <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>验证钱包密码</Text>
@@ -611,6 +619,8 @@ export default function WalletDetailScreen() {
             </View>
           </Pressable>
         </Pressable>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Password error dialog (forgot password / retry) */}
@@ -655,6 +665,8 @@ export default function WalletDetailScreen() {
 
       {/* Edit alias modal */}
       <Modal visible={showEditModal} transparent animationType="fade">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>修改钱包名称</Text>
@@ -691,6 +703,8 @@ export default function WalletDetailScreen() {
             </View>
           </View>
         </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -778,22 +792,17 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#F3F4F6",
   },
-  // 标识符行（竖排布局：标签在上，值在下，允许换行）
-  identifierSection: {
-    paddingVertical: 10,
-  },
+  // 标识符行（标签与值在同一行，值过长时换行）
   identifierRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
-    marginTop: 4,
+    marginTop: 2,
   },
   identifierValue: {
     fontSize: 13,
     color: "#6B7280",
     fontFamily: "monospace",
     lineHeight: 18,
-    flex: 1,
   },
   hintRight: {
     flexDirection: "row",

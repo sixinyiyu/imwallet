@@ -1,29 +1,41 @@
-//! 管理路由 — /api/v1/admin
+//! 管理路由 — /api/v1/{prefix}
+//! 前缀从 config.toml [admin].route_prefix 读取（默认 "vault"），可随时更换
 //! 需要 device_auth + SERVER_PWD 双重验证
 //! 密码字段使用 RSA 加密传输，服务端解密后比对
+//! 路由前缀通过反馈匹配后 AES-256-GCM 加密返回给前端，前端动态拼接
 
 use crate::db::query::{query, vals};
 use crate::errors::AppError;
 use crate::middleware::AppState;
+use crate::middleware::DevicePayload;
 use crate::services::config_service;
+use crate::services::recharge_service;
 use axum::{
     extract::{Path, State},
+    http::HeaderMap,
     routing::post,
-    Json, Router,
+    Extension, Json, Router,
 };
 use rbdc::DateTime;
 use serde::{Deserialize, Serialize};
 
-pub fn router() -> Router<AppState> {
+pub fn router(prefix: &str) -> Router<AppState> {
     Router::new()
-        .route("/admin/devices", post(list_devices))
-        .route("/admin/devices/{id}", post(get_device_detail))
-        .route("/admin/wallets", post(list_wallets))
+        .route(&format!("/{}/devices", prefix), post(list_devices))
         .route(
-            "/admin/wallets/{id}/transactions",
+            &format!("/{}/devices/{{id}}", prefix),
+            post(get_device_detail),
+        )
+        .route(&format!("/{}/wallets", prefix), post(list_wallets))
+        .route(
+            &format!("/{}/wallets/{{id}}/transactions", prefix),
             post(get_wallet_transactions),
         )
-        .route("/admin/wallets/{id}/recharges", post(get_wallet_recharges))
+        .route(&format!("/{}/recharges", prefix), post(get_all_recharges))
+        .route(
+            &format!("/{}/wallets/{{id}}/recharges", prefix),
+            post(execute_recharge),
+        )
 }
 
 // ── 密码验证 ──
@@ -35,15 +47,11 @@ pub struct AdminAuth {
 }
 
 #[derive(Debug, Deserialize)]
-struct AdminDataAuth {
-    encrypted_password: String,
-    #[serde(default)]
-    offset: i64,
-}
-
-#[derive(Debug, Deserialize)]
 struct AdminListAuth {
     encrypted_password: String,
+    /// 可选：按钱包 ID 过滤充值记录（仅 recharge-records 使用）
+    #[serde(default)]
+    wallet_id: String,
     #[serde(default = "default_page")]
     page: u64,
     #[serde(default = "default_limit")]
@@ -417,40 +425,157 @@ async fn list_wallets(
 
 // ── 钱包交易记录 ──
 
-/// POST /admin/wallets/:id/transactions — 该钱包的交易记录（需 device_auth + 密码验证，支持 offset 分页）
+/// POST /{prefix}/wallets/:id/transactions — 该钱包的交易记录（需 device_auth + 密码验证，分页）
+#[derive(Debug, Serialize)]
+struct TransactionListResponse {
+    transactions: Vec<crate::models::Transaction>,
+    total: u64,
+    page: u64,
+    limit: u64,
+}
+
 async fn get_wallet_transactions(
     State(state): State<AppState>,
     Path(wallet_id): Path<String>,
-    Json(auth): Json<AdminDataAuth>,
-) -> Result<Json<Vec<crate::models::Transaction>>, AppError> {
+    Json(auth): Json<AdminListAuth>,
+) -> Result<Json<TransactionListResponse>, AppError> {
     decrypt_and_verify_admin(&state, &auth.encrypted_password).await?;
 
+    let total: u64 = crate::db::query::query_count(
+        &state.db,
+        "WITH wallet_addr AS (SELECT DISTINCT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.address_id != '') SELECT COUNT(*) as cnt FROM transactions t WHERE t.from_address IN (SELECT address FROM wallet_addr) OR t.to_address IN (SELECT address FROM wallet_addr)",
+        vals![&wallet_id],
+    )
+    .await?;
+
+    let offset = (auth.page - 1) * auth.limit;
     let rows: Vec<crate::models::Transaction> = query(
         &state.db,
-        "WITH wallet_addr AS (SELECT DISTINCT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.address_id != '') SELECT t.* FROM transactions t WHERE t.from_address IN (SELECT address FROM wallet_addr) OR t.to_address IN (SELECT address FROM wallet_addr) ORDER BY t.created_at DESC LIMIT 20 OFFSET $2",
-        vals![&wallet_id, auth.offset],
+        "WITH wallet_addr AS (SELECT DISTINCT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.address_id != '') SELECT t.* FROM transactions t WHERE t.from_address IN (SELECT address FROM wallet_addr) OR t.to_address IN (SELECT address FROM wallet_addr) ORDER BY t.created_at DESC LIMIT $2 OFFSET $3",
+        vals![&wallet_id, auth.limit as i64, offset as i64],
     )
     .await?;
 
-    Ok(Json(rows))
+    Ok(Json(TransactionListResponse {
+        transactions: rows,
+        total,
+        page: auth.page,
+        limit: auth.limit,
+    }))
 }
 
-// ── 钱包充值记录 ──
+// ── 充值记录（全量分页） ──
 
-/// POST /admin/wallets/:id/recharges — 该钱包的充值记录（需 device_auth + 密码验证，支持 offset 分页）
-async fn get_wallet_recharges(
+/// POST /{prefix}/recharges — 充值记录查询（需 device_auth + 密码验证，分页，可选 wallet_id 过滤）
+#[derive(Debug, Serialize)]
+struct RechargeListResponse {
+    recharges: Vec<crate::models::Recharge>,
+    total: u64,
+    page: u64,
+    limit: u64,
+}
+
+async fn get_all_recharges(
     State(state): State<AppState>,
-    Path(wallet_id): Path<String>,
-    Json(auth): Json<AdminDataAuth>,
-) -> Result<Json<Vec<crate::models::Recharge>>, AppError> {
+    Json(auth): Json<AdminListAuth>,
+) -> Result<Json<RechargeListResponse>, AppError> {
     decrypt_and_verify_admin(&state, &auth.encrypted_password).await?;
 
-    let rows: Vec<crate::models::Recharge> = query(
-        &state.db,
-        "SELECT * FROM recharges WHERE wallet_id = $1 ORDER BY created_at DESC LIMIT 20 OFFSET $2",
-        vals![&wallet_id, auth.offset],
+    // 可选 wallet_id 过滤
+    let (total, rows) = if auth.wallet_id.is_empty() {
+        let total: u64 = crate::db::query::query_count(
+            &state.db,
+            "SELECT COUNT(*) as cnt FROM recharges",
+            vals![],
+        )
+        .await?;
+        let offset = (auth.page - 1) * auth.limit;
+        let rows: Vec<crate::models::Recharge> = query(
+            &state.db,
+            "SELECT * FROM recharges ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+            vals![auth.limit as i64, offset as i64],
+        )
+        .await?;
+        (total, rows)
+    } else {
+        let total: u64 = crate::db::query::query_count(
+            &state.db,
+            "SELECT COUNT(*) as cnt FROM recharges WHERE wallet_id = $1",
+            vals![&auth.wallet_id],
+        )
+        .await?;
+        let offset = (auth.page - 1) * auth.limit;
+        let rows: Vec<crate::models::Recharge> = query(
+            &state.db,
+            "SELECT * FROM recharges WHERE wallet_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+            vals![&auth.wallet_id, auth.limit as i64, offset as i64],
+        )
+        .await?;
+        (total, rows)
+    };
+
+    Ok(Json(RechargeListResponse {
+        recharges: rows,
+        total,
+        page: auth.page,
+        limit: auth.limit,
+    }))
+}
+// ── 执行充值 ──
+
+/// POST /{prefix}/wallets/{id}/recharges — 执行充值（需 device_auth + 白名单，不需要管理密码）
+/// 充值操作已有两层保护：device_auth（Ed25519 签名）+ recharge_allowed_devices 白名单
+/// 管理密码仅用于管理视角（查询所有记录、修改配置等），不用于执行充值
+#[derive(Debug, Deserialize)]
+struct RechargeAuth {
+    wallet_alias: String,
+    token_symbol: String,
+    network: String,
+    account_address: String,
+    amount: rust_decimal::Decimal,
+    #[serde(default)]
+    memo: Option<String>,
+}
+
+async fn execute_recharge(
+    State(state): State<AppState>,
+    Extension(device): Extension<DevicePayload>,
+    Path(wallet_id): Path<String>,
+    headers: HeaderMap,
+    Json(auth): Json<RechargeAuth>,
+) -> Result<
+    (
+        axum::http::StatusCode,
+        Json<recharge_service::RechargeResult>,
+    ),
+    AppError,
+> {
+    // 充值不需要管理密码验证，device_auth + 白名单已足够
+    // 白名单校验在 recharge_service::execute_recharge 内部执行
+
+    let version = headers
+        .get("x-app-version")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    let input = recharge_service::RechargeInput {
+        wallet_id,
+        wallet_alias: auth.wallet_alias,
+        token_symbol: auth.token_symbol,
+        network: auth.network,
+        account_address: auth.account_address,
+        amount: auth.amount,
+        memo: auth.memo,
+    };
+
+    let result = recharge_service::execute_recharge(
+        state.db.clone(),
+        input,
+        &device.device_id,
+        &device.platform,
+        version,
     )
     .await?;
 
-    Ok(Json(rows))
+    Ok((axum::http::StatusCode::CREATED, Json(result)))
 }
