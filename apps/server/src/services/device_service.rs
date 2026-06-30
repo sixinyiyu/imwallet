@@ -29,11 +29,7 @@ pub async fn register_device(
         return Ok((d, true));
     }
     // ON CONFLICT 触发，设备已存在
-    log::info!(
-        "[设备] 已存在 — ID={}, 平台={}",
-        device_id,
-        platform
-    );
+    log::info!("[设备] 已存在 — ID={}, 平台={}", device_id, platform);
     let existing = get_device(rb, device_id)
         .await?
         .ok_or_else(|| AppError::Internal("设备注册失败".into()))?;

@@ -364,11 +364,14 @@ async fn list_wallets(
             total_balance: rust_decimal::Decimal,
         }
         // 参数化 IN 子句：WHERE ws.wallet_id IN ($1, $2, ...) + vals
-        let placeholders: Vec<String> = wallet_ids.iter().enumerate()
+        let placeholders: Vec<String> = wallet_ids
+            .iter()
+            .enumerate()
             .map(|(i, _)| format!("${}", i + 1))
             .collect();
         let in_sql = placeholders.join(",");
-        let args: Vec<rbs::value::Value> = wallet_ids.iter()
+        let args: Vec<rbs::value::Value> = wallet_ids
+            .iter()
             .map(|id| rbs::value::Value::String(id.clone()))
             .collect();
         let sql = format!(
@@ -480,7 +483,11 @@ async fn get_all_recharges(
     // 可选 wallet_id 过滤（有值且 trim 后有内容才过滤）
     let filter_wallet_id = auth.wallet_id.as_ref().and_then(|w| {
         let trimmed = w.trim();
-        if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
     });
     let (total, rows) = if let Some(ref wid) = filter_wallet_id {
         let total: u64 = crate::db::query::query_count(

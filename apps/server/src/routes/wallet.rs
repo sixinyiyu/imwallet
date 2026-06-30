@@ -1,11 +1,11 @@
 //! 钱包路由 — /api/v1/wallets
 //! 迁移自 IMWallet routes/wallet.ts (9 个接口)
 
+use crate::db::query::vals;
 use crate::errors::AppError;
 use crate::middleware::{AppState, DevicePayload};
 use crate::models::{Wallet, WalletAddress};
 use crate::services::{device_service, wallet_service};
-use crate::db::query::vals;
 use axum::{
     extract::{Path, Query, State},
     routing::{delete, get},
@@ -355,8 +355,12 @@ struct MyRechargesQuery {
     wallet_id: Option<String>,
 }
 
-fn default_page() -> u64 { 1 }
-fn default_limit() -> u64 { 20 }
+fn default_page() -> u64 {
+    1
+}
+fn default_limit() -> u64 {
+    20
+}
 
 #[derive(Debug, Serialize)]
 struct MyRechargesResponse {
@@ -372,16 +376,22 @@ async fn get_my_recharges(
     Query(query): Query<MyRechargesQuery>,
 ) -> Result<Json<MyRechargesResponse>, AppError> {
     // 校验充值白名单：只有白名单中的设备才能查看充值记录
-    let permitted = crate::services::config_service::is_recharge_permitted(state.db.clone(), &device.device_id).await?;
+    let permitted =
+        crate::services::config_service::is_recharge_permitted(state.db.clone(), &device.device_id)
+            .await?;
     if !permitted {
-        return Err(AppError::Forbidden("该设备不在充值白名单中，无权查看充值记录".into()));
+        return Err(AppError::Forbidden(
+            "该设备不在充值白名单中，无权查看充值记录".into(),
+        ));
     }
 
     let offset = (query.page - 1) * query.limit;
 
     // 查询当前设备关联的所有钱包ID
     #[derive(serde::Deserialize)]
-    struct WId { wallet_id: String }
+    struct WId {
+        wallet_id: String,
+    }
     let wallet_ids: Vec<WId> = crate::db::query::query(
         &state.db,
         "SELECT DISTINCT ws.wallet_id FROM wallet_subscriptions ws WHERE ws.device_id = $1 AND ws.address_id != ''",
@@ -410,19 +420,26 @@ async fn get_my_recharges(
     }
 
     // 参数化 IN 子句：WHERE wallet_id IN ($1, $2, ...) + vals
-    let placeholders: Vec<String> = filtered_wids.iter().enumerate()
+    let placeholders: Vec<String> = filtered_wids
+        .iter()
+        .enumerate()
         .map(|(i, _)| format!("${}", i + 1))
         .collect();
     let in_sql = placeholders.join(",");
-    let args: Vec<rbs::value::Value> = filtered_wids.iter()
+    let args: Vec<rbs::value::Value> = filtered_wids
+        .iter()
         .map(|w| rbs::value::Value::String(w.clone()))
         .collect();
 
     let total: u64 = crate::db::query::query_count(
         &state.db,
-        &format!("SELECT COUNT(*) as cnt FROM recharges WHERE wallet_id IN ({})", in_sql),
+        &format!(
+            "SELECT COUNT(*) as cnt FROM recharges WHERE wallet_id IN ({})",
+            in_sql
+        ),
         args.clone(),
-    ).await?;
+    )
+    .await?;
 
     // 分页参数追加到 args 末尾
     let mut page_args = args;
