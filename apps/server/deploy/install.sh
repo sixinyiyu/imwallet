@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # rs-wallet 首次安装脚本（systemd 方式）
 # 用法: sudo bash install.sh [版本号]
-# 示例: sudo bash install.sh v0.1.0
+# 示例: sudo bash install.sh v0.3.0
 #       sudo bash install.sh latest
 #
 # 仅用于首次部署，升级请用 upgrade.sh
 #
 # 注意：自 v0.2.0 起，迁移 SQL 已内嵌到二进制中（#[migrations] 宏），
-# 不再依赖外部 migrations/ 目录。该目录仅作为参考保留。
+# 不再依赖外部 migrations/ 目录。
 
 set -euo pipefail
 
@@ -49,9 +49,13 @@ echo "Downloading ${DOWNLOAD_URL} ..."
 TMPDIR=$(mktemp -d)
 curl -sL "${DOWNLOAD_URL}" | tar xz -C "${TMPDIR}"
 
-# 5. 安装二进制（迁移 SQL 已内嵌，无需外部文件）
+# 5. 安装二进制 + 示例配置
 cp "${TMPDIR}/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
 chmod +x "${INSTALL_DIR}/${BIN_NAME}"
+# 示例配置（仅供参考，实际配置通过 env 文件覆盖）
+if [ -f "${TMPDIR}/config.toml.example" ]; then
+    cp "${TMPDIR}/config.toml.example" "${INSTALL_DIR}/config.toml.example"
+fi
 
 # 6. 清理临时目录
 rm -rf "${TMPDIR}"
@@ -63,14 +67,27 @@ curl -sL "https://raw.githubusercontent.com/${REPO}/main/apps/server/deploy/rs-w
 # 8. 创建 env 文件（仅首次）
 if [ ! -f "${INSTALL_DIR}/env" ]; then
     cat > "${INSTALL_DIR}/env" << 'ENVFILE'
-DATABASE_URL=postgresql://imwallet:CHANGE_ME@localhost:5432/imwallet
-PORT=3000
+# ── 数据库连接（两种方式任选其一）──
+# 方式1: DATABASE_URL 完整连接（优先级最高，设置后忽略 config.toml 中的拆分字段）
+DATABASE_URL=postgresql://imwallet:CHANGE_ME@localhost:5432/imwallet?sslmode=disable
+# 方式2: 拆分字段（不设 DATABASE_URL 时生效，需同时设置以下三项）
+# DATABASE_PASSWORD=CHANGE_ME
+# DATABASE_USER_NAME=imwallet
+# DATABASE_TYPE=postgresql
+
+# ── 服务配置 ──
+PORT=9000
 SERVER_PWD=CHANGE_ME
 RSA_PRIVATE_KEY_PATH=keys/rsa_private.pem
 RSA_PUBLIC_KEY_PATH=keys/rsa_public.pem
+ADMIN_ROUTE_PREFIX=vault
+
+# ── 调试 ──
+RUST_BACKTRACE=1
 ENVFILE
     echo ""
     echo "!!! Created ${INSTALL_DIR}/env — MUST edit with your actual credentials !!!"
+    echo "    Required: DATABASE_URL (or DATABASE_PASSWORD), SERVER_PWD"
     echo ""
 fi
 

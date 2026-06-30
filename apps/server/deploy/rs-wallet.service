@@ -12,7 +12,7 @@ Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
 
-# Environment overrides
+# Environment overrides (env file contains DB/PWD/PORT etc.)
 Environment=RUST_BACKTRACE=1
 EnvironmentFile=-/opt/rs-wallet/env
 
