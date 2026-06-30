@@ -11,6 +11,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { configService, type FeeConfig } from "../services/configService";
@@ -194,7 +195,7 @@ export default function ConfigManageScreen() {
       // 密码验证成功 → 缓存加密密码 + 跳转到设备管理页面
       await cacheAdminAuth(devicePwdInput.trim());
       setShowDevicePwdDrawer(false);
-      navigation.navigate("DeviceManage", { verified: true });
+      navigation.navigate("DeviceManage", { verified: true, rechargePermitted });
     } catch {
       setDevicePwdError("密码验证失败，请重试");
     }
@@ -319,8 +320,10 @@ export default function ConfigManageScreen() {
 
       {/* 编辑费率弹窗（含密码输入） */}
       <Modal visible={showEditModal} transparent animationType="fade">
-        <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss}>
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
+            <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss}>
+              <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>修改费率</Text>
             <Text style={styles.modalDesc}>请输入 0~1 之间的数值，如 0.005 表示 0.5%</Text>
             <TextInput
@@ -365,8 +368,10 @@ export default function ConfigManageScreen() {
                 )}
               </TouchableOpacity>
             </View>
+            </Pressable>
           </Pressable>
-        </Pressable>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* 交易限制开关密码抽屉 */}
@@ -380,8 +385,9 @@ export default function ConfigManageScreen() {
           style={styles.drawerOverlay}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <Pressable style={styles.drawerBackdrop} onPress={handleCloseTogglePwdDrawer} />
-          <View style={styles.drawerContent}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+            <Pressable style={styles.drawerBackdrop} onPress={handleCloseTogglePwdDrawer} />
+            <View style={styles.drawerContent}>
             <View style={styles.drawerHandle} />
             <Text style={styles.drawerTitle}>请输入管理密码</Text>
             <Text style={styles.drawerDesc}>
@@ -422,6 +428,7 @@ export default function ConfigManageScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -436,8 +443,9 @@ export default function ConfigManageScreen() {
           style={styles.drawerOverlay}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <Pressable style={styles.drawerBackdrop} onPress={handleCloseDevicePwdDrawer} />
-          <View style={styles.drawerContent}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+            <Pressable style={styles.drawerBackdrop} onPress={handleCloseDevicePwdDrawer} />
+            <View style={styles.drawerContent}>
             <View style={styles.drawerHandle} />
             <Text style={styles.drawerTitle}>请输入管理密码</Text>
             <Text style={styles.drawerDesc}>进入设备管理需要验证管理密码</Text>
@@ -476,6 +484,7 @@ export default function ConfigManageScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
     </View>

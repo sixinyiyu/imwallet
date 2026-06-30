@@ -38,6 +38,8 @@ export default function DeviceManageScreen() {
   const route = useRoute<DeviceManageRoute>();
   // 从缓存获取明文密码（验证成功后已缓存），不再从路由参数获取
   const adminPwd = getPlaintextPassword();
+  // 从配置管理页传递的充值权限标志，无需重新判断
+  const rechargePermitted = route.params?.rechargePermitted ?? false;
 
   // adminPwd 为 null 时显示空页面（等待返回上一页）
   if (!adminPwd) {
@@ -61,8 +63,6 @@ export default function DeviceManageScreen() {
   const [dataTab, setDataTab] = useState<"transactions" | "recharges">("transactions");
   const [dataOffset, setDataOffset] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
-  // 当前设备是否有充值权限（控制充值tab是否显示）
-  const [rechargePermitted, setRechargePermitted] = useState(false);
 
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
@@ -99,8 +99,6 @@ export default function DeviceManageScreen() {
   useEffect(() => {
     setWalletsLoading(true);
     loadWallets(1).finally(() => setWalletsLoading(false));
-    // 同时检查充值权限
-    configService.getRechargePermitted().then(setRechargePermitted).catch(() => setRechargePermitted(false));
   }, [adminPwd]);
 
   const handleWalletsLoadMore = async () => {
