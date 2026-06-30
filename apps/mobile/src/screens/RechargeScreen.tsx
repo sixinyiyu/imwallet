@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,9 @@ import {
   Pressable,
   RefreshControl,
 } from "react-native";
+import { getPlaintextPassword, clearAdminAuthCache } from "../utils/adminAuthCache";
 import { useFocusEffect } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { walletService } from "../services/walletService";
 import { assetService } from "../services/assetService";
 import { localAddressService } from "../services/localAddressService";
@@ -65,6 +67,22 @@ export default function RechargeScreen() {
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2000);
   }, []);
+
+  // 密码缓存守卫
+  const adminPwd = getPlaintextPassword();
+  const navigation = useNavigation();
+  useEffect(() => {
+    if (!adminPwd) {
+      showToast("管理密码缓存已过期，请重新验证");
+      clearAdminAuthCache();
+      setTimeout(() => navigation.goBack(), 1500);
+    }
+  }, [adminPwd]);
+
+  // adminPwd 为 null 时显示空页面
+  if (!adminPwd) {
+    return <View style={styles.container} />;
+  }
 
   const loadData = async () => {
     setLoading(true);
@@ -176,7 +194,7 @@ export default function RechargeScreen() {
     if (recordsLoading) return;
     setRecordsLoading(true);
     try {
-      const res = await rechargeService.getRecharges({ page, limit: 20 });
+      const res = await rechargeService.getRechargeRecords(adminPwd, page, 20);
       setRecords((prev) => (append ? [...prev, ...res.recharges] : res.recharges));
       setRecordsTotal(res.total);
       setRecordsPage(page);
@@ -232,6 +250,7 @@ export default function RechargeScreen() {
         setSubmitting(false);
         return;
       }
+      // 充值不需要管理密码，仅需 device_auth + 白名单
       await rechargeService.recharge({
         walletId: selectedWallet.id,
         walletAlias: selectedWallet.name,
@@ -367,11 +386,12 @@ export default function RechargeScreen() {
                   {selectedToken && TOKEN_ICONS[selectedToken.symbol]
                     ? React.createElement(TOKEN_ICONS[selectedToken.symbol], { size: 18 })
                     : null}
-                <Text style={selectedToken ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
-                  {selectedToken
-                    ? `${selectedToken.symbol} · ${shortAddr(getAssetAddress(selectedToken))}`
-                    : "请选择代币"}
-                </Text>                </View>
+                  <Text style={selectedToken ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
+                    {selectedToken
+                      ? `${selectedToken.symbol} · ${shortAddr(getAssetAddress(selectedToken))}`
+                      : "请选择代币"}
+                  </Text>
+                </View>
                 <ChevronRightIcon size={18} color="#9CA3AF" />
               </TouchableOpacity>
 
