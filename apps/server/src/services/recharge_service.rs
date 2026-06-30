@@ -9,6 +9,8 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::utils::short_addr;
+
 #[derive(Debug, Deserialize)]
 pub struct RechargeInput {
     pub wallet_id: String,
@@ -115,7 +117,7 @@ pub async fn execute_recharge(
     tx.commit().await?;
 
     log::info!(
-        "[充值] 完成 — ID={}, 钱包{}(ID{}), 代币{}({}), 充值金额 {}, 设备{}",
+        "[充值] 完成 — 充值ID={}, 钱包{}(ID{}), 代币{}({}), 充值金额 {}, 设备{}",
         &rid,
         &input.wallet_alias,
         &input.wallet_id,
@@ -133,13 +135,4 @@ pub async fn execute_recharge(
         token_symbol: input.token_symbol,
         amount: input.amount,
     })
-}
-
-/// 地址截断显示：前8后4，用于日志脱敏
-fn short_addr(addr: &str) -> String {
-    if addr.len() <= 12 {
-        addr.to_string()
-    } else {
-        format!("{}...{}", &addr[..8], &addr[addr.len() - 4..])
-    }
 }

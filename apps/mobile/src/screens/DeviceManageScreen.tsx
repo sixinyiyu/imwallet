@@ -41,11 +41,6 @@ export default function DeviceManageScreen() {
   // 从配置管理页传递的充值权限标志，无需重新判断
   const rechargePermitted = route.params?.rechargePermitted ?? false;
 
-  // adminPwd 为 null 时显示空页面（等待返回上一页）
-  if (!adminPwd) {
-    return <View style={styles.container} />;
-  }
-
   const [wallets, setWallets] = useState<WalletAdminInfo[]>([]);
   const [walletsLoading, setWalletsLoading] = useState(true);
   const [walletsPage, setWalletsPage] = useState(1);
@@ -61,7 +56,7 @@ export default function DeviceManageScreen() {
   const [recharges, setRecharges] = useState<WalletRecharge[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataTab, setDataTab] = useState<"transactions" | "recharges">("transactions");
-  const [dataOffset, setDataOffset] = useState(0);
+  const [dataPage, setDataPage] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const [toastVisible, setToastVisible] = useState(false);
@@ -82,6 +77,11 @@ export default function DeviceManageScreen() {
       setTimeout(() => navigation.goBack(), 1500);
     }
   }, [adminPwd]);
+
+  // adminPwd 为 null 时显示空页面（等待返回上一页）
+  if (!adminPwd) {
+    return <View style={styles.container} />;
+  }
 
   const loadWallets = useCallback(async (page: number, append = false) => {
     try {
@@ -110,12 +110,13 @@ export default function DeviceManageScreen() {
 
   const handleSelectWallet = async (walletId: string) => {
     if (selectedWallet === walletId) {
-      setSelectedWallet(null);
-      setWalletAddresses([]);
-      return;
-    }
+    setSelectedWallet(null);
+    setWalletAddresses([]);
+    setTransactions([]);
+    setRecharges([]);
+    return;    }
     setSelectedWallet(walletId);
-    setDataOffset(0);
+    setDataPage(1);
     setDataTab("transactions");
     setDataLoading(true);
     try {
@@ -148,15 +149,15 @@ export default function DeviceManageScreen() {
 
   const handleLoadMore = async () => {
     if (!selectedWallet || loadingMore) return;
-    const nextOffset = dataOffset + 20;
-    setDataOffset(nextOffset);
+    const nextPage = dataPage + 1;
+    setDataPage(nextPage);
     setLoadingMore(true);
     try {
       if (dataTab === "transactions") {
-        const more = await adminService.getWalletTransactions(selectedWallet, adminPwd, Math.floor(nextOffset / 20) + 1, 20);
+        const more = await adminService.getWalletTransactions(selectedWallet, adminPwd, nextPage, 20);
         setTransactions((prev) => [...prev, ...more.transactions]);
       } else {
-        const more = await adminService.getRechargeRecords(adminPwd, Math.floor(nextOffset / 20) + 1, 20, selectedWallet);
+        const more = await adminService.getRechargeRecords(adminPwd, nextPage, 20, selectedWallet);
         setRecharges((prev) => [...prev, ...more.recharges]);
       }
     } catch (err: any) {
@@ -271,14 +272,7 @@ export default function DeviceManageScreen() {
                         <Text style={[styles.tabText, dataTab === "recharges" && styles.tabTextActive]}>充值</Text>
                       </TouchableOpacity>
                     </View>
-                    ) : (
-                    <View style={styles.tabRow}>
-                      <View style={[styles.tab, styles.tabActive]}
-                      >
-                        <Text style={[styles.tabText, styles.tabTextActive]}>交易</Text>
-                      </View>
-                    </View>
-                    )}
+                    ) : null}
 
                     {dataTab === "transactions" ? (
                       transactions.length === 0 ? (

@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
+use crate::utils::short_addr;
+
 // NotificationType 常量
 const TRANSFER_IN: &str = "TRANSFER_IN";
 const TRANSFER_OUT: &str = "TRANSFER_OUT";
@@ -45,18 +47,6 @@ pub async fn execute_transfer(
     platform: &str,
     cfg: &RuntimeConfig,
 ) -> Result<TransferResult, AppError> {
-    log::info!(
-        "[转账] 设备{}从{}端发起转账请求，钱包ID{} -- {}({}) --> 收款方(地址{}), 转账金额 {} {}, 手续费模式{}",
-        short_addr(device_id),
-        platform,
-        &input.from_wallet_id,
-        &input.token_symbol,
-        &input.network,
-        short_addr(&input.to_address),
-        input.amount,
-        &input.token_symbol,
-        &cfg.fee_mode
-    );
     // 校验收款地址格式与链类型匹配
     let v = address_validator::validate_address_for_chain(&input.to_address, &input.network);
     if !v.is_valid {
@@ -98,6 +88,20 @@ pub async fn execute_transfer(
         .into_iter()
         .next()
         .ok_or_else(|| AppError::BadRequest("未找到发送方地址".into()))?;
+
+    log::info!(
+        "[转账] 设备{}从{}端发起转账请求，钱包{}(地址{}) -- {}({}) --> 收款方(地址{}), 转账金额 {} {}, 手续费模式{}",
+        short_addr(device_id),
+        platform,
+        &input.from_wallet_id,
+        short_addr(&from_addr.address),
+        &input.token_symbol,
+        &input.network,
+        short_addr(&input.to_address),
+        input.amount,
+        &input.token_symbol,
+        &cfg.fee_mode
+    );
 
     let bals: Vec<crate::models::AssetAddress> = tx_query(
         &tx,
@@ -290,13 +294,4 @@ pub async fn get_transaction(
     )
     .await
     .map_err(AppError::from)
-}
-
-/// 地址截断显示：前8后4，用于日志脱敏
-fn short_addr(addr: &str) -> String {
-    if addr.len() <= 12 {
-        addr.to_string()
-    } else {
-        format!("{}...{}", &addr[..8], &addr[addr.len() - 4..])
-    }
 }

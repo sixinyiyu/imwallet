@@ -16,6 +16,7 @@ mod middleware;
 mod models;
 mod routes;
 mod services;
+mod utils;
 // mod validators; — removed dead code
 
 use log::Level;
@@ -44,8 +45,8 @@ async fn main() -> anyhow::Result<()> {
     log::info!("rs-wallet starting...");
 
     // 3. 初始化数据库连接
-    let db = Arc::new(db::init_db(&config.database_url)?);
-    log::info!("Database connected");
+    let db = Arc::new(db::init_db(&config.database_full_url())?);
+    log::info!("Database connected ({})", config.database_masked_url());
 
     // 4. 执行数据库迁移（flyway 驱动 V*.sql，DDL + 种子数据一步完成）
     services::migrator::migrate(db.clone()).await?;
