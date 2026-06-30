@@ -19,6 +19,98 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use tokio::sync::Mutex;
 
+// ── 请求日志常量与辅助函数 ──
+
+/// 已知的扫描探测路径前缀（降级为 debug 日志）
+const SCAN_PATHS: &[&str] = &[
+    "/.env",
+    "/.git",
+    "/.DS_Store",
+    "/.vscode",
+    "/.well-known",
+    "/graphql",
+    "/api/graphql",
+    "/api/gql",
+    "/actuator",
+    "/v2/",
+    "/config.json",
+    "/version",
+    "/info.php",
+    "/robots.txt",
+    "/console",
+    "/server-status",
+    "/login.action",
+    "/debug",
+    "/trace.axd",
+    "/@vite",
+    "/dns-query",
+    "/ecp/",
+    "/META-INF",
+    "/s/",
+    "/telescope",
+    "/___proxy",
+];
+
+/// 需要脱敏的字段名（值替换为 ***）
+const SENSITIVE_KEYS: &[&str] = &[
+    "encrypted_password",
+    "encryptedPassword",
+    "password",
+    "secret",
+    "token",
+    "apiKey",
+    "api_key",
+    "authorization",
+];
+
+/// body 参数日志最大长度
+const MAX_BODY_LOG_LEN: usize = 500;
+
+fn is_scan_probe(path: &str) -> bool {
+    if path == "/" {
+        return true;
+    }
+    SCAN_PATHS.iter().any(|p| path.starts_with(p))
+}
+
+fn sanitize_params(input: &str) -> String {
+    let mut result = input.to_string();
+    for key in SENSITIVE_KEYS {
+        // JSON: "key":"value"
+        let json_prefix = format!("\"{}\"", key);
+        if let Some(start) = result.find(&json_prefix) {
+            let after_key = &result[start + json_prefix.len()..];
+            let trimmed = after_key.trim_start_matches(':').trim_start_matches(' ');
+            if let Some(value_content) = trimmed.strip_prefix('"') {
+                if let Some(end_quote) = value_content.find('"') {
+                    let value_start =
+                        start + json_prefix.len() + (after_key.len() - trimmed.len()) + 1;
+                    let value_end = value_start + end_quote;
+                    result.replace_range(value_start..value_end, "***");
+                }
+            }
+        }
+        // URL/query: key=value
+        let url_prefix = format!("{}=", key);
+        if let Some(start) = result.find(&url_prefix) {
+            let value_start = start + url_prefix.len();
+            let value_end = result[value_start..]
+                .find('&')
+                .map_or(result.len(), |pos| value_start + pos);
+            result.replace_range(value_start..value_end, "***");
+        }
+    }
+    result
+}
+
+fn truncate_log(s: &str, max_len: usize) -> &str {
+    if s.len() <= max_len {
+        s
+    } else {
+        &s[..s.floor_char_boundary(max_len)]
+    }
+}
+
 // ── 防重放缓存（内联，仅本中间件使用） ──
 
 #[derive(Clone)]
@@ -143,6 +235,7 @@ pub async fn device_auth(
     request: axum::extract::Request<axum::body::Body>,
     next: Next,
 ) -> Result<Response, AppError> {
+    let start = std::time::Instant::now();
     let (parts, body) = request.into_parts();
     let headers = parts.headers.clone();
     let method = parts.method.clone();
@@ -281,10 +374,79 @@ pub async fn device_auth(
     }
 
     // 重建 request
-    let mut request = axum::extract::Request::from_parts(parts, axum::body::Body::from(body_bytes));
+    let mut request =
+        axum::extract::Request::from_parts(parts, axum::body::Body::from(body_bytes.clone()));
     request.extensions_mut().insert(DevicePayload {
         device_id: device_id.to_string(),
         platform,
     });
-    Ok(next.run(request).await)
+
+    // 调用 handler
+    let response = next.run(request).await;
+
+    // ── 请求日志 ──
+    let elapsed = start.elapsed();
+    let status = response.status();
+    let status_code = status.as_u16();
+    let path = uri.path();
+
+    // 构建参数日志：query + body（脱敏 + 截断）
+    let query_str = uri.query().map(sanitize_params).unwrap_or_default();
+    let body_str = if !body_bytes.is_empty() {
+        let raw = String::from_utf8_lossy(&body_bytes);
+        truncate_log(&sanitize_params(&raw), MAX_BODY_LOG_LEN).to_string()
+    } else {
+        String::new()
+    };
+    let params_log = if !query_str.is_empty() && !body_str.is_empty() {
+        format!(" query=[{}] body=[{}]", query_str, body_str)
+    } else if !query_str.is_empty() {
+        format!(" query=[{}]", query_str)
+    } else if !body_str.is_empty() {
+        format!(" body=[{}]", body_str)
+    } else {
+        String::new()
+    };
+
+    // 日志分级：5xx→error, 4xx+扫描→debug, 4xx+业务→warn, 2xx/3xx→info
+    if status.is_server_error() {
+        log::error!(
+            "Request failed: {} {}{} → {} ({:.0}ms)",
+            method,
+            path,
+            params_log,
+            status_code,
+            elapsed.as_millis()
+        );
+    } else if status.is_client_error() {
+        if is_scan_probe(path) {
+            log::debug!(
+                "Scan probe: {} {} → {} ({:.0}ms)",
+                method,
+                path,
+                status_code,
+                elapsed.as_millis()
+            );
+        } else {
+            log::warn!(
+                "Request rejected: {} {}{} → {} ({:.0}ms)",
+                method,
+                path,
+                params_log,
+                status_code,
+                elapsed.as_millis()
+            );
+        }
+    } else {
+        log::info!(
+            "Request completed: {} {}{} → {} ({:.0}ms)",
+            method,
+            path,
+            params_log,
+            status_code,
+            elapsed.as_millis()
+        );
+    }
+
+    Ok(response)
 }

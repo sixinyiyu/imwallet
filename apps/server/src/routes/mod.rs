@@ -66,7 +66,6 @@ pub async fn build_routes(db: Arc<rbatis::RBatis>, config: AppConfig) -> anyhow:
     Ok(Router::new()
         .route("/health", axum::routing::get(health::health_check_handler))
         .nest("/api/v1", public_routes.merge(auth_routes))
-        .layer(middleware::from_fn(crate::middleware::request_logger))
         .with_state(state))
 }
 
