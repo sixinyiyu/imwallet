@@ -51,7 +51,7 @@ struct AdminListAuth {
     encrypted_password: String,
     /// 可选：按钱包 ID 过滤充值记录（仅 recharge-records 使用）
     #[serde(default)]
-    wallet_id: String,
+    wallet_id: Option<String>,
     #[serde(default = "default_page")]
     page: u64,
     #[serde(default = "default_limit")]
@@ -75,17 +75,10 @@ async fn decrypt_and_verify_admin(
         AppError::BadRequest("密码解密失败".into())
     })?;
 
-    log::debug!("Admin auth: decrypted pwd len={}", password.len());
-
     let verified = config_service::verify_service_password(state.db.clone(), &password).await?;
     if verified {
-        log::debug!("Admin auth: password verified OK");
         Ok(password)
     } else {
-        log::debug!(
-            "Admin auth: password verification FAILED (pwd len={})",
-            password.len()
-        );
         Err(AppError::Forbidden("管理密码验证失败".into()))
     }
 }
@@ -370,16 +363,19 @@ async fn list_wallets(
             icon_url: String,
             total_balance: rust_decimal::Decimal,
         }
-        let id_list: String = wallet_ids
-            .iter()
-            .map(|id| format!("'{}'", id))
-            .collect::<Vec<String>>()
-            .join(",");
+        // 参数化 IN 子句：WHERE ws.wallet_id IN ($1, $2, ...) + vals
+        let placeholders: Vec<String> = wallet_ids.iter().enumerate()
+            .map(|(i, _)| format!("${}", i + 1))
+            .collect();
+        let in_sql = placeholders.join(",");
+        let args: Vec<rbs::value::Value> = wallet_ids.iter()
+            .map(|id| rbs::value::Value::String(id.clone()))
+            .collect();
         let sql = format!(
             "SELECT ws.wallet_id, aa.asset_id, a.symbol, a.name, aa.chain, a.icon_url, SUM(aa.balance) as total_balance FROM assets_addresses aa JOIN assets a ON a.id = aa.asset_id JOIN wallet_subscriptions ws ON ws.address_id = aa.address_id WHERE ws.wallet_id IN ({}) AND ws.address_id != '' GROUP BY ws.wallet_id, aa.asset_id, a.symbol, a.name, aa.chain, a.icon_url",
-            id_list
+            in_sql
         );
-        let balance_rows: Vec<BalanceRow> = query(&state.db, &sql, vals![]).await?;
+        let balance_rows: Vec<BalanceRow> = query(&state.db, &sql, args).await?;
 
         // 按钱包分组
         let mut balance_map: std::collections::HashMap<String, Vec<AssetBalanceBrief>> =
@@ -481,8 +477,27 @@ async fn get_all_recharges(
 ) -> Result<Json<RechargeListResponse>, AppError> {
     decrypt_and_verify_admin(&state, &auth.encrypted_password).await?;
 
-    // 可选 wallet_id 过滤
-    let (total, rows) = if auth.wallet_id.is_empty() {
+    // 可选 wallet_id 过滤（有值且 trim 后有内容才过滤）
+    let filter_wallet_id = auth.wallet_id.as_ref().and_then(|w| {
+        let trimmed = w.trim();
+        if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+    });
+    let (total, rows) = if let Some(ref wid) = filter_wallet_id {
+        let total: u64 = crate::db::query::query_count(
+            &state.db,
+            "SELECT COUNT(*) as cnt FROM recharges WHERE wallet_id = $1",
+            vals![wid],
+        )
+        .await?;
+        let offset = (auth.page - 1) * auth.limit;
+        let rows: Vec<crate::models::Recharge> = query(
+            &state.db,
+            "SELECT * FROM recharges WHERE wallet_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+            vals![wid, auth.limit as i64, offset as i64],
+        )
+        .await?;
+        (total, rows)
+    } else {
         let total: u64 = crate::db::query::query_count(
             &state.db,
             "SELECT COUNT(*) as cnt FROM recharges",
@@ -494,21 +509,6 @@ async fn get_all_recharges(
             &state.db,
             "SELECT * FROM recharges ORDER BY created_at DESC LIMIT $1 OFFSET $2",
             vals![auth.limit as i64, offset as i64],
-        )
-        .await?;
-        (total, rows)
-    } else {
-        let total: u64 = crate::db::query::query_count(
-            &state.db,
-            "SELECT COUNT(*) as cnt FROM recharges WHERE wallet_id = $1",
-            vals![&auth.wallet_id],
-        )
-        .await?;
-        let offset = (auth.page - 1) * auth.limit;
-        let rows: Vec<crate::models::Recharge> = query(
-            &state.db,
-            "SELECT * FROM recharges WHERE wallet_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
-            vals![&auth.wallet_id, auth.limit as i64, offset as i64],
         )
         .await?;
         (total, rows)
