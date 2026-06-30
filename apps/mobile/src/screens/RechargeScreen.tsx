@@ -32,7 +32,6 @@ export default function RechargeScreen() {
   const [memo, setMemo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [formCollapsed, setFormCollapsed] = useState(true);
 
   // 服务端钱包列表（搜索+分页）
   const [serverWallets, setServerWallets] = useState<SimpleWallet[]>([]);
@@ -49,6 +48,7 @@ export default function RechargeScreen() {
   const [recordsPage, setRecordsPage] = useState(1);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [formCollapsed, setFormCollapsed] = useState(true);
 
   // 地址本缓存（用于充值记录中匹配联系人名称）
   const [addressMap, setAddressMap] = useState<Map<string, AddressEntry>>(new Map());
@@ -67,7 +67,6 @@ export default function RechargeScreen() {
   }, []);
 
   const loadData = async () => {
-    setLoading(true);
     try {
       const [assetsRes, contacts] = await Promise.all([
         assetService.getAssets(),
@@ -83,7 +82,6 @@ export default function RechargeScreen() {
     } catch {
       showToast("加载数据失败");
     }
-    setLoading(false);
   };
 
   /** 根据代币网络获取钱包在该网络上的链地址 */
@@ -172,9 +170,8 @@ export default function RechargeScreen() {
     }
   };
 
-  const loadRecords = async (page = 1, append = false) => {
-    if (recordsLoading) return;
-    setRecordsLoading(true);
+  const loadRecords = async (page = 1, append = false, showLoading = true) => {
+    if (showLoading) setRecordsLoading(true);
     try {
       const res = await rechargeService.getMyRechargeRecords(page, 20, selectedWallet?.id);
       setRecords((prev) => (append ? [...prev, ...res.recharges] : res.recharges));
@@ -183,13 +180,17 @@ export default function RechargeScreen() {
     } catch {
       if (!append) setRecords([]);
     }
-    setRecordsLoading(false);
+    if (showLoading) setRecordsLoading(false);
   };
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
-      loadRecords(1);
+      setLoading(true);
+      setRecordsLoading(true);
+      Promise.all([loadData(), loadRecords(1, false, false)]).finally(() => {
+        setLoading(false);
+        setRecordsLoading(false);
+      });
     }, [])
   );
 
