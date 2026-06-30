@@ -103,27 +103,47 @@ export default function WalletDetailScreen() {
     setTimeout(() => setToastVisible(false), 2000);
   }, []);
 
-  // Set header right: "移除" link
+  // Set header right: "移除" link (普通钱包) / "取消订阅" link (只读钱包)
   useEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity
-          onPress={() => {
-            // 未备份钱包：提示先备份
-            if (!walletIsBackedUp) {
-              setShowNotBackedUpDrawer(true);
-            } else {
-              setShowConfirmDrawer(true);
-            }
-          }}
-          style={{ marginRight: 16 }}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Text style={{ color: "#EF4444", fontSize: 15, fontWeight: "500" }}>移除</Text>
-        </TouchableOpacity>
-      ),
+      headerRight: () => {
+        if (wallet?.isReadOnly) {
+          return (
+            <TouchableOpacity
+              onPress={async () => {
+                try {
+                  await useWalletStore.getState().unsubscribeWallet(wallet.id);
+                  navigation.goBack();
+                } catch (err: any) {
+                  showToast(err?.message || "取消订阅失败");
+                }
+              }}
+              style={{ marginRight: 16 }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={{ color: "#6B7280", fontSize: 15, fontWeight: "500" }}>取消订阅</Text>
+            </TouchableOpacity>
+          );
+        }
+        return (
+          <TouchableOpacity
+            onPress={() => {
+              // 未备份钱包：提示先备份
+              if (!walletIsBackedUp) {
+                setShowNotBackedUpDrawer(true);
+              } else {
+                setShowConfirmDrawer(true);
+              }
+            }}
+            style={{ marginRight: 16 }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={{ color: "#EF4444", fontSize: 15, fontWeight: "500" }}>移除</Text>
+          </TouchableOpacity>
+        );
+      },
     });
-  }, [navigation, walletIsBackedUp]);
+  }, [navigation, walletIsBackedUp, wallet?.isReadOnly]);
 
   useEffect(() => {
     loadDetail();
@@ -265,7 +285,7 @@ export default function WalletDetailScreen() {
           {/* 来源 */}
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>来源</Text>
-            <Text style={styles.infoValue}>{wallet.source === "CREATE" ? "创建" : "导入"}</Text>
+            <Text style={styles.infoValue}>{wallet.source === "CREATE" ? "创建" : wallet.source === "IMPORT" ? "导入" : wallet.source === "SUBSCRIBE" ? "只读订阅" : wallet.source}</Text>
           </View>
           <View style={styles.infoDivider} />
 
@@ -327,14 +347,16 @@ export default function WalletDetailScreen() {
         {/* Account list section */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>账户列表</Text>
-          <TouchableOpacity
-            style={styles.addAccountLink}
-            onPress={() => navigation.navigate("WalletAddAccount", { walletId: wallet.id })}
-            activeOpacity={0.6}
-          >
-            <PlusCircleIcon size={18} color="#287220" />
-            <Text style={styles.addAccountLinkText}>添加账户</Text>
-          </TouchableOpacity>
+          {!wallet.isReadOnly && (
+            <TouchableOpacity
+              style={styles.addAccountLink}
+              onPress={() => navigation.navigate("WalletAddAccount", { walletId: wallet.id })}
+              activeOpacity={0.6}
+            >
+              <PlusCircleIcon size={18} color="#287220" />
+              <Text style={styles.addAccountLinkText}>添加账户</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {accounts.length === 0 ? (
@@ -368,6 +390,25 @@ export default function WalletDetailScreen() {
               </View>
             </View>
           ))
+        )}
+
+        {/* 取消订阅按钮（仅只读钱包显示） */}
+        {wallet.isReadOnly && (
+          <TouchableOpacity
+            style={styles.unsubscribeBtn}
+            onPress={async () => {
+              try {
+                await useWalletStore.getState().unsubscribeWallet(wallet.id);
+                showToast("已取消订阅");
+                navigation.goBack();
+              } catch (err: any) {
+                showToast(err?.message || "取消订阅失败");
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.unsubscribeBtnText}>取消订阅此钱包</Text>
+          </TouchableOpacity>
         )}
       </ScrollView>
 
@@ -1087,5 +1128,20 @@ const styles = StyleSheet.create({
   },
   modalConfirmBtnDisabled: {
     backgroundColor: "#A5D6A7",
+  },
+  // ── 取消订阅按钮 ──
+  unsubscribeBtn: {
+    marginTop: 24,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  unsubscribeBtnText: {
+    color: "#6B7280",
+    fontWeight: "600",
+    fontSize: 15,
   },
 });

@@ -40,6 +40,7 @@ function localToSimple(w: LocalWallet): SimpleWallet {
     avatar: w.avatar,
     passwordHint: w.password_hint,
     createdAt: w.created_at,
+    isReadOnly: w.source === "SUBSCRIBE",
   };
 }
 
@@ -60,6 +61,7 @@ interface WalletState {
 
   loadLocalState: () => Promise<void>;
   syncWalletsWithServer: () => Promise<void>;
+  syncSubscribedWalletsAsync: () => void;
   fetchWallets: () => Promise<void>;
   fetchWalletsAggregate: () => Promise<SimpleWallet[]>;
   fetchAccounts: (walletId: string) => Promise<void>;
@@ -75,6 +77,8 @@ interface WalletState {
   deleteAccount: (accountId: string) => Promise<void>;
   fetchBalance: (walletId: string) => Promise<void>;
   verifyPassword: (walletId: string, password: string) => Promise<boolean>;
+  subscribeWallet: (walletId: string) => Promise<void>;
+  unsubscribeWallet: (walletId: string) => Promise<void>;
 }
 
 export const useWalletStore = create<WalletState>((set, get) => ({
@@ -120,10 +124,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // 3. Re-sync local wallets & addresses to server (recover from server data loss)
       await get().syncWalletsWithServer();
 
-      // 4. Fetch wallet state from local SQLite
+      // 4. Fetch wallet state from local SQLite (优先加载本地数据)
       await get().fetchWallets();
 
-      // 5. 启动时同步通知到本地
+      // 5. 异步加载订阅钱包（从后端获取当前设备的钱包列表，发现本地不存在时以 SUBSCRIBE 写入）
+      get().syncSubscribedWalletsAsync();
+
+      // 6. 启动时同步通知到本地
       try {
         await notificationSyncService.syncNotifications();
       } catch {
@@ -177,6 +184,78 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     } catch {
       // silent — sync failure should not block app startup
     }
+  },
+
+  /**
+   * 异步加载订阅钱包 — 从后端获取当前设备的钱包列表，
+   * 发现本地不存在时以 SUBSCRIBE 写入本地并同步地址。
+   * 不阻塞启动，异步执行。
+   */
+  syncSubscribedWalletsAsync: () => {
+    // 异步执行，不阻塞启动
+    (async () => {
+      try {
+        // 从后端获取当前设备订阅的所有钱包
+        const { wallets: serverWallets } = await walletService.getWallets();
+        const localWallets = await localWalletService.getAllWallets();
+        const localIds = new Set(localWallets.map((w) => w.id));
+
+        // 找出本地不存在但后端存在的钱包（即订阅钱包）
+        const newWallets = serverWallets.filter((w) => !localIds.has(w.id));
+        if (newWallets.length === 0) return;
+
+        for (const w of newWallets) {
+          try {
+            // 写入本地 wallets 表
+            await localWalletService.createWallet({
+              id: w.id,
+              name: w.name,
+              source: "SUBSCRIBE",
+              password_hash: "",
+              password_hint: "",
+              mnemonic_hash: "",
+            });
+
+            // 从后端获取该钱包的地址列表并写入本地
+            const { addresses } = await walletService.getWalletAddresses(w.id);
+            for (const addr of addresses) {
+              const existingAccount = await localAccountService.getAccountByAddress(addr.address);
+              if (!existingAccount) {
+                const { generateUUID } = await import("../db/database");
+                const accountId = generateUUID();
+                await localAccountService.createAccount({
+                  id: accountId,
+                  wallet_id: w.id,
+                  chain: addr.chain,
+                  derivation_path: "",
+                  address: addr.address,
+                  extended_pubkey: "",
+                  account_index: -1,
+                  name: `${addr.chain} Account`,
+                  server_address_id: addr.id,
+                });
+
+                await localAddressService.upsertAddress({
+                  chain: addr.chain,
+                  address: addr.address,
+                  walletId: w.id,
+                  name: `${addr.chain} Account`,
+                  type: "internalWallet",
+                  status: "verified",
+                });
+              }
+            }
+          } catch {
+            // 单个钱包同步失败，继续下一个
+          }
+        }
+
+        // 刷新钱包列表
+        await get().fetchWallets();
+      } catch {
+        // silent — 异步同步失败不影响用户
+      }
+    })();
   },
 
   /** Fetch wallets from local SQLite */
@@ -414,6 +493,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   /** Add account — derive address locally, save to SQLite + sync to server */
   addAccount: async (walletId: string, network: string, name?: string, allowMultiAccount?: boolean) => {
     try {
+      // 只读钱包无法添加账户
+      const localWallet = await localWalletService.getWalletById(walletId);
+      if (localWallet?.source === "SUBSCRIBE") {
+        throw new Error("只读钱包无法添加账户");
+      }
+
       // 读取助记词用于地址派生
       const mnemonic = await SecureStore.getItemAsync(mnemonicKey(walletId));
       if (!mnemonic) {
@@ -520,5 +605,79 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   /** Verify wallet password locally */
   verifyPassword: async (walletId: string, password: string): Promise<boolean> => {
     return localWalletService.verifyPassword(walletId, password);
+  },
+
+  /** Subscribe wallet (readonly) — subscribe an existing wallet without mnemonic */
+  subscribeWallet: async (walletId: string) => {
+    try {
+      // 1. 调用后端订阅 API
+      const result = await syncService.subscribeWalletReadonly(walletId);
+      const serverWallet = result.wallet;
+      const serverAddresses = result.addresses || [];
+
+      // 2. 写入本地 wallets 表（source=SUBSCRIBE, 无密码/助记词）
+      const existing = await localWalletService.getWalletById(walletId);
+      if (!existing) {
+        await localWalletService.createWallet({
+          id: walletId,
+          name: serverWallet.alias || "",
+          source: "SUBSCRIBE",
+          password_hash: "",
+          password_hint: "",
+          mnemonic_hash: "",
+        });
+      }
+
+      // 3. 写入本地 accounts 表（每个地址一条，无派生路径）
+      for (const addr of serverAddresses) {
+        const existingAccount = await localAccountService.getAccountByAddress(addr.address);
+        if (!existingAccount) {
+          const { generateUUID } = await import("../db/database");
+          const accountId = generateUUID();
+          await localAccountService.createAccount({
+            id: accountId,
+            wallet_id: walletId,
+            chain: addr.chain,
+            derivation_path: "",
+            address: addr.address,
+            extended_pubkey: "",
+            account_index: -1,
+            name: `${addr.chain} Account`,
+            server_address_id: addr.id,
+          });
+
+          // 同步写入 addresses 表
+          await localAddressService.upsertAddress({
+            chain: addr.chain,
+            address: addr.address,
+            walletId: walletId,
+            name: `${addr.chain} Account`,
+            type: "internalWallet",
+            status: "verified",
+          });
+        }
+      }
+
+      // 4. 刷新钱包列表
+      await get().fetchWallets();
+    } catch (err: any) {
+      throw err;
+    }
+  },
+
+  /** Unsubscribe wallet (readonly) — cancel subscription and clean local data */
+  unsubscribeWallet: async (walletId: string) => {
+    try {
+      // 1. 调用后端取消订阅 API
+      await syncService.unsubscribeWalletReadonly(walletId);
+
+      // 2. 删除本地数据
+      await localWalletService.deleteWallet(walletId);
+
+      // 3. 刷新钱包列表
+      await get().fetchWallets();
+    } catch (err: any) {
+      throw err;
+    }
   },
 }));

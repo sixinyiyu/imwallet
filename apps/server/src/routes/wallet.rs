@@ -8,7 +8,7 @@ use crate::models::{Wallet, WalletAddress};
 use crate::services::{device_service, wallet_service};
 use axum::{
     extract::{Path, Query, State},
-    routing::{delete, get},
+    routing::{delete, get, post},
     Extension, Json, Router,
 };
 use rbdc::DateTime;
@@ -29,6 +29,7 @@ pub fn router() -> Router<AppState> {
             "/wallets/{id}/addresses/{address_id}",
             delete(delete_address),
         )
+        .route("/wallets/{id}/subscribe", post(subscribe_wallet_readonly).delete(unsubscribe_wallet_readonly))
         .route("/recharges/my", get(get_my_recharges))
 }
 
@@ -145,6 +146,12 @@ impl From<WalletAddress> for AddressResponse {
             created_at: a.created_at,
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+struct SubscribeWalletResponse {
+    wallet: WalletResponse,
+    addresses: Vec<AddressResponse>,
 }
 
 #[derive(Debug, Serialize)]
@@ -321,7 +328,39 @@ async fn subscribe_chain(
     ))
 }
 
-/// GET /wallets/:id/addresses — 获取钱包的所有链上地址
+/// POST /wallets/:id/subscribe — 只读订阅钱包（当前设备订阅一个已存在的钱包）
+async fn subscribe_wallet_readonly(
+    State(state): State<AppState>,
+    Extension(device): Extension<DevicePayload>,
+    Path(wallet_id): Path<String>,
+) -> Result<(axum::http::StatusCode, Json<SubscribeWalletResponse>), AppError> {
+    let (wallet, addresses) = wallet_service::subscribe_wallet_readonly(
+        state.db.clone(),
+        &wallet_id,
+        &device.device_id,
+    )
+    .await?;
+
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(SubscribeWalletResponse {
+            wallet: WalletResponse::from(wallet),
+            addresses: addresses.into_iter().map(AddressResponse::from).collect(),
+        }),
+    ))
+}
+
+/// DELETE /wallets/:id/subscribe — 取消只读订阅（删除当前设备对该钱包的订阅记录）
+async fn unsubscribe_wallet_readonly(
+    State(state): State<AppState>,
+    Extension(device): Extension<DevicePayload>,
+    Path(wallet_id): Path<String>,
+) -> Result<axum::http::StatusCode, AppError> {
+    wallet_service::unsubscribe_wallet_readonly(state.db.clone(), &wallet_id, &device.device_id).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// GET /wallets/:id/addresseses — 获取钱包的所有链上地址
 async fn get_wallet_addresses(
     State(state): State<AppState>,
     Path(id): Path<String>,

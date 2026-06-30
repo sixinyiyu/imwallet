@@ -2,21 +2,29 @@ import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
   FlatList,
+  Modal,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { adminService, type WalletAdminInfo, type WalletTransaction } from "../services/adminService";
 import { rechargeService, type RechargeRecord } from "../services/rechargeService";
 import { walletService } from "../services/walletService";
+import type { SimpleWallet } from "../types";
 import { configService, type FeeConfig } from "../services/configService";
-import { ChevronRightIcon, AndroidIcon, IosIcon, WalletIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
+import { ChevronRightIcon, AndroidIcon, IosIcon, WalletIcon, PlusCircleIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
 import { WalletListSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import { formatTime } from "../utils/date";
 import { getPlaintextPassword, clearAdminAuthCache } from "../utils/adminAuthCache";
+import { useWalletStore } from "../stores/walletStore";
 import type { RouteProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../types/navigation";
 
@@ -62,6 +70,13 @@ export default function DeviceManageScreen() {
 
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
+
+  // 订阅钱包相关状态
+  const [showSubscribeModal, setShowSubscribeModal] = useState(false);
+  const [subscribeWallets, setSubscribeWallets] = useState<SimpleWallet[]>([]);
+  const [subscribeLoading, setSubscribeLoading] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
+  const [subscribeError, setSubscribeError] = useState<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -169,6 +184,42 @@ export default function DeviceManageScreen() {
     setLoadingMore(false);
   };
 
+  // ── 订阅钱包 ──
+
+  const handleOpenSubscribe = async () => {
+    setSubscribeLoading(true);
+    setSubscribeError(null);
+    try {
+      // 加载所有系统钱包
+      const { wallets: allWallets } = await walletService.getAllWallets({ limit: 100 });
+      // 获取当前设备已订阅的钱包 ID
+      const currentWalletIds = new Set(useWalletStore.getState().wallets.map((w) => w.id));
+      // 过滤掉已订阅的
+      const available = allWallets.filter((w) => !currentWalletIds.has(w.id));
+      setSubscribeWallets(available);
+      setShowSubscribeModal(true);
+    } catch (err: any) {
+      showToast(err?.message || "加载钱包列表失败");
+    }
+    setSubscribeLoading(false);
+  };
+
+  const handleSubscribeWallet = async (walletId: string) => {
+    setSubscribing(true);
+    setSubscribeError(null);
+    try {
+      await useWalletStore.getState().subscribeWallet(walletId);
+      showToast("订阅成功");
+      setShowSubscribeModal(false);
+      // 刷新钱包列表（移除已订阅的）
+      const currentWalletIds = new Set(useWalletStore.getState().wallets.map((w) => w.id));
+      setSubscribeWallets((prev) => prev.filter((w) => !currentWalletIds.has(w.id)));
+    } catch (err: any) {
+      setSubscribeError(err?.message || "订阅失败，请重试");
+    }
+    setSubscribing(false);
+  };
+
   if (walletsLoading) {
     return (
       <View style={styles.container}>
@@ -179,6 +230,23 @@ export default function DeviceManageScreen() {
 
   return (
     <View style={styles.container}>
+      {/* 订阅钱包按钮 */}
+      <TouchableOpacity
+        style={styles.subscribeBtn}
+        onPress={handleOpenSubscribe}
+        disabled={subscribeLoading}
+        activeOpacity={0.7}
+      >
+        {subscribeLoading ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <View style={styles.subscribeBtnContent}>
+            <PlusCircleIcon size={18} color="#fff" />
+            <Text style={styles.subscribeBtnText}>订阅钱包</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+
       <FlatList
         data={wallets}
         keyExtractor={(w) => w.id}
@@ -405,6 +473,64 @@ export default function DeviceManageScreen() {
           </View>
         </View>
       )}
+
+      {/* 订阅钱包 Modal */}
+      <Modal
+        visible={showSubscribeModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSubscribeModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.drawerOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+            <Pressable style={styles.drawerBackdrop} onPress={() => setShowSubscribeModal(false)} />
+            <View style={styles.drawerContent}>
+              <View style={styles.drawerHandle} />
+              <Text style={styles.drawerTitle}>订阅钱包</Text>
+              <Text style={styles.drawerDesc}>选择一个钱包订阅到当前设备（只读，无法转账或添加账户）</Text>
+              {subscribeError && <Text style={styles.subscribeError}>{subscribeError}</Text>}
+              {subscribeWallets.length === 0 ? (
+                <View style={styles.subscribeEmpty}>
+                  <Text style={styles.subscribeEmptyText}>所有钱包均已订阅</Text>
+                </View>
+              ) : (
+                subscribeWallets.map((w) => (
+                  <TouchableOpacity
+                    key={w.id}
+                    style={styles.subscribeWalletRow}
+                    onPress={() => handleSubscribeWallet(w.id)}
+                    disabled={subscribing}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.subscribeWalletIconWrap}>
+                      <WalletIcon size={20} color="#287220" />
+                    </View>
+                    <View style={styles.subscribeWalletInfo}>
+                      <Text style={styles.subscribeWalletName}>{w.name}</Text>
+                      <Text style={styles.subscribeWalletId} selectable>{w.id}</Text>
+                    </View>
+                    {subscribing ? (
+                      <ActivityIndicator size="small" color="#287220" />
+                    ) : (
+                      <ChevronRightIcon size={16} color="#8899B8" />
+                    )}
+                  </TouchableOpacity>
+                ))
+              )}
+              <TouchableOpacity
+                style={styles.drawerCancelBtn}
+                onPress={() => setShowSubscribeModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.drawerCancelText}>关闭</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -556,4 +682,52 @@ const styles = StyleSheet.create({
   toastWrap: { position: "absolute", bottom: 80, left: 0, right: 0, alignItems: "center" },
   toast: { backgroundColor: "rgba(0,0,0,0.75)", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
   toastText: { color: "#FFFFFF", fontSize: 14 },
+
+  // ── 订阅钱包按钮 ──
+  subscribeBtn: {
+    backgroundColor: "#287220",
+    borderRadius: 10,
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    alignItems: "center",
+  },
+  subscribeBtnContent: { flexDirection: "row", alignItems: "center", gap: 8 },
+  subscribeBtnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+
+  // ── 订阅钱包 Modal ──
+  drawerOverlay: { flex: 1, justifyContent: "flex-end" },
+  drawerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
+  drawerContent: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 24,
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+    paddingTop: 12,
+  },
+  drawerHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "#D1D5DB", alignSelf: "center", marginBottom: 20 },
+  drawerTitle: { fontSize: 17, fontWeight: "600", color: "#1F2937", marginBottom: 8 },
+  drawerDesc: { fontSize: 13, color: "#9CA3AF", marginBottom: 16 },
+  subscribeError: { fontSize: 13, color: "#EF4444", marginBottom: 12 },
+  subscribeEmpty: { paddingVertical: 32, alignItems: "center" },
+  subscribeEmptyText: { fontSize: 14, color: "#9CA3AF" },
+  subscribeWalletRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+  },
+  subscribeWalletIconWrap: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center",
+    marginRight: 12,
+  },
+  subscribeWalletInfo: { flex: 1 },
+  subscribeWalletName: { fontSize: 15, fontWeight: "500", color: "#1F2937" },
+  subscribeWalletId: { fontSize: 11, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
+  drawerCancelBtn: {
+    marginTop: 16, paddingVertical: 14, borderRadius: 10,
+    backgroundColor: "#F3F4F6", alignItems: "center",
+  },
+  drawerCancelText: { color: "#6B7280", fontWeight: "600", fontSize: 15 },
 });

@@ -147,7 +147,7 @@ export default function WalletScreen() {
                   ]}
                   numberOfLines={1}
                 >
-                  {w.name}
+                  {w.name}{w.isReadOnly ? " (只读)" : ""}
                 </Text>
               </TouchableOpacity>
             ))}

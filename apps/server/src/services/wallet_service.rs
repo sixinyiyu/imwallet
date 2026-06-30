@@ -323,6 +323,102 @@ pub async fn get_wallet_balance(
     })
 }
 
+/// 只读订阅钱包 — 当前设备订阅一个已存在的钱包（不含助记词）。
+/// 逻辑：
+///   1. 查询钱包是否存在
+///   2. 检查当前设备是否已订阅该钱包
+///   3. 获取该钱包的所有链上地址
+///   4. 为每个地址批量插入 wallet_subscriptions 记录
+///   5. 返回钱包信息 + 地址列表
+pub async fn subscribe_wallet_readonly(
+    rb: Arc<RBatis>,
+    wallet_id: &str,
+    device_id: &str,
+) -> Result<(Wallet, Vec<WalletAddress>), AppError> {
+    // 1. 查询钱包是否存在
+    let wallet = get_wallet(rb.clone(), wallet_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("钱包不存在".into()))?;
+
+    // 2. 检查当前设备是否已订阅该钱包（任何一条订阅记录即可）
+    #[derive(serde::Deserialize)]
+    struct SubCheck {
+        count: i64,
+    }
+    let check: SubCheck = query_one(
+        &rb,
+        "SELECT COUNT(*) as count FROM wallet_subscriptions WHERE wallet_id = $1 AND device_id = $2",
+        vals![wallet_id, device_id],
+    )
+    .await?
+    .ok_or_else(|| AppError::Internal("订阅检查失败".into()))?;
+    if check.count > 0 {
+        // 已订阅 — 直接返回钱包信息和地址列表（幂等）
+        let addresses = get_wallet_addresses(rb.clone(), wallet_id).await?;
+        log::info!(
+            "[只读订阅] 已存在 — 钱包={}, 设备={}, 地址数={}",
+            wallet_id,
+            device_id,
+            addresses.len()
+        );
+        return Ok((wallet, addresses));
+    }
+
+    // 3. 获取该钱包的所有链上地址
+    let addresses = get_wallet_addresses(rb.clone(), wallet_id).await?;
+
+    // 4. 批量插入订阅记录
+    if addresses.is_empty() {
+        // 钱包暂无链上地址 — 插入一条空订阅占位（与创建钱包时的逻辑一致）
+        crate::db::query::exec(
+            &rb,
+            "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES ($1, $2, '', '') ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
+            vals![wallet_id, device_id, "", ""],
+        )
+        .await?;
+    } else {
+        for wa in &addresses {
+            crate::services::device_service::subscribe_wallet(
+                rb.clone(),
+                wallet_id,
+                device_id,
+                &wa.chain,
+                &wa.id,
+            )
+            .await?;
+        }
+    }
+
+    log::info!(
+        "[只读订阅] 成功 — 钱包={}, 设备={}, 地址数={}",
+        wallet_id,
+        device_id,
+        addresses.len()
+    );
+    Ok((wallet, addresses))
+}
+
+/// 取消只读订阅 — 仅删除当前设备对该钱包的订阅记录，不删除钱包本身
+pub async fn unsubscribe_wallet_readonly(
+    rb: Arc<RBatis>,
+    wallet_id: &str,
+    device_id: &str,
+) -> Result<(), AppError> {
+    // 检查钱包是否存在
+    let _wallet = get_wallet(rb.clone(), wallet_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("钱包不存在".into()))?;
+
+    crate::services::device_service::unsubscribe_wallet(rb, wallet_id, device_id).await?;
+
+    log::info!(
+        "[只读订阅] 取消 — 钱包={}, 设备={}",
+        wallet_id,
+        device_id
+    );
+    Ok(())
+}
+
 pub async fn get_all_wallets(
     rb: Arc<RBatis>,
     search: Option<&str>,

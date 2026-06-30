@@ -34,6 +34,8 @@ export interface SimpleWallet {
   avatar: string;
   passwordHint: string;
   createdAt: string;
+  /** 只读订阅标记：source=SUBSCRIBE 时为 true */
+  isReadOnly?: boolean;
 }
 
 /** 聚合钱包信息（含网络列表，供钱包列表页使用） */

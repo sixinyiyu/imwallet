@@ -125,11 +125,15 @@ export const localWalletService = {
 
   async verifyPassword(id: string, password: string): Promise<boolean> {
     const db = await getDatabase();
-    const row = await db.selectOne<{ password_hash: string }>("wallets", {
+    const row = await db.selectOne<LocalWallet>("wallets", {
       where: { id },
     });
-    if (!row || !row.password_hash) return false;
-    return hashPassword(password) === row.password_hash;
+    if (!row) return false;
+    // 只读订阅钱包没有密码，直接返回 false
+    const wallet = rowToWallet(row);
+    if (wallet.source === "SUBSCRIBE") return false;
+    if (!wallet.password_hash) return false;
+    return hashPassword(password) === wallet.password_hash;
   },
 
   async verifyMnemonicHash(id: string, mnemonicHash: string): Promise<boolean> {

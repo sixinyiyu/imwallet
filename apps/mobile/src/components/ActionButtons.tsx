@@ -58,12 +58,15 @@ export default function ActionButtons({
         end={{ x: 1, y: 0 }}
         style={styles.container}
       >
-        <TouchableOpacity style={styles.button} onPress={handleTransferPress}>
-          <View style={styles.iconCircle}>
-            <TransferIcon size={22} color="#FFFFFF" />
-          </View>
-          <Text style={styles.label}>转账</Text>
-        </TouchableOpacity>
+        {/* 只读钱包不显示转账按钮 */}
+        {!activeWallet?.isReadOnly && (
+          <TouchableOpacity style={styles.button} onPress={handleTransferPress}>
+            <View style={styles.iconCircle}>
+              <TransferIcon size={22} color="#FFFFFF" />
+            </View>
+            <Text style={styles.label}>转账</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={styles.button}
           onPress={handleReceivePress}
