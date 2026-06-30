@@ -65,7 +65,7 @@ export default function ConfigManageScreen() {
   const loadConfig = async () => {
     setLoading(true);
     try {
-      const allConfigs = await configService.getAllConfigs();
+      const allConfigs = await configService.getAllConfigs(true);
       const feeRateItem = allConfigs.find((c) => c.key === "fee_rate");
       const feeModeItem = allConfigs.find((c) => c.key === "fee_mode");
       setFeeConfig({
