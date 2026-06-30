@@ -21,9 +21,19 @@ pub async fn register_device(
     )
     .await?;
     if let Some(d) = inserted {
+        log::info!(
+            "[设备] 注册成功 — ID={}, 平台={}, 新设备",
+            &d.id,
+            &d.platform
+        );
         return Ok((d, true));
     }
     // ON CONFLICT 触发，设备已存在
+    log::info!(
+        "[设备] 已存在 — ID={}, 平台={}",
+        device_id,
+        platform
+    );
     let existing = get_device(rb, device_id)
         .await?
         .ok_or_else(|| AppError::Internal("设备注册失败".into()))?;
@@ -53,9 +63,23 @@ pub async fn subscribe_wallet(
     )
     .await?;
     if let Some(sub) = inserted {
+        log::info!(
+            "[订阅] 新建 — 钱包={}, 设备={}, 链={}, 地址ID={}",
+            wallet_id,
+            device_id,
+            chain,
+            address_id
+        );
         return Ok(sub);
     }
     // ON CONFLICT 触发，订阅已存在 — 查询已有记录返回，不报错
+    log::info!(
+        "[订阅] 已存在 — 钱包={}, 设备={}, 链={}, 地址ID={}",
+        wallet_id,
+        device_id,
+        chain,
+        address_id
+    );
     let existing: WalletSubscription = query_one(
         &rb,
         "SELECT * FROM wallet_subscriptions WHERE wallet_id = $1 AND device_id = $2 AND chain = $3 AND address_id = $4",

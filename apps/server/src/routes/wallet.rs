@@ -293,6 +293,14 @@ async fn subscribe_chain(
     Path(wallet_id): Path<String>,
     Json(body): Json<SyncAddressRequest>,
 ) -> Result<(axum::http::StatusCode, Json<AddressResponse>), AppError> {
+    log::info!(
+        "[链上账户] 创建 — 钱包={}, 链={}, 地址={}, 设备={}",
+        wallet_id,
+        body.chain,
+        &body.address[..8.min(body.address.len())],
+        device.device_id
+    );
+
     let wa = wallet_service::subscribe_chain(state.db.clone(), &body.chain, &body.address).await?;
 
     // 创建订阅记录

@@ -45,6 +45,18 @@ pub async fn execute_transfer(
     platform: &str,
     cfg: &RuntimeConfig,
 ) -> Result<TransferResult, AppError> {
+    log::info!(
+        "[转账] 设备{}从{}端发起转账请求，钱包ID{} -- {}({}) --> 收款方(地址{}), 转账金额 {} {}, 手续费模式{}",
+        short_addr(device_id),
+        platform,
+        &input.from_wallet_id,
+        &input.token_symbol,
+        &input.network,
+        short_addr(&input.to_address),
+        input.amount,
+        &input.token_symbol,
+        &cfg.fee_mode
+    );
     // 校验收款地址格式与链类型匹配
     let v = address_validator::validate_address_for_chain(&input.to_address, &input.network);
     if !v.is_valid {
@@ -100,10 +112,10 @@ pub async fn execute_transfer(
 
     let fee_rate = Decimal::from_f64_retain(cfg.fee_rate).unwrap_or(Decimal::new(5, 3));
     let fee_mode = FeeMode::from_str(&cfg.fee_mode);
-    let fee = input.amount * fee_rate;
+    let fee = (input.amount * fee_rate).round_dp(6);
     let (received, total_debit) = match fee_mode {
-        FeeMode::Deducted => (input.amount - fee, input.amount),
-        FeeMode::Extra => (input.amount, input.amount + fee),
+        FeeMode::Deducted => ((input.amount - fee).round_dp(6), input.amount),
+        FeeMode::Extra => (input.amount, (input.amount + fee).round_dp(6)),
     };
     if bal.balance < total_debit {
         return Err(AppError::BadRequest("余额不足".into()));
@@ -156,8 +168,12 @@ pub async fn execute_transfer(
     let tx_hash = format!("0x{}", hex::encode(Sha256::digest(hash.as_bytes())));
     tx_exec(&tx, "INSERT INTO transactions (id, tx_hash, from_address, to_address, token_symbol, amount, fee, status, memo, platform, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, 'CONFIRMED', $8, $9, NOW(), NOW())", vals![&tx_id, &tx_hash, &from_addr.address, &input.to_address, &input.token_symbol, rbdc::Decimal::new(&input.amount.to_string()).unwrap(), rbdc::Decimal::new(&fee.to_string()).unwrap(), input.memo.as_deref().unwrap_or(""), platform]).await?;
 
+    // 通知内容：金额统一 round_dp(6) 避免精度溢出（如 3.9799999999999999995836663656）
+    let amount_display = input.amount.round_dp(6);
+    let received_display = received.round_dp(6);
+
     let nid1 = uuid::Uuid::new_v4().to_string();
-    tx_exec(&tx, "INSERT INTO notifications (id, wallet_id, title, content, type, created_at) VALUES ($1, $2, '转账成功', $3, $4, NOW())", vals![&nid1, &input.from_wallet_id, &format!("转出 {} {}", input.amount, input.token_symbol), TRANSFER_OUT]).await?;
+    tx_exec(&tx, "INSERT INTO notifications (id, wallet_id, title, content, type, created_at) VALUES ($1, $2, '转账成功', $3, $4, NOW())", vals![&nid1, &input.from_wallet_id, &format!("转出 {} {}", amount_display, input.token_symbol), TRANSFER_OUT]).await?;
 
     if let Some(to) = to_addr.first() {
         #[derive(serde::Deserialize)]
@@ -172,11 +188,27 @@ pub async fn execute_transfer(
         .await?;
         for w in wallets {
             let nid2 = uuid::Uuid::new_v4().to_string();
-            tx_exec(&tx, "INSERT INTO notifications (id, wallet_id, title, content, type, created_at) VALUES ($1, $2, '收到转账', $3, $4, NOW())", vals![&nid2, &w.wallet_id, &format!("收到 {} {}", received, input.token_symbol), TRANSFER_IN]).await?;
+            tx_exec(&tx, "INSERT INTO notifications (id, wallet_id, title, content, type, created_at) VALUES ($1, $2, '收到转账', $3, $4, NOW())", vals![&nid2, &w.wallet_id, &format!("收到 {} {}", received_display, input.token_symbol), TRANSFER_IN]).await?;
         }
     }
 
     tx.commit().await?;
+
+    log::info!(
+        "[转账] 完成 — 交易ID={}, 发送方(地址{}) -- {}({}) --> 接收方(地址{}), 转账金额 {} {}, 手续费 {}, 实到 {}, 手续费模式{}, 转账结果：已确认, 交易哈希{}",
+        &tx_id,
+        short_addr(&from_addr.address),
+        &input.token_symbol,
+        &input.network,
+        short_addr(&input.to_address),
+        input.amount,
+        &input.token_symbol,
+        fee,
+        received,
+        &cfg.fee_mode,
+        &tx_hash
+    );
+
     Ok(TransferResult {
         id: tx_id,
         tx_hash,
@@ -258,4 +290,13 @@ pub async fn get_transaction(
     )
     .await
     .map_err(AppError::from)
+}
+
+/// 地址截断显示：前8后4，用于日志脱敏
+fn short_addr(addr: &str) -> String {
+    if addr.len() <= 12 {
+        addr.to_string()
+    } else {
+        format!("{}...{}", &addr[..8], &addr[addr.len() - 4..])
+    }
 }

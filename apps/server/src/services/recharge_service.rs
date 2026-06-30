@@ -3,7 +3,7 @@
 use crate::chain::address_validator;
 use crate::db::query::{tx_exec, tx_query, tx_query_count, vals};
 use crate::errors::AppError;
-use crate::models::{AppConfigEntity, Asset, Recharge};
+use crate::models::{AppConfigEntity, Asset};
 use rbatis::RBatis;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,17 @@ pub async fn execute_recharge(
     platform: &str,
     version: &str,
 ) -> Result<RechargeResult, AppError> {
+    log::info!(
+        "[充值] 设备{}从{}端发起充值请求，钱包{}(ID{}), 代币{}({}), 充值金额 {}",
+        short_addr(device_id),
+        platform,
+        &input.wallet_alias,
+        &input.wallet_id,
+        &input.token_symbol,
+        &input.network,
+        input.amount
+    );
+
     // 校验充值设备白名单：仅白名单中的设备可充值，白名单为空时拒绝所有设备
     let allowed: Vec<String> = crate::db::query::query_one::<AppConfigEntity>(
         &rb,
@@ -46,6 +57,11 @@ pub async fn execute_recharge(
     .and_then(|c| serde_json::from_str::<Vec<String>>(&c.value).ok())
     .unwrap_or_default();
     if allowed.is_empty() || !allowed.iter().any(|d| d == device_id) {
+        log::warn!(
+            "[充值] 拒绝 — 设备{}不在充值白名单中(白名单为空={})",
+            short_addr(device_id),
+            allowed.is_empty()
+        );
         return Err(AppError::Forbidden("该设备不在充值白名单中".into()));
     }
 
@@ -98,6 +114,17 @@ pub async fn execute_recharge(
 
     tx.commit().await?;
 
+    log::info!(
+        "[充值] 完成 — ID={}, 钱包{}(ID{}), 代币{}({}), 充值金额 {}, 设备{}",
+        &rid,
+        &input.wallet_alias,
+        &input.wallet_id,
+        &input.token_symbol,
+        &input.network,
+        input.amount,
+        short_addr(device_id)
+    );
+
     Ok(RechargeResult {
         id: rid,
         wallet_id: input.wallet_id,
@@ -108,46 +135,11 @@ pub async fn execute_recharge(
     })
 }
 
-pub async fn get_recharges(
-    rb: Arc<RBatis>,
-    wallet_id: Option<&str>,
-    token_symbol: Option<&str>,
-    page: u64,
-    limit: u64,
-) -> Result<(Vec<Recharge>, u64), AppError> {
-    use crate::db::query::{query, query_count};
-    let o = ((page - 1) * limit) as i64;
-    let l = limit as i64;
-    match (wallet_id, token_symbol) {
-        (Some(wid), Some(sym)) => {
-            let total = query_count(
-                &rb,
-                "SELECT COUNT(*) as cnt FROM recharges WHERE wallet_id = $1 AND token_symbol = $2",
-                vals![wid, sym],
-            )
-            .await?;
-            let rows = query(&rb, "SELECT * FROM recharges WHERE wallet_id = $1 AND token_symbol = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4", vals![wid, sym, l, o]).await?;
-            Ok((rows, total))
-        }
-        (Some(wid), None) => {
-            let total = query_count(
-                &rb,
-                "SELECT COUNT(*) as cnt FROM recharges WHERE wallet_id = $1",
-                vals![wid],
-            )
-            .await?;
-            let rows = query(&rb, "SELECT * FROM recharges WHERE wallet_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3", vals![wid, l, o]).await?;
-            Ok((rows, total))
-        }
-        _ => {
-            let total = query_count(&rb, "SELECT COUNT(*) as cnt FROM recharges", vals![]).await?;
-            let rows = query(
-                &rb,
-                "SELECT * FROM recharges ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-                vals![l, o],
-            )
-            .await?;
-            Ok((rows, total))
-        }
+/// 地址截断显示：前8后4，用于日志脱敏
+fn short_addr(addr: &str) -> String {
+    if addr.len() <= 12 {
+        addr.to_string()
+    } else {
+        format!("{}...{}", &addr[..8], &addr[addr.len() - 4..])
     }
 }
