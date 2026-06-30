@@ -9,6 +9,8 @@ import {
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { adminService, type WalletAdminInfo, type WalletTransaction, type WalletRecharge } from "../services/adminService";
+import { walletService } from "../services/walletService";
+import { configService, type FeeConfig } from "../services/configService";
 import { ChevronRightIcon, AndroidIcon, IosIcon, WalletIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
 import { WalletListSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
@@ -49,12 +51,18 @@ export default function DeviceManageScreen() {
   const [walletsLoadingMore, setWalletsLoadingMore] = useState(false);
 
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
+  // 当前选中钱包的链上地址（用于判断交易角色：发送方 vs 接收方）
+  const [walletAddresses, setWalletAddresses] = useState<string[]>([]);
+  // 手续费配置（用于计算实到金额）
+  const [feeConfig, setFeeConfig] = useState<FeeConfig>({ feeRate: 0.005, feeMode: "DEDUCTED" });
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [recharges, setRecharges] = useState<WalletRecharge[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataTab, setDataTab] = useState<"transactions" | "recharges">("transactions");
   const [dataOffset, setDataOffset] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  // 当前设备是否有充值权限（控制充值tab是否显示）
+  const [rechargePermitted, setRechargePermitted] = useState(false);
 
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
@@ -91,6 +99,8 @@ export default function DeviceManageScreen() {
   useEffect(() => {
     setWalletsLoading(true);
     loadWallets(1).finally(() => setWalletsLoading(false));
+    // 同时检查充值权限
+    configService.getRechargePermitted().then(setRechargePermitted).catch(() => setRechargePermitted(false));
   }, [adminPwd]);
 
   const handleWalletsLoadMore = async () => {
@@ -103,6 +113,7 @@ export default function DeviceManageScreen() {
   const handleSelectWallet = async (walletId: string) => {
     if (selectedWallet === walletId) {
       setSelectedWallet(null);
+      setWalletAddresses([]);
       return;
     }
     setSelectedWallet(walletId);
@@ -110,12 +121,25 @@ export default function DeviceManageScreen() {
     setDataTab("transactions");
     setDataLoading(true);
     try {
-      const [txns, rechs] = await Promise.all([
-        adminService.getWalletTransactions(walletId, adminPwd, 0),
-        adminService.getWalletRecharges(walletId, adminPwd, 0),
-      ]);
-      setTransactions(txns);
-      setRecharges(rechs);
+      // 同时获取钱包地址（判断交易角色）和手续费配置
+      const fetches: Promise<any>[] = [
+        adminService.getWalletTransactions(walletId, adminPwd, 1, 20),
+        walletService.getWalletAddresses(walletId).catch(() => ({ addresses: [] })),
+        configService.getFeeConfig().catch(() => null),
+      ];
+      // 仅充值权限设备才加载充值数据
+      if (rechargePermitted) {
+        fetches.push(adminService.getRechargeRecords(adminPwd, 1, 20, walletId));
+      }
+      const results = await Promise.all(fetches);
+      setTransactions(results[0].transactions);
+      setWalletAddresses(results[1].addresses.map((a: any) => a.address));
+      if (results[2]) setFeeConfig(results[2]);
+      if (rechargePermitted && results[3]) {
+        setRecharges(results[3].recharges);
+      } else {
+        setRecharges([]);
+      }
     } catch (err: any) {
       const msg = err?.message || "加载钱包数据失败";
       if (__DEV__) console.warn("[DeviceManage] loadWalletData error:", msg);
@@ -131,11 +155,11 @@ export default function DeviceManageScreen() {
     setLoadingMore(true);
     try {
       if (dataTab === "transactions") {
-        const more = await adminService.getWalletTransactions(selectedWallet, adminPwd, nextOffset);
-        setTransactions((prev) => [...prev, ...more]);
+        const more = await adminService.getWalletTransactions(selectedWallet, adminPwd, Math.floor(nextOffset / 20) + 1, 20);
+        setTransactions((prev) => [...prev, ...more.transactions]);
       } else {
-        const more = await adminService.getWalletRecharges(selectedWallet, adminPwd, nextOffset);
-        setRecharges((prev) => [...prev, ...more]);
+        const more = await adminService.getRechargeRecords(adminPwd, Math.floor(nextOffset / 20) + 1, 20, selectedWallet);
+        setRecharges((prev) => [...prev, ...more.recharges]);
       }
     } catch (err: any) {
       const msg = err?.message || "加载更多失败";
@@ -233,7 +257,8 @@ export default function DeviceManageScreen() {
                   <ActivityIndicator size="small" color="#287220" style={{ marginVertical: 16 }} />
                 ) : (
                   <>
-                    {/* Tab 切换 */}
+                    {/* Tab 切换 — 仅充值权限设备显示充值tab */}
+                    {rechargePermitted ? (
                     <View style={styles.tabRow}>
                       <TouchableOpacity
                         style={[styles.tab, dataTab === "transactions" && styles.tabActive]}
@@ -248,12 +273,33 @@ export default function DeviceManageScreen() {
                         <Text style={[styles.tabText, dataTab === "recharges" && styles.tabTextActive]}>充值</Text>
                       </TouchableOpacity>
                     </View>
+                    ) : (
+                    <View style={styles.tabRow}>
+                      <View style={[styles.tab, styles.tabActive]}
+                      >
+                        <Text style={[styles.tabText, styles.tabTextActive]}>交易</Text>
+                      </View>
+                    </View>
+                    )}
 
                     {dataTab === "transactions" ? (
                       transactions.length === 0 ? (
                         <EmptyState message="暂无交易记录" />
                       ) : (
-                        transactions.map((t) => (
+                        transactions.map((t) => {
+                          // 判断交易角色：发送方 vs 接收方
+                          const isReceive = walletAddresses.includes(t.toAddress);
+                          const isSend = walletAddresses.includes(t.fromAddress);
+                          const feeNum = parseFloat(t.fee) || 0;
+                          const amountNum = parseFloat(t.amount) || 0;
+                          // 计算实到金额
+                          const receivedNum = feeConfig.feeMode === "EXTRA" ? amountNum : amountNum - feeNum;
+                          const directionLabel = isReceive ? "收到" : "发送";
+                          const directionColor = isReceive ? "#10B981" : "#EF4444";
+                          // 接收方看到实到金额，发送方看到转账金额
+                          const displayAmount = isReceive ? receivedNum : amountNum;
+                          const prefix = isReceive ? "+" : "-";
+                          return (
                           <View key={t.id} style={styles.txCard}>
                             <View style={styles.txTopRow}>
                               <View style={styles.txTokenWrap}>
@@ -262,8 +308,11 @@ export default function DeviceManageScreen() {
                                   : <Text style={styles.txTokenEmoji}>🪙</Text>
                                 }
                                 <Text style={styles.txSymbol}>{t.tokenSymbol}</Text>
+                                <Text style={[styles.txDirection, { color: directionColor }]}>{directionLabel}</Text>
                               </View>
-                              <Text style={styles.txAmount}>{t.amount} / 手续费 {t.fee}</Text>
+                              <Text style={[styles.txAmount, { color: directionColor }]}>
+                                {prefix}{displayAmount.toFixed(6)}
+                              </Text>
                             </View>
                             <View style={styles.txAddrRow}>
                               <Text style={styles.txAddr} numberOfLines={1} ellipsizeMode="middle">
@@ -276,10 +325,14 @@ export default function DeviceManageScreen() {
                             </View>
                             <View style={styles.txBottomRow}>
                               <Text style={styles.txTime}>{formatTime(t.createdAt)}</Text>
-                              <Text style={styles.txPlatform}>{t.platform === "ios" ? "iOS" : "Android"}</Text>
+                              {/* 发送方显示手续费+实到，接收方不显示手续费 */}
+                              {isSend && feeNum > 0 && (
+                                <Text style={styles.txFee}>手续费 {feeNum.toFixed(6)} · 实到 {receivedNum.toFixed(6)}</Text>
+                              )}
                             </View>
                           </View>
-                        ))
+                          );
+                        })
                       )
                     ) : (
                       recharges.length === 0 ? (
@@ -480,6 +533,8 @@ const styles = StyleSheet.create({
   txTokenEmoji: { fontSize: 16 },
   txSymbol: { fontSize: 15, fontWeight: "600", color: "#1F2937" },
   txAmount: { fontSize: 15, fontWeight: "700", color: "#1F2937" },
+  txDirection: { fontSize: 13, fontWeight: "500", marginLeft: 6 },
+  txFee: { fontSize: 12, color: "#9CA3AF" },
   txAddrRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   txAddr: { fontSize: 13, color: "#6B7280", fontFamily: "monospace", flex: 1 },
   txAddrLabel: { fontSize: 13, fontWeight: "500", color: "#374151", marginRight: 6 },
