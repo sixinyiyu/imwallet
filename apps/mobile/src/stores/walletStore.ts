@@ -267,7 +267,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     try {
       const localWallets = await localWalletService.getAllWallets();
       const wallets = localWallets.map(localToSimple);
-      const active = wallets[0] || null;
+      // 保持用户已选择的钱包，如果该钱包仍在列表中；否则取第一个
+      const currentActive = get().activeWallet;
+      const active = currentActive && wallets.some((w) => w.id === currentActive.id)
+        ? wallets.find((w) => w.id === currentActive.id)!
+        : wallets[0] || null;
 
       let accounts: Account[] = [];
       if (active) {
