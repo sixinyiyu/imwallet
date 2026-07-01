@@ -392,24 +392,6 @@ export default function WalletDetailScreen() {
           ))
         )}
 
-        {/* 取消订阅按钮（仅只读钱包显示） */}
-        {wallet.isReadOnly && (
-          <TouchableOpacity
-            style={styles.unsubscribeBtn}
-            onPress={async () => {
-              try {
-                await useWalletStore.getState().unsubscribeWallet(wallet.id);
-                showToast("已取消订阅");
-                navigation.goBack();
-              } catch (err: any) {
-                showToast(err?.message || "取消订阅失败");
-              }
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.unsubscribeBtnText}>取消订阅此钱包</Text>
-          </TouchableOpacity>
-        )}
       </ScrollView>
 
       {/* Toast */}
@@ -1128,20 +1110,5 @@ const styles = StyleSheet.create({
   },
   modalConfirmBtnDisabled: {
     backgroundColor: "#A5D6A7",
-  },
-  // ── 取消订阅按钮 ──
-  unsubscribeBtn: {
-    marginTop: 24,
-    paddingVertical: 14,
-    borderRadius: 10,
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  unsubscribeBtnText: {
-    color: "#6B7280",
-    fontWeight: "600",
-    fontSize: 15,
   },
 });
