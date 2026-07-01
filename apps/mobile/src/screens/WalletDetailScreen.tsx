@@ -285,7 +285,7 @@ export default function WalletDetailScreen() {
           {/* 来源 */}
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>来源</Text>
-            <Text style={styles.infoValue}>{wallet.source === "CREATE" ? "创建" : wallet.source === "IMPORT" ? "导入" : wallet.source === "SUBSCRIBE" ? "只读订阅" : wallet.source}</Text>
+            <Text style={styles.infoValue}>{wallet.source === "CREATE" ? "创建" : wallet.source === "IMPORT" ? "导入" : wallet.source === "SUBSCRIBE" ? "订阅" : wallet.source}</Text>
           </View>
           <View style={styles.infoDivider} />
 
