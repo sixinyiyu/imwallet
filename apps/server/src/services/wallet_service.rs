@@ -349,12 +349,6 @@ pub async fn subscribe_wallet_readonly(
     if check.count > 0 {
         // 已订阅 — 直接返回钱包信息和地址列表（幂等）
         let addresses = get_wallet_addresses(rb.clone(), wallet_id).await?;
-        log::info!(
-            "[只读订阅] 已存在 — 钱包={}, 设备={}, 地址数={}",
-            wallet_id,
-            device_id,
-            addresses.len()
-        );
         return Ok((wallet, addresses));
     }
 
@@ -384,7 +378,7 @@ pub async fn subscribe_wallet_readonly(
     }
 
     log::info!(
-        "[只读订阅] 成功 — 钱包={}, 设备={}, 地址数={}",
+        "[订阅] 成功 — 钱包={}, 设备={}, 地址数={}",
         wallet_id,
         device_id,
         addresses.len()

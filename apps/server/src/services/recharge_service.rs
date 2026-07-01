@@ -38,17 +38,6 @@ pub async fn execute_recharge(
     platform: &str,
     version: &str,
 ) -> Result<RechargeResult, AppError> {
-    log::info!(
-        "[充值] 设备{}从{}端发起充值请求，钱包{}(ID{}), 代币{}({}), 充值金额 {}",
-        short_addr(device_id),
-        platform,
-        &input.wallet_alias,
-        &input.wallet_id,
-        &input.token_symbol,
-        &input.network,
-        input.amount
-    );
-
     // 校验充值设备白名单：仅白名单中的设备可充值，白名单为空时拒绝所有设备
     let allowed: Vec<String> = crate::db::query::query_one::<AppConfigEntity>(
         &rb,

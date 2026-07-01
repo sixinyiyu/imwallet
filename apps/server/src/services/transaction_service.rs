@@ -89,20 +89,6 @@ pub async fn execute_transfer(
         .next()
         .ok_or_else(|| AppError::BadRequest("未找到发送方地址".into()))?;
 
-    log::info!(
-        "[转账] 设备{}从{}端发起转账请求，钱包{}(地址{}) -- {}({}) --> 收款方(地址{}), 转账金额 {} {}, 手续费模式{}",
-        short_addr(device_id),
-        platform,
-        &input.from_wallet_id,
-        short_addr(&from_addr.address),
-        &input.token_symbol,
-        &input.network,
-        short_addr(&input.to_address),
-        input.amount,
-        &input.token_symbol,
-        &cfg.fee_mode
-    );
-
     let bals: Vec<crate::models::AssetAddress> = tx_query(
         &tx,
         "SELECT * FROM assets_addresses WHERE address_id = $1 AND asset_id = $2 LIMIT 1",
