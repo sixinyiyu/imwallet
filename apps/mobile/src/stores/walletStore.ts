@@ -674,8 +674,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // 1. 调用后端取消订阅 API
       await syncService.unsubscribeWalletReadonly(walletId);
 
-      // 2. 删除本地数据
+      // 2. 删除本地数据（钱包+账户+地址+通知）
       await localWalletService.deleteWallet(walletId);
+      await localNotificationService.deleteWalletNotifications(walletId);
 
       // 3. 刷新钱包列表
       await get().fetchWallets();
