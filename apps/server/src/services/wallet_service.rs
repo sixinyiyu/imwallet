@@ -18,13 +18,6 @@ pub async fn create_wallet_and_subscribe(
     alias: &str,
     device_id: &str,
 ) -> Result<Wallet, AppError> {
-    log::info!(
-        "[钱包] 创建请求 — ID={}, 别名={}, 来源={}, 设备{}",
-        wallet_id,
-        alias,
-        source,
-        device_id
-    );
     let src = if source == "IMPORT" {
         "IMPORT"
     } else {
@@ -58,10 +51,11 @@ pub async fn create_wallet_and_subscribe(
 
     tx.commit().await?;
     log::info!(
-        "[钱包] 创建成功 — ID={}, 别名={}, 来源={}",
+        "[钱包] 创建成功 — ID={}, 别名={}, 来源={}, 设备={}",
         &wallet.id,
         &wallet.alias,
-        &wallet.source
+        &wallet.source,
+        device_id
     );
     Ok(wallet)
 }
