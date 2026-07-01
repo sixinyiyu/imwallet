@@ -147,7 +147,7 @@ export default function WalletScreen() {
                   ]}
                   numberOfLines={1}
                 >
-                  {w.name}{w.isReadOnly ? " (只读)" : ""}
+                  {w.name}{w.isReadOnly ? " (订阅)" : ""}
                 </Text>
               </TouchableOpacity>
             ))}
