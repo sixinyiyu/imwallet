@@ -435,6 +435,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // 5. 安全存储助记词
     await SecureStore.setItemAsync(mnemonicKey(walletId), cleaned);
 
+    // 6. 导入钱包 = 用户已持有助记词，直接标记为已备份
+    await get().backupWallet(walletId);
+
     set({ mnemonic: mnemonicInput, hasWallets: true });
     await get().fetchWallets();
     return walletId;

@@ -142,8 +142,13 @@ export default function WalletAddAccountScreen() {
     }
     setDrawerVisible(false);
     setCreating(false);
-    // 跳转到钱包备份引导页
-    navigation.replace("BackupGuide", { walletId: effectiveWalletId!, source: "create" });
+    // 已备份（导入钱包）→ 直接回主页；未备份（创建钱包）→ 跳备份引导
+    const backedUp = useWalletStore.getState().isWalletBackedUp(effectiveWalletId!);
+    if (backedUp) {
+      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+    } else {
+      navigation.replace("BackupGuide", { walletId: effectiveWalletId!, source: "create" });
+    }
   };
 
   // 只有新选择的链才算有效选择（已有账户的不算，除非开启了同链多账户）
