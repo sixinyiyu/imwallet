@@ -292,7 +292,9 @@ export default function WalletDetailScreen() {
           {/* 备份状态 */}
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>备份状态</Text>
-            {walletIsBackedUp ? (
+            {wallet.isReadOnly ? (
+              <Text style={styles.noBackupNeededText}>无需备份</Text>
+            ) : walletIsBackedUp ? (
               <Text style={styles.backedUpText}>已备份</Text>
             ) : (
               <TouchableOpacity
@@ -315,8 +317,8 @@ export default function WalletDetailScreen() {
             <Text style={styles.infoValue}>{formatDate(wallet.createdAt)}</Text>
           </View>
 
-          {/* 密码提示 */}
-          {passwordHint !== undefined && passwordHint !== null && (
+          {/* 密码提示（订阅钱包不显示） */}
+          {!wallet.isReadOnly && passwordHint !== undefined && passwordHint !== null && (
             <>
               <View style={styles.infoDivider} />
               <View style={styles.infoRow}>
@@ -846,6 +848,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#22C55E",
     fontWeight: "600",
+  },
+  noBackupNeededText: {
+    fontSize: 14,
+    color: "#9CA3AF",
+    fontWeight: "500",
   },
   // Section header
   sectionHeader: {
