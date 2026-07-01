@@ -28,6 +28,7 @@ export { default as BtcIcon } from "./BtcIcon";
 export { default as AddContactIcon } from "./AddContactIcon";
 export { default as AndroidIcon } from "./AndroidIcon";
 export { default as IosIcon } from "./IosIcon";
+export { default as SubscribeIcon } from "./SubscribeIcon";
 
 import React from "react";
 import { Text } from "react-native";

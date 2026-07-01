@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -14,12 +14,11 @@ import {
   ScrollView,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
-import { adminService, type WalletAdminInfo, type WalletTransaction } from "../services/adminService";
-import { rechargeService, type RechargeRecord } from "../services/rechargeService";
+import { adminService, type WalletAdminInfo, type WalletTransaction, type WalletRecharge } from "../services/adminService";
 import { walletService } from "../services/walletService";
 import type { SimpleWallet } from "../types";
 import { configService, type FeeConfig } from "../services/configService";
-import { ChevronRightIcon, AndroidIcon, IosIcon, WalletIcon, PlusCircleIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
+import { ChevronRightIcon, AndroidIcon, IosIcon, WalletIcon, PlusCircleIcon, TOKEN_ICONS, renderTokenIcon, SubscribeIcon } from "../components/icons";
 import { WalletListSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import { formatTime } from "../utils/date";
@@ -36,7 +35,6 @@ function formatCny(value: string): string {
 
 type DeviceManageRoute = RouteProp<RootStackParamList, "DeviceManage">;
 
-
 /** 平台图标 */
 function PlatformIcon({ platform, size = 16 }: { platform: string; size?: number }) {
   if (platform === "ios") return <IosIcon size={size} color="#555" />;
@@ -45,9 +43,8 @@ function PlatformIcon({ platform, size = 16 }: { platform: string; size?: number
 
 export default function DeviceManageScreen() {
   const route = useRoute<DeviceManageRoute>();
-  // 从缓存获取明文密码（验证成功后已缓存），不再从路由参数获取
+  const navigation = useNavigation();
   const adminPwd = getPlaintextPassword();
-  // 从配置管理页传递的充值权限标志，无需重新判断
   const rechargePermitted = route.params?.rechargePermitted ?? false;
 
   const [wallets, setWallets] = useState<WalletAdminInfo[]>([]);
@@ -57,12 +54,10 @@ export default function DeviceManageScreen() {
   const [walletsLoadingMore, setWalletsLoadingMore] = useState(false);
 
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
-  // 当前选中钱包的链上地址（用于判断交易角色：发送方 vs 接收方）
   const [walletAddresses, setWalletAddresses] = useState<string[]>([]);
-  // 手续费配置（用于计算实到金额）
   const [feeConfig, setFeeConfig] = useState<FeeConfig>({ feeRate: 0.005, feeMode: "DEDUCTED" });
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
-  const [recharges, setRecharges] = useState<RechargeRecord[]>([]);
+  const [recharges, setRecharges] = useState<WalletRecharge[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataTab, setDataTab] = useState<"transactions" | "recharges">("transactions");
   const [dataPage, setDataPage] = useState(1);
@@ -78,14 +73,18 @@ export default function DeviceManageScreen() {
   const [subscribing, setSubscribing] = useState(false);
   const [subscribeError, setSubscribeError] = useState<string | null>(null);
 
+  // 当前设备已订阅的钱包 ID 集合（用于卡片上判断是否已订阅）
+  // 用字符串做 selector，避免每次创建新 Set 导致无限重渲染
+  const localWalletIdStr = useWalletStore((s) => s.wallets.map((w) => w.id).sort().join(','));
+  const subscribedIds = useMemo(() => new Set(localWalletIdStr ? localWalletIdStr.split(',') : []), [localWalletIdStr]);
+
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2000);
   }, []);
 
-  // 缓存过期守卫：密码缓存失效时提示并返回上一页
-  const navigation = useNavigation();
+  // 缓存过期守卫
   useEffect(() => {
     if (!adminPwd) {
       showToast("管理密码缓存已过期，请重新验证");
@@ -94,7 +93,23 @@ export default function DeviceManageScreen() {
     }
   }, [adminPwd]);
 
-  // adminPwd 为 null 时显示空页面（等待返回上一页）
+  // 导航栏右侧订阅按钮 — 用 ref 持有回调，只 setOptions 一次，避免无限循环
+  const openSubscribeRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={() => openSubscribeRef.current()}
+          style={{ marginRight: 16, padding: 4 }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <SubscribeIcon size={22} color="#287220" />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
+
   if (!adminPwd) {
     return <View style={styles.container} />;
   }
@@ -126,31 +141,32 @@ export default function DeviceManageScreen() {
 
   const handleSelectWallet = async (walletId: string) => {
     if (selectedWallet === walletId) {
-    setSelectedWallet(null);
-    setWalletAddresses([]);
-    setTransactions([]);
-    setRecharges([]);
-    return;    }
+      setSelectedWallet(null);
+      setWalletAddresses([]);
+      setTransactions([]);
+      setRecharges([]);
+      return;
+    }
     setSelectedWallet(walletId);
     setDataPage(1);
     setDataTab("transactions");
     setDataLoading(true);
     try {
-      // 同时获取钱包地址（判断交易角色）和手续费配置
       const fetches: Promise<any>[] = [
         adminService.getWalletTransactions(walletId, adminPwd, 1, 20),
         walletService.getWalletAddresses(walletId).catch(() => ({ addresses: [] })),
         configService.getFeeConfig().catch(() => null),
       ];
-      // 仅充值权限设备才加载充值数据（使用白名单接口，无需管理密码）
+      // 充值记录走 admin 接口（动态前缀），跟订阅无关，仅取决于充值权限
       if (rechargePermitted) {
-        fetches.push(rechargeService.getMyRechargeRecords(1, 20, walletId));
+        fetches.push(adminService.getRechargeRecords(adminPwd, 1, 20, walletId));
       }
       const results = await Promise.all(fetches);
       setTransactions(results[0].transactions);
       setWalletAddresses(results[1].addresses.map((a: any) => a.address));
       if (results[2]) setFeeConfig(results[2]);
-      if (rechargePermitted && results[3]) {
+      // 充值数据仅在充值权限时才取（跟订阅无关）
+      if (rechargePermitted && results.length >= 4) {
         setRecharges(results[3].recharges);
       } else {
         setRecharges([]);
@@ -173,7 +189,7 @@ export default function DeviceManageScreen() {
         const more = await adminService.getWalletTransactions(selectedWallet, adminPwd, nextPage, 20);
         setTransactions((prev) => [...prev, ...more.transactions]);
       } else {
-        const more = await rechargeService.getMyRechargeRecords(nextPage, 20, selectedWallet);
+        const more = await adminService.getRechargeRecords(adminPwd, nextPage, 20, selectedWallet);
         setRecharges((prev) => [...prev, ...more.recharges]);
       }
     } catch (err: any) {
@@ -190,11 +206,8 @@ export default function DeviceManageScreen() {
     setSubscribeLoading(true);
     setSubscribeError(null);
     try {
-      // 加载所有系统钱包
       const { wallets: allWallets } = await walletService.getAllWallets({ limit: 100 });
-      // 获取当前设备已订阅的钱包 ID
       const currentWalletIds = new Set(useWalletStore.getState().wallets.map((w) => w.id));
-      // 过滤掉已订阅的
       const available = allWallets.filter((w) => !currentWalletIds.has(w.id));
       setSubscribeWallets(available);
       setShowSubscribeModal(true);
@@ -204,6 +217,9 @@ export default function DeviceManageScreen() {
     setSubscribeLoading(false);
   };
 
+  // 每次 handleOpenSubscribe 变化时更新 ref，确保导航栏按钮调用最新回调
+  openSubscribeRef.current = handleOpenSubscribe;
+
   const handleSubscribeWallet = async (walletId: string) => {
     setSubscribing(true);
     setSubscribeError(null);
@@ -211,13 +227,22 @@ export default function DeviceManageScreen() {
       await useWalletStore.getState().subscribeWallet(walletId);
       showToast("订阅成功");
       setShowSubscribeModal(false);
-      // 刷新钱包列表（移除已订阅的）
       const currentWalletIds = new Set(useWalletStore.getState().wallets.map((w) => w.id));
       setSubscribeWallets((prev) => prev.filter((w) => !currentWalletIds.has(w.id)));
     } catch (err: any) {
       setSubscribeError(err?.message || "订阅失败，请重试");
     }
     setSubscribing(false);
+  };
+
+  /** 卡片上直接订阅（快捷入口） */
+  const handleQuickSubscribe = async (walletId: string) => {
+    try {
+      await useWalletStore.getState().subscribeWallet(walletId);
+      showToast("订阅成功");
+    } catch (err: any) {
+      showToast(err?.message || "订阅失败");
+    }
   };
 
   if (walletsLoading) {
@@ -230,230 +255,227 @@ export default function DeviceManageScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 订阅钱包按钮 */}
-      <TouchableOpacity
-        style={styles.subscribeBtn}
-        onPress={handleOpenSubscribe}
-        disabled={subscribeLoading}
-        activeOpacity={0.7}
-      >
-        {subscribeLoading ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <View style={styles.subscribeBtnContent}>
-            <PlusCircleIcon size={18} color="#fff" />
-            <Text style={styles.subscribeBtnText}>订阅钱包</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-
       <FlatList
         data={wallets}
         keyExtractor={(w) => w.id}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item: w }) => (
-          <View style={styles.walletCard}>
-            {/* 钱包头部 */}
-            <TouchableOpacity
-              style={styles.walletHeader}
-              onPress={() => handleSelectWallet(w.id)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.walletIconContainer}>
-                <WalletIcon size={24} color="#287220" />
-              </View>
-              <View style={styles.walletInfo}>
-                <View style={styles.walletNameRow}>
-                  <Text style={styles.walletAlias}>{w.alias}</Text>
-                  <Text style={styles.walletBalanceValue}>¥{formatCny(w.totalBalanceCny)}</Text>
+        renderItem={({ item: w }) => {
+          const isSubscribed = subscribedIds.has(w.id);
+
+          return (
+            <View style={styles.walletCard}>
+              {/* 钱包头部 */}
+              <TouchableOpacity
+                style={styles.walletHeader}
+                onPress={() => handleSelectWallet(w.id)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.walletIconContainer}>
+                  <WalletIcon size={24} color="#287220" />
                 </View>
-                <Text style={styles.walletIdentifier} selectable>{w.id}</Text>
-                <Text style={styles.walletMeta}>
-                  {w.chains.length > 0 ? w.chains.join(" · ") : "无链"} · {w.deviceCount} 个设备关联
-                </Text>
-              </View>
-              <View style={[styles.chevronWrap, selectedWallet === w.id && styles.chevronExpanded]}>
-                <ChevronRightIcon size={18} color="#8899B8" />
-              </View>
-            </TouchableOpacity>
-
-            {/* 关联设备 — 默认显示，不折叠 */}
-            {w.devices.length > 0 && (
-              <View style={styles.deviceSection}>
-                <Text style={styles.sectionLabel}>关联设备</Text>
-                {w.devices.map((d) => (
-                  <View key={d.id} style={styles.deviceRow}>
-                    <Text style={styles.deviceId}>{d.id.slice(0, 24)}...{d.id.slice(-18)}</Text>
-                    <View style={styles.deviceRight}>
-                      <PlatformIcon platform={d.platform} size={16} />
-                      <View style={[styles.onlineDot, d.online ? styles.onlineDotOn : styles.onlineDotOff]} />
-                      <Text style={[styles.onlineText, d.online ? styles.onlineTextOn : styles.onlineTextOff]}>
-                        {d.online ? "在线" : "离线"}
-                      </Text>
+                <View style={styles.walletInfo}>
+                  <View style={styles.walletNameRow}>
+                    <View style={styles.walletNameLeft}>
+                      <Text style={styles.walletAlias}>{w.alias}</Text>
+                      <Text style={styles.walletBalanceValue}>¥{formatCny(w.totalBalanceCny)}</Text>
                     </View>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* 代币余额 — 默认显示，不折叠 */}
-            {w.assets.length > 0 && (
-              <View style={styles.assetSection}>
-                <Text style={styles.sectionLabel}>代币余额</Text>
-                {w.assets.map((a) => (
-                  <View key={a.assetId} style={styles.assetRow}>
-                    <View style={styles.assetIconWrap}>
-                      {renderTokenIcon(a.symbol, 20)}
-                    </View>
-                    <View style={styles.assetInfo}>
-                      <Text style={styles.assetSymbol}>{a.symbol}</Text>
-                      <Text style={styles.assetChain}>{a.chain}</Text>
-                    </View>
-                    <View style={styles.assetAmountWrap}>
-                      <Text style={styles.assetBalance}>{a.balance}</Text>
-                      <Text style={styles.assetCny}>≈ ¥{formatCny(a.cnyValue)}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* 展开区域 — 仅交易/充值 */}
-            {selectedWallet === w.id && (
-              <View style={styles.expandPanel}>
-                {dataLoading ? (
-                  <ActivityIndicator size="small" color="#287220" style={{ marginVertical: 16 }} />
-                ) : (
-                  <>
-                    {/* Tab 切换 — 仅充值权限设备显示充值tab */}
-                    {rechargePermitted ? (
-                    <View style={styles.tabRow}>
+                    {/* 未订阅 → 第一行右侧显示订阅 icon */}
+                    {!isSubscribed && (
                       <TouchableOpacity
-                        style={[styles.tab, dataTab === "transactions" && styles.tabActive]}
-                        onPress={() => setDataTab("transactions")}
+                        style={styles.cardSubscribeBtn}
+                        onPress={() => handleQuickSubscribe(w.id)}
+                        activeOpacity={0.7}
                       >
-                        <Text style={[styles.tabText, dataTab === "transactions" && styles.tabTextActive]}>交易</Text>
+                        <SubscribeIcon size={16} color="#287220" />
+                        <Text style={styles.cardSubscribeText}>订阅</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.tab, dataTab === "recharges" && styles.tabActive]}
-                        onPress={() => setDataTab("recharges")}
-                      >
-                        <Text style={[styles.tabText, dataTab === "recharges" && styles.tabTextActive]}>充值</Text>
-                      </TouchableOpacity>
-                    </View>
-                    ) : null}
-
-                    {dataTab === "transactions" ? (
-                      transactions.length === 0 ? (
-                        <EmptyState message="暂无交易记录" />
-                      ) : (
-                        transactions.map((t) => {
-                          // 判断交易角色：发送方 vs 接收方
-                          const isReceive = walletAddresses.includes(t.toAddress);
-                          const isSend = walletAddresses.includes(t.fromAddress);
-                          const feeNum = parseFloat(t.fee) || 0;
-                          const amountNum = parseFloat(t.amount) || 0;
-                          // 计算实到金额
-                          const receivedNum = feeConfig.feeMode === "EXTRA" ? amountNum : amountNum - feeNum;
-                          const directionLabel = isReceive ? "收到" : "发送";
-                          const directionColor = isReceive ? "#10B981" : "#EF4444";
-                          // 接收方看到实到金额，发送方看到转账金额
-                          const displayAmount = isReceive ? receivedNum : amountNum;
-                          const prefix = isReceive ? "+" : "-";
-                          return (
-                          <View key={t.id} style={styles.txCard}>
-                            <View style={styles.txTopRow}>
-                              <View style={styles.txTokenWrap}>
-                                {TOKEN_ICONS[t.tokenSymbol]
-                                  ? React.createElement(TOKEN_ICONS[t.tokenSymbol], { size: 20 })
-                                  : <Text style={styles.txTokenEmoji}>🪙</Text>
-                                }
-                                <Text style={styles.txSymbol}>{t.tokenSymbol}</Text>
-                                <Text style={[styles.txDirection, { color: directionColor }]}>{directionLabel}</Text>
-                              </View>
-                              <Text style={[styles.txAmount, { color: directionColor }]}>
-                                {prefix}{displayAmount.toFixed(6)}
-                              </Text>
-                            </View>
-                            <View style={styles.txAddrRow}>
-                              <Text style={styles.txAddr} numberOfLines={1} ellipsizeMode="middle">
-                                {t.fromAddress}
-                              </Text>
-                              <Text style={styles.txArrow}> → </Text>
-                              <Text style={styles.txAddr} numberOfLines={1} ellipsizeMode="middle">
-                                {t.toAddress}
-                              </Text>
-                            </View>
-                            <View style={styles.txBottomRow}>
-                              <View style={styles.txBottomLeft}>
-                                <PlatformIcon platform={t.platform} size={14} />
-                                <Text style={styles.txTime}>{formatTime(t.createdAt)}</Text>
-                              </View>
-                              {/* 发送方显示手续费+实到，接收方不显示手续费 */}
-                              {isSend && feeNum > 0 && (
-                                <Text style={styles.txFee}>手续费 {feeNum.toFixed(6)} · 实到 {receivedNum.toFixed(6)}</Text>
-                              )}
-                            </View>
-                          </View>
-                          );
-                        })
-                      )
-                    ) : (
-                      recharges.length === 0 ? (
-                        <EmptyState message="暂无充值记录" />
-                      ) : (
-                        recharges.map((r) => (
-                          <View key={r.id} style={styles.txCard}>
-                            <View style={styles.txTopRow}>
-                              <View style={styles.txTokenWrap}>
-                                {TOKEN_ICONS[r.tokenSymbol]
-                                  ? React.createElement(TOKEN_ICONS[r.tokenSymbol], { size: 20 })
-                                  : <Text style={styles.txTokenEmoji}>🪙</Text>
-                                }
-                                <Text style={styles.txSymbol}>{r.tokenSymbol}</Text>
-                              </View>
-                              <Text style={[styles.txAmount, { color: "#10B981" }]}>+{r.amount}</Text>
-                            </View>
-                            <View style={styles.txAddrRow}>
-                              <Text style={styles.txAddrLabel}>{r.walletAlias}</Text>
-                              <Text style={styles.txAddr} numberOfLines={1} ellipsizeMode="middle">
-                                {r.accountAddress}
-                              </Text>
-                            </View>
-                            <View style={styles.txBottomRow}>
-                              <Text style={styles.txTime}>{formatTime(r.createdAt)}</Text>
-                            </View>
-                          </View>
-                        ))
-                      )
                     )}
+                  </View>
+                  <Text style={styles.walletIdentifier} selectable>{w.id}</Text>
+                  <View style={styles.walletMetaRow}>
+                    <Text style={styles.walletMeta}>
+                      {w.chains.length > 0 ? w.chains.join(" · ") : "无链"} · {w.deviceCount} 个设备关联
+                    </Text>
+                    <View style={[styles.chevronWrap, selectedWallet === w.id && styles.chevronExpanded]}>
+                      <ChevronRightIcon size={18} color="#8899B8" />
+                    </View>
+                  </View>
+                </View>
+              </TouchableOpacity>
 
-                    {(dataTab === "transactions" ? transactions.length : recharges.length) > 0 && (() => {
-                      const items = dataTab === "transactions" ? transactions : recharges;
-                      const hasMore = items.length >= 20;
-                      return hasMore ? (
-                        <TouchableOpacity
-                          style={styles.loadMoreBtn}
-                          onPress={handleLoadMore}
-                          disabled={loadingMore}
-                          activeOpacity={0.7}
-                        >
-                          {loadingMore ? (
-                            <ActivityIndicator size="small" color="#287220" />
-                          ) : (
-                            <Text style={styles.loadMoreBtnText}>加载更多</Text>
-                          )}
-                        </TouchableOpacity>
+              {/* 关联设备 */}
+              {w.devices.length > 0 && (
+                <View style={styles.deviceSection}>
+                  <Text style={styles.sectionLabel}>关联设备</Text>
+                  {w.devices.map((d) => (
+                    <View key={d.id} style={styles.deviceRow}>
+                      <Text style={styles.deviceId}>{d.id.slice(0, 24)}...{d.id.slice(-18)}</Text>
+                      <View style={styles.deviceRight}>
+                        <PlatformIcon platform={d.platform} size={16} />
+                        <View style={[styles.onlineDot, d.online ? styles.onlineDotOn : styles.onlineDotOff]} />
+                        <Text style={[styles.onlineText, d.online ? styles.onlineTextOn : styles.onlineTextOff]}>
+                          {d.online ? "在线" : "离线"}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* 代币余额 */}
+              {w.assets.length > 0 && (
+                <View style={styles.assetSection}>
+                  <Text style={styles.sectionLabel}>代币余额</Text>
+                  {w.assets.map((a) => (
+                    <View key={a.assetId} style={styles.assetRow}>
+                      <View style={styles.assetIconWrap}>
+                        {renderTokenIcon(a.symbol, 20)}
+                      </View>
+                      <View style={styles.assetInfo}>
+                        <Text style={styles.assetSymbol}>{a.symbol}</Text>
+                        <Text style={styles.assetChain}>{a.chain}</Text>
+                      </View>
+                      <View style={styles.assetAmountWrap}>
+                        <Text style={styles.assetBalance}>{a.balance}</Text>
+                        <Text style={styles.assetCny}>≈ ¥{formatCny(a.cnyValue)}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* 展开区域 — 交易/充值数据（所有钱包默认可见，充值tab仅充值权限设备可见） */}
+              {selectedWallet === w.id && (
+                <View style={styles.expandPanel}>
+                  {dataLoading ? (
+                    <ActivityIndicator size="small" color="#287220" style={{ marginVertical: 16 }} />
+                  ) : (
+                    <>
+                      {rechargePermitted ? (
+                        <View style={styles.tabRow}>
+                          <TouchableOpacity
+                            style={[styles.tab, dataTab === "transactions" && styles.tabActive]}
+                            onPress={() => setDataTab("transactions")}
+                          >
+                            <Text style={[styles.tabText, dataTab === "transactions" && styles.tabTextActive]}>交易</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.tab, dataTab === "recharges" && styles.tabActive]}
+                            onPress={() => setDataTab("recharges")}
+                          >
+                            <Text style={[styles.tabText, dataTab === "recharges" && styles.tabTextActive]}>充值</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+
+                      {dataTab === "transactions" ? (
+                        transactions.length === 0 ? (
+                          <EmptyState message="暂无交易记录" />
+                        ) : (
+                          transactions.map((t) => {
+                            const isReceive = walletAddresses.includes(t.toAddress);
+                            const isSend = walletAddresses.includes(t.fromAddress);
+                            const feeNum = parseFloat(t.fee) || 0;
+                            const amountNum = parseFloat(t.amount) || 0;
+                            const receivedNum = feeConfig.feeMode === "EXTRA" ? amountNum : amountNum - feeNum;
+                            const directionLabel = isReceive ? "收到" : "发送";
+                            const directionColor = isReceive ? "#10B981" : "#EF4444";
+                            const displayAmount = isReceive ? receivedNum : amountNum;
+                            const prefix = isReceive ? "+" : "-";
+                            return (
+                              <View key={t.id} style={styles.txCard}>
+                                <View style={styles.txTopRow}>
+                                  <View style={styles.txTokenWrap}>
+                                    {TOKEN_ICONS[t.tokenSymbol]
+                                      ? React.createElement(TOKEN_ICONS[t.tokenSymbol], { size: 20 })
+                                      : <Text style={styles.txTokenEmoji}>🪙</Text>
+                                    }
+                                    <Text style={styles.txSymbol}>{t.tokenSymbol}</Text>
+                                    <Text style={[styles.txDirection, { color: directionColor }]}>{directionLabel}</Text>
+                                  </View>
+                                  <Text style={[styles.txAmount, { color: directionColor }]}>
+                                    {prefix}{displayAmount.toFixed(6)}
+                                  </Text>
+                                </View>
+                                <View style={styles.txAddrRow}>
+                                  <Text style={styles.txAddr} numberOfLines={1} ellipsizeMode="middle">
+                                    {t.fromAddress}
+                                  </Text>
+                                  <Text style={styles.txArrow}> → </Text>
+                                  <Text style={styles.txAddr} numberOfLines={1} ellipsizeMode="middle">
+                                    {t.toAddress}
+                                  </Text>
+                                </View>
+                                <View style={styles.txBottomRow}>
+                                  <View style={styles.txBottomLeft}>
+                                    <PlatformIcon platform={t.platform} size={14} />
+                                    <Text style={styles.txTime}>{formatTime(t.createdAt)}</Text>
+                                  </View>
+                                  {isSend && feeNum > 0 && (
+                                    <Text style={styles.txFee}>手续费 {feeNum.toFixed(6)} · 实到 {receivedNum.toFixed(6)}</Text>
+                                  )}
+                                </View>
+                              </View>
+                            );
+                          })
+                        )
                       ) : (
-                        <Text style={styles.endHint}>— 已加载全部 —</Text>
-                      );
-                    })()}
-                  </>
-                )}
-              </View>
-            )}
-          </View>
-        )}
+                        recharges.length === 0 ? (
+                          <EmptyState message="暂无充值记录" />
+                        ) : (
+                          recharges.map((r) => (
+                            <View key={r.id} style={styles.txCard}>
+                              <View style={styles.txTopRow}>
+                                <View style={styles.txTokenWrap}>
+                                  {TOKEN_ICONS[r.tokenSymbol]
+                                    ? React.createElement(TOKEN_ICONS[r.tokenSymbol], { size: 20 })
+                                    : <Text style={styles.txTokenEmoji}>🪙</Text>
+                                  }
+                                  <Text style={styles.txSymbol}>{r.tokenSymbol}</Text>
+                                </View>
+                                <Text style={[styles.txAmount, { color: "#10B981" }]}>+{r.amount}</Text>
+                              </View>
+                              <View style={styles.txAddrRow}>
+                                <Text style={styles.txAddrLabel}>{r.walletAlias}</Text>
+                                <Text style={styles.txAddr} numberOfLines={1} ellipsizeMode="middle">
+                                  {r.accountAddress}
+                                </Text>
+                              </View>
+                              <View style={styles.txBottomRow}>
+                                <Text style={styles.txTime}>{formatTime(r.createdAt)}</Text>
+                              </View>
+                            </View>
+                          ))
+                        )
+                      )}
+
+                      {(dataTab === "transactions" ? transactions.length : recharges.length) > 0 && (() => {
+                        const items = dataTab === "transactions" ? transactions : recharges;
+                        const hasMore = items.length >= 20;
+                        return hasMore ? (
+                          <TouchableOpacity
+                            style={styles.loadMoreBtn}
+                            onPress={handleLoadMore}
+                            disabled={loadingMore}
+                            activeOpacity={0.7}
+                          >
+                            {loadingMore ? (
+                              <ActivityIndicator size="small" color="#287220" />
+                            ) : (
+                              <Text style={styles.loadMoreBtnText}>加载更多</Text>
+                            )}
+                          </TouchableOpacity>
+                        ) : (
+                          <Text style={styles.endHint}>— 已加载全部 —</Text>
+                        );
+                      })()}
+                    </>
+                  )}
+                </View>
+              )}
+            </View>
+          );
+        }}
         ListEmptyComponent={<EmptyState message="暂无钱包数据" />}
         ListFooterComponent={
           walletsLoadingMore ? (
@@ -474,7 +496,7 @@ export default function DeviceManageScreen() {
         </View>
       )}
 
-      {/* 订阅钱包 Modal */}
+      {/* 订阅钱包 Modal（导航栏 "+" 入口） */}
       <Modal
         visible={showSubscribeModal}
         transparent
@@ -571,11 +593,27 @@ const styles = StyleSheet.create({
   },
   walletAlias: { fontSize: 16, fontWeight: "600", color: "1F2937" },
   walletNameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  walletNameLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
   walletBalanceValue: { fontSize: 14, fontWeight: "700", color: "#1F2937" },
   walletIdentifier: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
-  walletMeta: { fontSize: 13, color: "#9CA3AF", marginTop: 4 },
+  walletMetaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
+  walletMeta: { fontSize: 13, color: "#9CA3AF" },
 
-  // ── 关联设备（默认显示） ──
+  // ── 卡片上的订阅按钮 ──
+  cardSubscribeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#F0F7FF",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+  },
+  cardSubscribeText: { fontSize: 13, fontWeight: "500", color: "#287220" },
+
+  // ── 关联设备 ──
   deviceSection: {
     marginTop: 12,
     borderTopWidth: 1,
@@ -596,7 +634,7 @@ const styles = StyleSheet.create({
   onlineTextOn: { color: "#10B981" },
   onlineTextOff: { color: "#9CA3AF" },
 
-  // ── 展开面板（仅交易/充值） ──
+  // ── 展开面板 ──
   expandPanel: {
     marginTop: 12,
     borderTopWidth: 1,
@@ -604,7 +642,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
 
-  // ── 代币余额区域 ──
+  // ── 代币余额 ──
   assetSection: {
     marginBottom: 12,
   },
@@ -664,15 +702,6 @@ const styles = StyleSheet.create({
   txBottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 },
   txBottomLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
   txTime: { fontSize: 12, color: "#9CA3AF" },
-  txPlatform: {
-    fontSize: 11,
-    color: "#6B7280",
-    backgroundColor: "#F3F4F6",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    overflow: "hidden",
-  },
 
   // ── 加载更多 ──
   loadMoreBtn: { paddingVertical: 10, alignItems: "center" },
@@ -682,18 +711,6 @@ const styles = StyleSheet.create({
   toastWrap: { position: "absolute", bottom: 80, left: 0, right: 0, alignItems: "center" },
   toast: { backgroundColor: "rgba(0,0,0,0.75)", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
   toastText: { color: "#FFFFFF", fontSize: 14 },
-
-  // ── 订阅钱包按钮 ──
-  subscribeBtn: {
-    backgroundColor: "#287220",
-    borderRadius: 10,
-    paddingVertical: 12,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    alignItems: "center",
-  },
-  subscribeBtnContent: { flexDirection: "row", alignItems: "center", gap: 8 },
-  subscribeBtnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
 
   // ── 订阅钱包 Modal ──
   drawerOverlay: { flex: 1, justifyContent: "flex-end" },
