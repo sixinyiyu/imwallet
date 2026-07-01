@@ -73,10 +73,18 @@ export default function DeviceManageScreen() {
   const [subscribing, setSubscribing] = useState(false);
   const [subscribeError, setSubscribeError] = useState<string | null>(null);
 
-  // 当前设备已订阅的钱包 ID 集合（用于卡片上判断是否已订阅）
-  // 用字符串做 selector，避免每次创建新 Set 导致无限重渲染
-  const localWalletIdStr = useWalletStore((s) => s.wallets.map((w) => w.id).sort().join(','));
-  const subscribedIds = useMemo(() => new Set(localWalletIdStr ? localWalletIdStr.split(',') : []), [localWalletIdStr]);
+  // 当前设备的本地钱包信息（ID + source），用于卡片标签区分：本地 vs 已订阅 vs 未订阅
+  // 用字符串做 selector，避免每次创建新对象导致无限重渲染
+  const localWalletInfoStr = useWalletStore((s) => s.wallets.map((w) => `${w.id}:${w.source}`).sort().join(','));
+  const localWalletSourceMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!localWalletInfoStr) return map;
+    localWalletInfoStr.split(',').forEach((entry) => {
+      const [id, source] = entry.split(':');
+      if (id && source) map.set(id, source);
+    });
+    return map;
+  }, [localWalletInfoStr]);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -260,10 +268,30 @@ export default function DeviceManageScreen() {
         keyExtractor={(w) => w.id}
         contentContainerStyle={styles.listContent}
         renderItem={({ item: w }) => {
-          const isSubscribed = subscribedIds.has(w.id);
+          const localSource = localWalletSourceMap.get(w.id);
+          // walletTag: "local" | "subscribed" | "none"
+          const walletTag: "local" | "subscribed" | "none" =
+            localSource === "CREATE" || localSource === "IMPORT" ? "local"
+            : localSource === "SUBSCRIBE" ? "subscribed"
+            : "none";
 
           return (
             <View style={styles.walletCard}>
+              {/* 右上角角标：本地(绿) / 已订阅(蓝) */}
+              {walletTag === "local" && (
+                <View style={styles.ribbonWrap}>
+                  <View style={styles.ribbonLocal}>
+                    <Text style={styles.ribbonText}>本地</Text>
+                  </View>
+                </View>
+              )}
+              {walletTag === "subscribed" && (
+                <View style={styles.ribbonWrap}>
+                  <View style={styles.ribbonSubscribed}>
+                    <Text style={styles.ribbonText}>已订阅</Text>
+                  </View>
+                </View>
+              )}
               {/* 钱包头部 */}
               <TouchableOpacity
                 style={styles.walletHeader}
@@ -279,8 +307,8 @@ export default function DeviceManageScreen() {
                       <Text style={styles.walletAlias}>{w.alias}</Text>
                       <Text style={styles.walletBalanceValue}>¥{formatCny(w.totalBalanceCny)}</Text>
                     </View>
-                    {/* 未订阅 → 第一行右侧显示订阅 icon */}
-                    {!isSubscribed && (
+                    {/* 未订阅 → 右侧显示订阅按钮 */}
+                    {walletTag === "none" && (
                       <TouchableOpacity
                         style={styles.cardSubscribeBtn}
                         onPress={() => handleQuickSubscribe(w.id)}
@@ -570,6 +598,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: "#E5E7EB",
+    overflow: "hidden",
   },
   walletHeader: {
     flexDirection: "row", alignItems: "center",
@@ -598,6 +627,38 @@ const styles = StyleSheet.create({
   walletIdentifier: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
   walletMetaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   walletMeta: { fontSize: 13, color: "#9CA3AF" },
+
+  // ── 右上角角标（ribbon） ──
+  ribbonWrap: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    width: 60,
+    height: 60,
+    overflow: "hidden",
+    zIndex: 10,
+  },
+  ribbonLocal: {
+    position: "absolute",
+    top: 4,
+    right: -34,
+    width: 96,
+    backgroundColor: "#8CC884",
+    transform: [{ rotate: "45deg" }],
+    paddingVertical: 2,
+    alignItems: "center",
+  },
+  ribbonSubscribed: {
+    position: "absolute",
+    top: 4,
+    right: -34,
+    width: 96,
+    backgroundColor: "#5B9BD5",
+    transform: [{ rotate: "45deg" }],
+    paddingVertical: 2,
+    alignItems: "center",
+  },
+  ribbonText: { fontSize: 11, fontWeight: "600", color: "#FFFFFF" },
 
   // ── 卡片上的订阅按钮 ──
   cardSubscribeBtn: {
