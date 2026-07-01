@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -6,26 +6,18 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
+  Animated,
+  PanResponder,
 } from "react-native";
 import { localNotificationService } from "../services/localNotificationService";
 import { notificationSyncService } from "../services/notificationSyncService";
 import { useAlert } from "../hooks/useAlert";
-import { detectNetwork } from "../utils/address";
-import { TronIcon, EthIcon, BtcIcon, ContactIcon } from "../components/icons";
+import { useWalletStore } from "../stores/walletStore";
+import { renderTokenIcon } from "../components/icons";
 import { NotificationSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import type { Notification } from "../types";
 import { formatDateTime } from "../utils/date";
-
-function NetworkIcon({ network, size = 20 }: { network: string; size?: number }) {
-  if (!network) return <ContactIcon size={size} color="#6B7280" />;
-  switch (network) {
-    case "Tron": return <TronIcon size={size} />;
-    case "Ethereum":  return <EthIcon size={size} />;
-    case "Bitcoin":  return <BtcIcon size={size} />;
-    default:     return <ContactIcon size={size} color="#6B7280" />;
-  }
-}
 
 function getTypeIcon(type: string) {
   switch (type) {
@@ -37,10 +29,150 @@ function getTypeIcon(type: string) {
   }
 }
 
+const DELETE_BTN_WIDTH = 80;
+
+/** 左划删除行组件 */
+function SwipeableRow({
+  item,
+  walletAlias,
+  isCurrentlyOpen,
+  onRowOpen,
+  onRowClose,
+  onMarkRead,
+  onPress,
+  onDelete,
+}: {
+  item: Notification;
+  walletAlias: string;
+  isCurrentlyOpen: boolean;
+  onRowOpen: (id: string) => void;
+  onRowClose: () => void;
+  onMarkRead: (id: string) => void;
+  onPress: (item: Notification) => void;
+  onDelete: (id: string) => void;
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const isSwipedOpen = useRef(false);
+
+  // 删除按钮 opacity：随滑动距离从 0→1 渐变，未划开时完全不可见
+  const deleteOpacity = translateX.interpolate({
+    inputRange: [-DELETE_BTN_WIDTH, 0],
+    outputRange: [1, 0],
+    extrapolate: "clamp",
+  });
+
+  // 当其他行被划开或点击空白区域时，收回当前行
+  useEffect(() => {
+    if (!isCurrentlyOpen && isSwipedOpen.current) {
+      Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+      isSwipedOpen.current = false;
+    }
+  }, [isCurrentlyOpen, translateX]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 30,
+      onPanResponderMove: (_, gestureState) => {
+        const newVal = Math.min(gestureState.dx, 0);
+        translateX.setValue(newVal + (isSwipedOpen.current ? -DELETE_BTN_WIDTH : 0));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (isSwipedOpen.current) {
+          if (gestureState.dx > 40) {
+            Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+            isSwipedOpen.current = false;
+            onRowClose();
+          } else {
+            Animated.spring(translateX, { toValue: -DELETE_BTN_WIDTH, useNativeDriver: true }).start();
+          }
+        } else {
+          if (gestureState.dx < -40) {
+            Animated.spring(translateX, { toValue: -DELETE_BTN_WIDTH, useNativeDriver: true }).start();
+            isSwipedOpen.current = true;
+            onRowOpen(item.id);
+          } else {
+            Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+          }
+        }
+      },
+    })
+  ).current;
+
+  const meta = item.metadata;
+  const tokenSymbol = meta?.tokenSymbol;
+  const chain = meta?.chain;
+  const amount = meta?.amount;
+
+  const displayTitle = `${walletAlias} · ${item.title}`;
+  const displayContent = amount
+    ? `${tokenSymbol || ""}${amount} ${chain ? `(${chain})` : ""}`
+    : item.content;
+
+  const handleDelete = () => {
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+    isSwipedOpen.current = false;
+    onRowClose();
+    onDelete(item.id);
+  };
+
+  return (
+    <View style={styles.swipeContainer}>
+      {/* 删除按钮（opacity 随滑动渐变，未划开时完全透明） */}
+      <Animated.View style={[styles.deleteBtnContainer, { opacity: deleteOpacity }]}>
+        <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
+          <Text style={styles.deleteBtnText}>删除</Text>
+        </TouchableOpacity>
+      </Animated.View>
+      {/* 通知内容（可滑动） */}
+      <Animated.View
+        style={[styles.itemAnimated, { transform: [{ translateX }] }]}
+        {...panResponder.panHandlers}
+      >
+        <TouchableOpacity
+          style={[styles.item, !item.isRead && styles.itemUnread]}
+          onPress={() => {
+            // 点击时先关闭划开状态
+            if (isSwipedOpen.current) {
+              Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+              isSwipedOpen.current = false;
+              onRowClose();
+              return;
+            }
+            onPress(item);
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.itemLeft}>
+            {tokenSymbol
+              ? <View style={styles.tokenIconWrap}>{renderTokenIcon(tokenSymbol, 22, "🪙")}</View>
+              : <Text style={styles.typeIcon}>{getTypeIcon(item.type)}</Text>
+            }
+            {!item.isRead && <View style={styles.unreadDot} />}
+          </View>
+          <View style={styles.itemContent}>
+            <Text style={[styles.title, !item.isRead && styles.titleUnread]}>
+              {displayTitle}
+            </Text>
+            <Text style={styles.contentText} numberOfLines={2}>
+              {displayContent}
+            </Text>
+            <Text style={styles.dateText}>
+              {formatDateTime(item.createdAt)}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+}
+
 export default function NotificationScreen() {
   const alert = useAlert();
+  const wallets = useWalletStore((s) => s.wallets);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
 
   const loadLocal = async () => {
     try {
@@ -88,31 +220,59 @@ export default function NotificationScreen() {
     }
   };
 
+  /** 根据 walletId 查本地钱包别名 */
+  const getWalletAlias = (walletId: string): string => {
+    const w = wallets.find((w) => w.id === walletId);
+    return w?.name || walletId;
+  };
+
+  /** 点击通知：关闭其他划开行 + 标记已读 */
+  const handleNotificationPress = (item: Notification) => {
+    setOpenRowId(null); // 点击其他行时收回划开的行
+    if (!item.isRead) {
+      handleMarkRead(item.id);
+    }
+  };
+
+  /** 删除通知：本地物理删除 + 记录 deleted ID */
+  const handleDeleteNotification = async (id: string) => {
+    setOpenRowId(null);
+    try {
+      await localNotificationService.deleteNotification(id);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch {
+      // silent
+    }
+  };
+
+  /** 某行被划开 → 设置 openRowId（其他行自动收回） */
+  const handleRowOpen = (id: string) => {
+    setOpenRowId(id);
+  };
+
+  /** 某行被收回 → 清空 openRowId */
+  const handleRowClose = () => {
+    setOpenRowId(null);
+  };
+
+  /** 点击空白区域 → 收回划开的行 */
+  const handleContainerTouch = () => {
+    if (openRowId) {
+      setOpenRowId(null);
+    }
+  };
+
   const renderItem = ({ item }: { item: Notification }) => (
-    <TouchableOpacity
-      style={[styles.item, !item.isRead && styles.itemUnread]}
-      onPress={() => {
-        if (!item.isRead) {
-          handleMarkRead(item.id);
-        }
-      }}
-    >
-      <View style={styles.itemLeft}>
-        <Text style={styles.typeIcon}>{getTypeIcon(item.type)}</Text>
-        {!item.isRead && <View style={styles.unreadDot} />}
-      </View>
-      <View style={styles.itemContent}>
-        <Text style={[styles.title, !item.isRead && styles.titleUnread]}>
-          {item.title}
-        </Text>
-        <Text style={styles.contentText} numberOfLines={2}>
-          {item.content}
-        </Text>
-        <Text style={styles.dateText}>
-          {formatDateTime(item.createdAt)}
-        </Text>
-      </View>
-    </TouchableOpacity>
+    <SwipeableRow
+      item={item}
+      walletAlias={getWalletAlias(item.walletId)}
+      isCurrentlyOpen={openRowId === item.id}
+      onRowOpen={handleRowOpen}
+      onRowClose={handleRowClose}
+      onMarkRead={handleMarkRead}
+      onPress={handleNotificationPress}
+      onDelete={handleDeleteNotification}
+    />
   );
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
@@ -122,7 +282,7 @@ export default function NotificationScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onTouchStart={handleContainerTouch}>
       {unreadCount > 0 && (
         <TouchableOpacity style={styles.markAllBtn} onPress={handleMarkAllRead}>
           <Text style={styles.markAllText}>全部标记已读 ({unreadCount}条未读)</Text>
@@ -155,11 +315,34 @@ const styles = StyleSheet.create({
     borderBottomColor: "#DBEAFE",
   },
   markAllText: { color: "#3B82F6", fontSize: 14, fontWeight: "500" },
-  item: {
-    backgroundColor: "#fff",
+  // ── 左划删除容器 ──
+  swipeContainer: {
+    overflow: "hidden",
     marginHorizontal: 16,
     marginVertical: 4,
     borderRadius: 12,
+  },
+  deleteBtnContainer: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: DELETE_BTN_WIDTH,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  deleteBtn: {
+    backgroundColor: "#EF4444",
+    width: DELETE_BTN_WIDTH,
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  deleteBtnText: { color: "#fff", fontSize: 14, fontWeight: "600" },
+  // ── 通知行 ──
+  itemAnimated: {},
+  item: {
+    backgroundColor: "#fff",
     padding: 14,
     flexDirection: "row",
   },
@@ -170,6 +353,14 @@ const styles = StyleSheet.create({
   },
   itemLeft: {
     width: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tokenIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
   },

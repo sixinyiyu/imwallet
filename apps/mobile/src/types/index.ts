@@ -184,12 +184,20 @@ export type AddressType = "address" | "contract" | "validator" | "contact" | "in
 /** 验证状态枚举 */
 export type VerificationStatus = "verified" | "unverified" | "suspicious";
 
+export interface NotificationMetadata {
+  transactionId?: string;
+  tokenSymbol?: string;
+  chain?: string;
+  amount?: string;
+}
+
 export interface Notification {
   id: string;
   walletId: string;   // 关联钱包 ID
   title: string;
   content: string;
   type: string;
+  metadata?: NotificationMetadata;
   isRead: boolean;
   createdAt: string;
 }

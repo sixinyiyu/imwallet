@@ -1,6 +1,7 @@
 import api from "./api";
 import { localNotificationService } from "./localNotificationService";
 import { saveLogToLocal } from "./logService";
+import type { NotificationMetadata } from "../types";
 
 export const notificationSyncService = {
   /**
@@ -29,6 +30,7 @@ export const notificationSyncService = {
           title: n.title,
           content: n.content,
           type: n.type,
+          metadata: parseMetadata(n.metadata),
           createdAt: n.createdAt,
         }))
       );
@@ -41,3 +43,14 @@ export const notificationSyncService = {
     }
   },
 };
+
+/** 解析服务端返回的 metadata（JSONB → NotificationMetadata） */
+function parseMetadata(raw: any): NotificationMetadata | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  return {
+    transactionId: raw.transaction_id || raw.transactionId,
+    tokenSymbol: raw.token_symbol || raw.tokenSymbol,
+    chain: raw.chain,
+    amount: raw.amount,
+  };
+}

@@ -399,11 +399,11 @@ pub async fn device_auth(
         String::new()
     };
     let params_log = if !query_str.is_empty() && !body_str.is_empty() {
-        format!(" query=[{}] body=[{}]", query_str, body_str)
+        format!(" query: {} body: {}", query_str, body_str)
     } else if !query_str.is_empty() {
-        format!(" query=[{}]", query_str)
+        format!(" query: {}", query_str)
     } else if !body_str.is_empty() {
-        format!(" body=[{}]", body_str)
+        format!(" body: {}", body_str)
     } else {
         String::new()
     };

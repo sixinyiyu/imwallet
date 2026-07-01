@@ -162,8 +162,15 @@ pub async fn execute_transfer(
     let amount_display = input.amount.round_dp(6);
     let received_display = received.round_dp(6);
 
+    // 通知 metadata：轻量提示信息，不存地址（详情页已有完整信息）
+    let out_meta = serde_json::json!({
+        "transaction_id": tx_id,
+        "token_symbol": input.token_symbol,
+        "chain": input.network,
+        "amount": amount_display.to_string()
+    });
     let nid1 = uuid::Uuid::new_v4().to_string();
-    tx_exec(&tx, "INSERT INTO notifications (id, wallet_id, title, content, type, created_at) VALUES ($1, $2, '转账成功', $3, $4, NOW())", vals![&nid1, &input.from_wallet_id, &format!("转出 {} {}", amount_display, input.token_symbol), TRANSFER_OUT]).await?;
+    tx_exec(&tx, "INSERT INTO notifications (id, wallet_id, title, content, type, metadata, created_at) VALUES ($1, $2, '转账成功', $3, $4, $5, NOW())", vals![&nid1, &input.from_wallet_id, &format!("转出 {} {}", amount_display, input.token_symbol), TRANSFER_OUT, &out_meta]).await?;
 
     if let Some(to) = to_addr.first() {
         #[derive(serde::Deserialize)]
@@ -177,8 +184,14 @@ pub async fn execute_transfer(
         )
         .await?;
         for w in wallets {
+            let in_meta = serde_json::json!({
+                "transaction_id": tx_id,
+                "token_symbol": input.token_symbol,
+                "chain": input.network,
+                "amount": received_display.to_string()
+            });
             let nid2 = uuid::Uuid::new_v4().to_string();
-            tx_exec(&tx, "INSERT INTO notifications (id, wallet_id, title, content, type, created_at) VALUES ($1, $2, '收到转账', $3, $4, NOW())", vals![&nid2, &w.wallet_id, &format!("收到 {} {}", received_display, input.token_symbol), TRANSFER_IN]).await?;
+            tx_exec(&tx, "INSERT INTO notifications (id, wallet_id, title, content, type, metadata, created_at) VALUES ($1, $2, '收到转账', $3, $4, $5, NOW())", vals![&nid2, &w.wallet_id, &format!("收到 {} {}", received_display, input.token_symbol), TRANSFER_IN, &in_meta]).await?;
         }
     }
 

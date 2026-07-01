@@ -399,11 +399,7 @@ pub async fn unsubscribe_wallet_readonly(
 
     crate::services::device_service::unsubscribe_wallet(rb, wallet_id, device_id).await?;
 
-    log::info!(
-        "[只读订阅] 取消 — 钱包={}, 设备={}",
-        wallet_id,
-        device_id
-    );
+    log::info!("[只读订阅] 取消 — 钱包={}, 设备={}", wallet_id, device_id);
     Ok(())
 }
 

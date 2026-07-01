@@ -82,6 +82,7 @@ const SQLITE_INIT_SQL = `
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     type TEXT NOT NULL,
+    metadata TEXT NOT NULL DEFAULT '{}',
     is_read INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     synced_at TEXT NOT NULL DEFAULT ''
@@ -89,6 +90,13 @@ const SQLITE_INIT_SQL = `
   CREATE INDEX IF NOT EXISTS idx_notifications_wallet_id ON notifications(wallet_id);
   CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
   CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+
+  CREATE TABLE IF NOT EXISTS deleted_notification_ids (
+    id TEXT PRIMARY KEY,
+    wallet_id TEXT NOT NULL,
+    deleted_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_deleted_notification_wallet_id ON deleted_notification_ids(wallet_id);
 `;
 
 // ─── 数据库单例 ──────────────────────────────────────────────────────────────

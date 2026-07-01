@@ -29,7 +29,10 @@ pub fn router() -> Router<AppState> {
             "/wallets/{id}/addresses/{address_id}",
             delete(delete_address),
         )
-        .route("/wallets/{id}/subscribe", post(subscribe_wallet_readonly).delete(unsubscribe_wallet_readonly))
+        .route(
+            "/wallets/{id}/subscribe",
+            post(subscribe_wallet_readonly).delete(unsubscribe_wallet_readonly),
+        )
         .route("/recharges/my", get(get_my_recharges))
 }
 
@@ -334,12 +337,9 @@ async fn subscribe_wallet_readonly(
     Extension(device): Extension<DevicePayload>,
     Path(wallet_id): Path<String>,
 ) -> Result<(axum::http::StatusCode, Json<SubscribeWalletResponse>), AppError> {
-    let (wallet, addresses) = wallet_service::subscribe_wallet_readonly(
-        state.db.clone(),
-        &wallet_id,
-        &device.device_id,
-    )
-    .await?;
+    let (wallet, addresses) =
+        wallet_service::subscribe_wallet_readonly(state.db.clone(), &wallet_id, &device.device_id)
+            .await?;
 
     Ok((
         axum::http::StatusCode::CREATED,
@@ -356,7 +356,8 @@ async fn unsubscribe_wallet_readonly(
     Extension(device): Extension<DevicePayload>,
     Path(wallet_id): Path<String>,
 ) -> Result<axum::http::StatusCode, AppError> {
-    wallet_service::unsubscribe_wallet_readonly(state.db.clone(), &wallet_id, &device.device_id).await?;
+    wallet_service::unsubscribe_wallet_readonly(state.db.clone(), &wallet_id, &device.device_id)
+        .await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
