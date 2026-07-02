@@ -19,6 +19,7 @@ import {
 import { configService } from "../services/configService";
 import { GreenToggle } from "../components/GreenToggle";
 import PasswordDrawer from "../components/PasswordDrawer";
+import { getErrorMessage } from "../utils/format";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -123,12 +124,12 @@ export default function SettingsScreen() {
       setServiceConfigEnabled(true);
       await configService.setServiceConfigEnabled(true);
       setShowPwdDrawer(false);
-    } catch (err: any) {
-      const status = err?.response?.status;
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 403) {
         setPwdError("密码错误，请重试");
       } else {
-        setPwdError(err?.response?.data?.error || "验证失败，请检查网络");
+        setPwdError(getErrorMessage(err, "验证失败，请检查网络"));
       }
     }
     setPwdVerifying(false);
@@ -146,8 +147,8 @@ export default function SettingsScreen() {
         setUploadResult(`⚠️ 上传完成，${remaining} 条日志因网络问题未上报，可稍后重试`);
       }
       setPendingCount(remaining);
-    } catch (err: any) {
-      setUploadResult(`❌ 上传失败: ${err?.message || "未知错误"}`);
+    } catch (err: unknown) {
+      setUploadResult(`❌ 上传失败: ${getErrorMessage(err, "未知错误")}`);
     }
     setUploading(false);
   };

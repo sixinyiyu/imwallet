@@ -7,17 +7,19 @@ import {
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RouteProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { useAlert } from "../hooks/useAlert";
+import { getErrorMessage } from "../utils/format";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "BackupConfirm">;
 
 export default function BackupConfirmScreen() {
   const alert = useAlert();
   const navigation = useNavigation<Nav>();
-  const route = useRoute();
-  const walletId = (route.params as any)?.walletId as string;
+  const route = useRoute<RouteProp<RootStackParamList, "BackupConfirm">>();
+  const walletId = route.params.walletId;
   const { backupWallet } = useWalletStore();
 
   const handleConfirm = async () => {
@@ -31,8 +33,8 @@ export default function BackupConfirmScreen() {
           },
         },
       ]);
-    } catch (err: any) {
-      alert("备份失败", err.message || "请稍后重试");
+    } catch (err: unknown) {
+      alert("备份失败", getErrorMessage(err, "请稍后重试"));
     }
   };
 

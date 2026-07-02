@@ -22,6 +22,7 @@ import { TOKEN_ICONS, renderTokenIcon, ChevronRightIcon, CopyIcon } from "../com
 import { RechargeSkeleton } from "../components/Skeleton";
 import { formatTime as formatDate } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";
+import { getErrorMessage } from "../utils/format";
 
 
 export default function RechargeScreen() {
@@ -247,9 +248,8 @@ export default function RechargeScreen() {
       setAmount("");
       setMemo("");
       await loadRecords(1);
-    } catch (err: any) {
-      const serverError = err?.response?.data?.error || "充值失败，请重试";
-      showToast(serverError);
+    } catch (err: unknown) {
+      showToast(getErrorMessage(err, "充值失败，请重试"));
     }
     setSubmitting(false);
   };

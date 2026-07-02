@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import api from "../services/api";
 import { configService } from "../services/configService";
+import { getErrorMessage } from "../utils/format";
 
 export default function FeedbackScreen() {
   const [content, setContent] = useState("");
@@ -43,8 +44,8 @@ export default function FeedbackScreen() {
       // 清空输入
       setContent("");
       setContact("");
-    } catch (err: any) {
-      setResultMsg(err?.response?.data?.message || "提交失败，请稍后重试");
+    } catch (err: unknown) {
+      setResultMsg(getErrorMessage(err, "提交失败，请稍后重试"));
     }
     setSubmitting(false);
   };

@@ -208,7 +208,7 @@ export default function WalletManageScreen() {
                   {networks.length}个账户
                 </Text>
                 <Text style={styles.walletBackupStatus}>
-                  {backedUpWallets.has(item.id) ? "✅ 已备份" : "⚠️ 未备份"}
+                  {item.isReadOnly ? "📖 只读" : backedUpWallets.has(item.id) ? "✅ 已备份" : "⚠️ 未备份"}
                 </Text>
               </View>
 

@@ -17,6 +17,8 @@ import { TransactionCard } from "../screens/RecordsScreen";
 import { assetService } from "../services/assetService";
 import { USDTIcon, TransferIcon, ReceiveIcon, RecordsIcon, TronIcon } from "../components/icons";
 import type { Transaction } from "../types";
+import { useBackupGuard, type GuardType } from "../hooks/useBackupGuard";
+import BackupGuardModal from "../components/BackupGuardModal";
 
 type Route = RouteProp<RootStackParamList, "TokenDetail">;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -26,6 +28,7 @@ export default function TokenDetailScreen() {
   const navigation = useNavigation<Nav>();
   const { tokenSymbol } = route.params;
   const { activeWallet, activeAccount, assets } = useWalletStore();
+  const { guardCheck, showGuard, closeGuard, goToBackup, guardType } = useBackupGuard(activeWallet?.id);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -53,6 +56,7 @@ export default function TokenDetailScreen() {
   };
 
   return (
+    <View style={styles.outerContainer}>
     <ScrollView style={styles.container}>
       {/* Token Header */}
       <View style={styles.tokenHeader}>
@@ -68,14 +72,20 @@ export default function TokenDetailScreen() {
       <View style={styles.actions}>
         <TouchableOpacity
           style={styles.actionBtn}
-          onPress={() => navigation.navigate("Transfer", { tokenSymbol, tokenId: asset?.assetId })}
+          onPress={() => {
+            if (!guardCheck()) return;
+            navigation.navigate("Transfer", { tokenSymbol, tokenId: asset?.assetId });
+          }}
         >
           <TransferIcon size={24} color="#3B82F6" />
           <Text style={styles.actionLabel}>转账</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionBtn}
-          onPress={() => navigation.navigate("Receive", { tokenSymbol, tokenId: asset?.assetId })}
+          onPress={() => {
+            if (!guardCheck()) return;
+            navigation.navigate("Receive", { tokenSymbol, tokenId: asset?.assetId });
+          }}
         >
           <ReceiveIcon size={24} color="#10B981" />
           <Text style={styles.actionLabel}>收款</Text>
@@ -126,6 +136,15 @@ export default function TokenDetailScreen() {
         <EmptyState message="暂无交易记录" />
       )}
     </ScrollView>
+
+    {/* 备份/只读守卫弹窗 */}
+    <BackupGuardModal
+      visible={showGuard}
+      guardType={guardType ?? "backup"}
+      onClose={closeGuard}
+      onBackup={() => goToBackup(navigation)}
+    />
+    </View>
   );
 }
 
@@ -145,6 +164,7 @@ const infoStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  outerContainer: { flex: 1, backgroundColor: "#F9FAFB" },
   container: { flex: 1, backgroundColor: "#F9FAFB" },
   tokenHeader: { alignItems: "center", paddingVertical: 24 },
   iconCircle: {

@@ -29,6 +29,7 @@ import { detectNetwork, isValidAddressFormat } from "../utils/address";
 import { useAlert } from "../hooks/useAlert";
 import { useBackupGuard } from "../hooks/useBackupGuard";
 import BackupGuardModal from "../components/BackupGuardModal";
+import { getErrorMessage } from "../utils/format";
 
 /** 根据错误信息给出针对性建议 */
 function getSuggestion(error?: string): string {
@@ -60,7 +61,7 @@ export default function TransferScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const { activeWallet, assets, accounts } = useWalletStore();
-  const { guardCheck, showGuard, closeGuard, goToBackup } = useBackupGuard(activeWallet?.id);
+  const { guardCheck, showGuard, closeGuard, goToBackup, guardType } = useBackupGuard(activeWallet?.id);
   const [toAddress, setToAddress] = useState("");
   const [selectedToken, setSelectedToken] = useState<AssetBalance | null>(null);
 
@@ -251,8 +252,8 @@ export default function TransferScreen() {
       setAddressInContacts(true);
       setAddressCheckResult((prev) => prev ? { ...prev, inSystem: true } : prev);
       showToast("已添加到地址本");
-    } catch (err: any) {
-      alert("提示", "添加到地址本失败: " + (err.message || "未知错误"));
+    } catch (err: unknown) {
+      alert("提示", "添加到地址本失败: " + getErrorMessage(err, "未知错误"));
     } finally {
       setAddingToContacts(false);
     }
@@ -283,9 +284,8 @@ export default function TransferScreen() {
         receivedAmount: tx.receivedAmount,
         fee: tx.fee,
       });
-    } catch (err: any) {
-      const serverError = err.response?.data?.error || err.response?.data?.details?.[0]?.message || err.message;
-      setResult({ success: false, error: serverError || "转账失败，请稍后重试" });
+    } catch (err: unknown) {
+      setResult({ success: false, error: getErrorMessage(err, "转账失败，请稍后重试") });
     } finally {
       setSubmitting(false);
     }
@@ -307,8 +307,8 @@ export default function TransferScreen() {
         const { Share } = require("react-native");
         await Share.share({ message: `AquaD 转账 ${amount} ${tokenSymbol}` });
       }
-    } catch (err: any) {
-      alert("分享失败", err.message || "请尝试截图后手动分享");
+    } catch (err: unknown) {
+      alert("分享失败", getErrorMessage(err, "请尝试截图后手动分享"));
     }
   };
 
@@ -673,6 +673,7 @@ export default function TransferScreen() {
       {/* 备份提示弹窗 */}
       <BackupGuardModal
         visible={showGuard}
+        guardType={guardType ?? "backup"}
         onClose={closeGuard}
         onBackup={() => goToBackup(navigation)}
       />

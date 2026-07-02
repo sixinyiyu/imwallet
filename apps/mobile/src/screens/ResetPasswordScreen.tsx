@@ -20,6 +20,7 @@ import { validateMnemonic, cleanMnemonic, validateMnemonicWords, searchBip39Word
 import * as SecureStore from "../utils/secureStorage";
 import { EyeIcon, EyeOffIcon } from "../components/icons";
 import { useAlert } from "../hooks/useAlert";
+import { getErrorMessage } from "../utils/format";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "ResetPassword">;
 type RouteType = RouteProp<RootStackParamList, "ResetPassword">;
@@ -154,9 +155,9 @@ export default function ResetPasswordScreen() {
         setLoading(false);
         alert("验证失败", "助记词与当前钱包不匹配，请检查后重试");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLoading(false);
-      alert("错误", err.message || "验证失败，请稍后重试");
+      alert("错误", getErrorMessage(err, "验证失败，请稍后重试"));
     }
   };
 
@@ -180,8 +181,8 @@ export default function ResetPasswordScreen() {
         passwordHint.trim() || undefined,
       );
       navigation.pop(2);
-    } catch (err: any) {
-      alert("重置失败", err.message || "请稍后重试");
+    } catch (err: unknown) {
+      alert("重置失败", getErrorMessage(err, "请稍后重试"));
     } finally {
       setSubmitting(false);
     }

@@ -23,6 +23,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { cacheAdminAuth, clearAdminAuthCache } from "../utils/adminAuthCache";
+import { getErrorMessage } from "../utils/format";
 
 export default function ConfigManageScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -121,12 +122,12 @@ export default function ConfigManageScreen() {
       await loadConfig();
       setShowEditModal(false);
       showToast("费率已更新");
-    } catch (err: any) {
-      const status = err?.response?.status;
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 403) {
         setEditError("管理密码错误");
       } else {
-        setEditError(err?.response?.data?.error || "更新失败，请重试");
+        setEditError(getErrorMessage(err, "更新失败，请重试"));
       }
     }
     setSaving(false);
@@ -157,12 +158,12 @@ export default function ConfigManageScreen() {
       setShowTogglePwdDrawer(false);
       setTogglePwdInput("");
       setPendingToggleValue(null);
-    } catch (err: any) {
-      const status = err?.response?.status;
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 403) {
         setTogglePwdError("密码错误，请重试");
       } else {
-        setTogglePwdError(err?.response?.data?.error || "更新失败，请重试");
+        setTogglePwdError(getErrorMessage(err, "更新失败，请重试"));
       }
     }
     setTogglePwdVerifying(false);
@@ -198,14 +199,10 @@ export default function ConfigManageScreen() {
       await cacheAdminAuth(devicePwdInput.trim());
       setShowDevicePwdDrawer(false);
       navigation.navigate("DeviceManage", { verified: true, rechargePermitted });
-    } catch (err: any) {
+    } catch (err: unknown) {
       // 后端返回的错误信息（如密码验证失败）直接展示给用户
       // 前端内部错误（RSA加密失败、路由前缀缺失等）不暴露技术细节，统一提示网络/验证问题
-      if (err?.response?.data?.error) {
-        setDevicePwdError(err.response.data.error);
-      } else {
-        setDevicePwdError("验证请求发送失败，请检查网络后重试");
-      }
+      setDevicePwdError(getErrorMessage(err, "验证请求发送失败，请检查网络后重试"));
     }
     setDevicePwdVerifying(false);
   };

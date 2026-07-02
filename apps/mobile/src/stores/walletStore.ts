@@ -216,9 +216,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
               mnemonic_hash: "",
             });
 
-            // 订阅钱包无需备份，直接标记已备份
-            await SecureStore.setItemAsync(backedUpKey(w.id), "true");
-
             // 从后端获取该钱包的地址列表并写入本地
             const { addresses } = await walletService.getWalletAddresses(w.id);
             for (const addr of addresses) {
@@ -637,9 +634,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
           mnemonic_hash: "",
         });
       }
-
-      // 订阅钱包无需备份，直接标记已备份
-      await SecureStore.setItemAsync(backedUpKey(walletId), "true");
 
       // 3. 写入本地 accounts 表（每个地址一条，无派生路径）
       for (const addr of serverAddresses) {

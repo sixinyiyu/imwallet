@@ -33,7 +33,7 @@ export default function ActionButtons({
 }: Props) {
   const navigation = useNavigation<Nav>();
   const activeWallet = useWalletStore((s) => s.activeWallet);
-  const { guardCheck, showGuard, closeGuard, goToBackup } = useBackupGuard(activeWallet?.id);
+  const { guardCheck, showGuard, closeGuard, goToBackup, guardType } = useBackupGuard(activeWallet?.id);
 
   const [showTokenPicker, setShowTokenPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<"receive" | "transfer">("receive");
@@ -58,15 +58,13 @@ export default function ActionButtons({
         end={{ x: 1, y: 0 }}
         style={styles.container}
       >
-        {/* 只读钱包不显示转账按钮 */}
-        {!activeWallet?.isReadOnly && (
-          <TouchableOpacity style={styles.button} onPress={handleTransferPress}>
+        {/* 转账 */}
+        <TouchableOpacity style={styles.button} onPress={handleTransferPress}>
             <View style={styles.iconCircle}>
               <TransferIcon size={22} color="#FFFFFF" />
             </View>
             <Text style={styles.label}>转账</Text>
           </TouchableOpacity>
-        )}
         <TouchableOpacity
           style={styles.button}
           onPress={handleReceivePress}
@@ -87,6 +85,7 @@ export default function ActionButtons({
       {/* 备份提示弹窗 */}
       <BackupGuardModal
         visible={showGuard}
+        guardType={guardType ?? "backup"}
         onClose={closeGuard}
         onBackup={() => goToBackup(navigation)}
       />

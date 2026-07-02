@@ -161,7 +161,7 @@ export default function RecordsScreen() {
       {filterExpanded && (
         <View style={styles.filterPanel}>
           {/* 交易类型 */}
-          <Text style={styles.filterLabel}>交易类型</Text>
+          <Text style={styles.filterLabel}>交易类型 <Text style={styles.filterHint}>（暂不支持筛选）</Text></Text>
           <View style={styles.filterRow}>
             {TYPE_OPTIONS.map((opt) => (
               <TouchableOpacity
@@ -185,7 +185,7 @@ export default function RecordsScreen() {
           </View>
 
           {/* 时间范围 */}
-          <Text style={styles.filterLabel}>时间范围</Text>
+          <Text style={styles.filterLabel}>时间范围 <Text style={styles.filterHint}>（暂不支持筛选）</Text></Text>
           <View style={styles.filterRow}>
             {TIME_OPTIONS.map((opt) => (
               <TouchableOpacity
@@ -367,6 +367,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#E5E7EB",
   },
   filterLabel: { fontSize: 13, color: "#6B7280", fontWeight: "500", marginTop: 12, marginBottom: 6 },
+  filterHint: { fontSize: 11, color: "#9CA3AF", fontWeight: "400" },
   filterRow: { flexDirection: "row", gap: 8 },
   filterChip: {
     paddingHorizontal: 14,

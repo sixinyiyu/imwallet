@@ -88,7 +88,8 @@ export default function ProfileScreen() {
             style={styles.menuItem}
             onPress={() => {
               if (item.screen) {
-                navigation.navigate(item.screen as any);
+                // @ts-expect-error — dynamic screen name from menu config, all routes have undefined params
+                navigation.navigate(item.screen);
               }
             }}
           >

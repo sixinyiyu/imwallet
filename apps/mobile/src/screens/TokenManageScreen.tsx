@@ -13,6 +13,7 @@ import type { AssetInfo } from "../types";
 import { TOKEN_ICONS, renderTokenIcon } from "../components/icons";
 import { GreenToggle } from "../components/GreenToggle";
 import { TokenManageSkeleton } from "../components/Skeleton";
+import { getErrorMessage } from "../utils/format";
 
 export default function TokenManageScreen() {
   const [assets, setAssets] = useState<AssetInfo[]>([]);
@@ -60,8 +61,8 @@ export default function TokenManageScreen() {
         prev.map((a) => (a.id === asset.id ? { ...a, isTradable: value } : a))
       );
       showToast(`${asset.symbol} 交易已${value ? "开启" : "关闭"}`);
-    } catch (err: any) {
-      showToast(err?.response?.data?.error || "更新失败，请重试");
+    } catch (err: unknown) {
+      showToast(getErrorMessage(err, "更新失败，请重试"));
     }
     setTogglingId(null);
   };

@@ -13,6 +13,7 @@ import { copyToClipboard } from "../utils/clipboard";
 import { useBackupGuard } from "../hooks/useBackupGuard";
 import BackupGuardModal from "../components/BackupGuardModal";
 import type { RootStackParamList } from "../types/navigation";
+import { getErrorMessage } from "../utils/format";
 
 type ReceiveRouteProp = RouteProp<RootStackParamList, "Receive">;
 type Nav = NativeStackNavigationProp<RootStackParamList, "Receive">;
@@ -29,7 +30,7 @@ export default function ReceiveScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<ReceiveRouteProp>();
   const { activeWallet, activeAccount, assets } = useWalletStore();
-  const { guardCheck, showGuard, closeGuard, goToBackup } = useBackupGuard(activeWallet?.id);
+  const { guardCheck, showGuard, closeGuard, goToBackup, guardType } = useBackupGuard(activeWallet?.id);
   // 使用 Account.address（链上地址）而非 Wallet.address（内部标识）
   const address = activeAccount?.address ?? "";
   const qrWrapperRef = useRef<View>(null);
@@ -97,8 +98,8 @@ export default function ReceiveScreen() {
         const { Share } = require("react-native");
         await Share.share({ message: `${currentToken.symbol} (${network}) 收款地址: ${address}` });
       }
-    } catch (err: any) {
-        showToast("分享失败: " + (err.message || "请稍后重试"));    }
+    } catch (err: unknown) {
+        showToast("分享失败: " + getErrorMessage(err, "请稍后重试"));    }
   };
 
   return (
@@ -166,6 +167,7 @@ export default function ReceiveScreen() {
       {/* 备份提示弹窗 */}
       <BackupGuardModal
         visible={showGuard}
+        guardType={guardType ?? "backup"}
         onClose={closeGuard}
         onBackup={() => goToBackup(navigation)}
       />

@@ -26,6 +26,7 @@ import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import { formatFullTime } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";
+import { getErrorMessage } from "../utils/format";
 
 type Route = RouteProp<RootStackParamList, "TradeDetail">;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -100,8 +101,8 @@ export default function TradeDetailScreen() {
         const { Share } = require("react-native");
         await Share.share({ message: `AquaD 交易详情\n金额: ${tx?.amount} ${tx?.tokenSymbol}\n状态: ${tx?.status}` });
       }
-    } catch (err: any) {
-      alert("分享失败", err.message || "请尝试截图后手动分享");
+    } catch (err: unknown) {
+      alert("分享失败", getErrorMessage(err, "请尝试截图后手动分享"));
     }
   };
 
@@ -152,7 +153,7 @@ export default function TradeDetailScreen() {
 
   // 根据 FEE_MODE 计算实际到账和总计
   const isFeeDeducted = tx.feeMode === "DEDUCTED";
-  const receivedAmount = parseFloat(tx.receivedAmount) || (isFeeDeducted ? amountNum - feeNum : amountNum);
+  const receivedAmount = parseFloat(tx.receivedAmount ?? "0") || (isFeeDeducted ? amountNum - feeNum : amountNum);
   const senderTotal = isFeeDeducted ? amountNum : amountNum + feeNum;
 
   return (

@@ -38,6 +38,7 @@ import {
 import type { Wallet, SimpleWallet } from "../types";
 import { formatDate } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";
+import { getErrorMessage } from "../utils/format";
 
 /** 根据网络名获取对应图标组件（PascalCase） */
 function getNetworkIcon(network: string): React.FC<{ size?: number; color?: string }> | null {
@@ -114,8 +115,8 @@ export default function WalletDetailScreen() {
                 try {
                   await useWalletStore.getState().unsubscribeWallet(wallet.id);
                   navigation.goBack();
-                } catch (err: any) {
-                  showToast(err?.message || "取消订阅失败");
+                } catch (err: unknown) {
+                  showToast(getErrorMessage(err, "取消订阅失败"));
                 }
               }}
               style={{ marginRight: 16 }}
@@ -187,9 +188,8 @@ export default function WalletDetailScreen() {
       setDetail(null);
       await fetchWallets();
       setShowEditModal(false);
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || err.message || "修改失败";
-      alert("提示", msg);
+    } catch (err: unknown) {
+      alert("提示", getErrorMessage(err, "修改失败"));
     }
     setSavingAlias(false);
   };
@@ -206,7 +206,7 @@ export default function WalletDetailScreen() {
         // 删除最后一个钱包后跳转到 Start 导航页
         const remaining = useWalletStore.getState().wallets;
         if (remaining.length === 0) {
-          navigation.replace("Start" as any);
+          navigation.replace("Start");
         } else {
           navigation.goBack();
         }

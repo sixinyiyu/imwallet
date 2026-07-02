@@ -20,6 +20,7 @@ import { useWalletStore } from "../stores/walletStore";
 import { validateMnemonic, cleanMnemonic, validateMnemonicWords, generateIdentifier } from "../utils/mnemonic";
 import { useAlert } from "../hooks/useAlert";
 import { EyeIcon, EyeOffIcon } from "../components/icons";
+import { getErrorMessage } from "../utils/format";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "WalletImport">;
 
@@ -146,8 +147,8 @@ export default function WalletImportScreen() {
     try {
       const walletId = await importWallet(validatedMnemonic, alias.trim(), password, passwordHint.trim() || undefined);
       navigation.replace("WalletAddAccount", { walletId });
-    } catch (err: any) {
-      alert("导入失败", err.message || "请稍后重试");
+    } catch (err: unknown) {
+      alert("导入失败", getErrorMessage(err, "请稍后重试"));
     } finally {
       setLoading(false);
     }

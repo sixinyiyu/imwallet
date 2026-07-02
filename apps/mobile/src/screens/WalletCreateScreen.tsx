@@ -18,6 +18,7 @@ import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { EyeIcon, EyeOffIcon } from "../components/icons";
 import { useAlert } from "../hooks/useAlert";
+import { getErrorMessage } from "../utils/format";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -133,9 +134,8 @@ export default function WalletCreateScreen() {
     try {
       const id = await createWallet(alias.trim(), password, passwordHint.trim() || undefined);
       navigation.replace("WalletAddAccount", { walletId: id });
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.response?.data?.details?.[0]?.message || err.message || "请稍后重试";
-      alert("创建失败", msg);
+    } catch (err: unknown) {
+      alert("创建失败", getErrorMessage(err, "请稍后重试"));
     } finally {
       setLoading(false);
     }

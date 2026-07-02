@@ -12,6 +12,7 @@ import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { useAlert } from "../hooks/useAlert";
 import { useSecureScreen, useScreenshotDetector } from "../hooks/useSecureScreen";
+import { getErrorMessage } from "../utils/format";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "ConfirmMnemonic">;
 type RouteType = RouteProp<RootStackParamList, "ConfirmMnemonic">;
@@ -115,9 +116,9 @@ export default function ConfirmMnemonicScreen() {
           { name: "WalletDetail", params: { walletId } },
         ],
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setVerifying(false);
-      alert("备份失败", err.message || "请稍后重试");
+      alert("备份失败", getErrorMessage(err, "请稍后重试"));
     }
   };
 

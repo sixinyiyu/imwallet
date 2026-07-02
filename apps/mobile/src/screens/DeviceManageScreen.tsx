@@ -24,14 +24,9 @@ import EmptyState from "../components/EmptyState";
 import { formatTime } from "../utils/date";
 import { getPlaintextPassword, clearAdminAuthCache } from "../utils/adminAuthCache";
 import { useWalletStore } from "../stores/walletStore";
+import { formatCny, getErrorMessage } from "../utils/format";
 import type { RouteProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../types/navigation";
-
-/** 格式化 CNY 金额：保留2位小数 */
-function formatCny(value: string): string {
-  const num = parseFloat(value) || 0;
-  return num.toFixed(2);
-}
 
 type DeviceManageRoute = RouteProp<RootStackParamList, "DeviceManage">;
 
@@ -128,10 +123,8 @@ export default function DeviceManageScreen() {
       setWalletsTotal(res.total);
       setWallets((prev) => (append ? [...prev, ...res.wallets] : res.wallets));
       setWalletsPage(res.page);
-    } catch (err: any) {
-      const msg = err?.message || "加载钱包列表失败";
-      if (__DEV__) console.warn("[DeviceManage] loadWallets error:", msg);
-      showToast(msg);
+    } catch (err: unknown) {
+      showToast(getErrorMessage(err, "加载钱包列表失败"));
     }
   }, [adminPwd]);
 
@@ -160,29 +153,22 @@ export default function DeviceManageScreen() {
     setDataTab("transactions");
     setDataLoading(true);
     try {
-      const fetches: Promise<any>[] = [
-        adminService.getWalletTransactions(walletId, adminPwd, 1, 20),
-        walletService.getWalletAddresses(walletId).catch(() => ({ addresses: [] })),
-        configService.getFeeConfig().catch(() => null),
-      ];
-      // 充值记录走 admin 接口（动态前缀），跟订阅无关，仅取决于充值权限
-      if (rechargePermitted) {
-        fetches.push(adminService.getRechargeRecords(adminPwd, 1, 20, walletId));
-      }
-      const results = await Promise.all(fetches);
-      setTransactions(results[0].transactions);
-      setWalletAddresses(results[1].addresses.map((a: any) => a.address));
-      if (results[2]) setFeeConfig(results[2]);
-      // 充值数据仅在充值权限时才取（跟订阅无关）
-      if (rechargePermitted && results.length >= 4) {
-        setRecharges(results[3].recharges);
-      } else {
-        setRecharges([]);
-      }
-    } catch (err: any) {
-      const msg = err?.message || "加载钱包数据失败";
-      if (__DEV__) console.warn("[DeviceManage] loadWalletData error:", msg);
-      showToast(msg);
+      const txPromise = adminService.getWalletTransactions(walletId, adminPwd, 1, 20);
+      const addrPromise = walletService.getWalletAddresses(walletId).catch(() => ({ addresses: [] }));
+      const feePromise = configService.getFeeConfig().catch(() => null);
+      const rechargePromise = rechargePermitted
+        ? adminService.getRechargeRecords(adminPwd, 1, 20, walletId)
+        : null;
+
+      const [txResult, addrResult, feeResult, rechargeResult] = await Promise.all([
+        txPromise, addrPromise, feePromise, rechargePromise ?? Promise.resolve(null),
+      ]);
+      setTransactions(txResult.transactions);
+      setWalletAddresses(addrResult.addresses.map((a: { address: string }) => a.address));
+      if (feeResult) setFeeConfig(feeResult);
+      setRecharges(rechargeResult?.recharges ?? []);
+    } catch (err: unknown) {
+      showToast(getErrorMessage(err, "加载钱包数据失败"));
     }
     setDataLoading(false);
   };
@@ -200,10 +186,8 @@ export default function DeviceManageScreen() {
         const more = await adminService.getRechargeRecords(adminPwd, nextPage, 20, selectedWallet);
         setRecharges((prev) => [...prev, ...more.recharges]);
       }
-    } catch (err: any) {
-      const msg = err?.message || "加载更多失败";
-      if (__DEV__) console.warn("[DeviceManage] loadMore error:", msg);
-      showToast(msg);
+    } catch (err: unknown) {
+      showToast(getErrorMessage(err, "加载更多失败"));
     }
     setLoadingMore(false);
   };
@@ -219,8 +203,8 @@ export default function DeviceManageScreen() {
       const available = allWallets.filter((w) => !currentWalletIds.has(w.id));
       setSubscribeWallets(available);
       setShowSubscribeModal(true);
-    } catch (err: any) {
-      showToast(err?.message || "加载钱包列表失败");
+    } catch (err: unknown) {
+      showToast(getErrorMessage(err, "加载钱包列表失败"));
     }
     setSubscribeLoading(false);
   };
@@ -237,8 +221,8 @@ export default function DeviceManageScreen() {
       setShowSubscribeModal(false);
       const currentWalletIds = new Set(useWalletStore.getState().wallets.map((w) => w.id));
       setSubscribeWallets((prev) => prev.filter((w) => !currentWalletIds.has(w.id)));
-    } catch (err: any) {
-      setSubscribeError(err?.message || "订阅失败，请重试");
+    } catch (err: unknown) {
+      setSubscribeError(getErrorMessage(err, "订阅失败，请重试"));
     }
     setSubscribing(false);
   };
@@ -248,8 +232,8 @@ export default function DeviceManageScreen() {
     try {
       await useWalletStore.getState().subscribeWallet(walletId);
       showToast("订阅成功");
-    } catch (err: any) {
-      showToast(err?.message || "订阅失败");
+    } catch (err: unknown) {
+      showToast(getErrorMessage(err, "订阅失败"));
     }
   };
 
@@ -620,7 +604,7 @@ const styles = StyleSheet.create({
   chevronExpanded: {
     transform: [{ rotate: "90deg" }],
   },
-  walletAlias: { fontSize: 16, fontWeight: "600", color: "1F2937" },
+  walletAlias: { fontSize: 16, fontWeight: "600", color: "#1F2937" },
   walletNameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   walletNameLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
   walletBalanceValue: { fontSize: 14, fontWeight: "700", color: "#1F2937" },

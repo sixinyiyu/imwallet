@@ -14,6 +14,7 @@ import { useAlert } from "../hooks/useAlert";
 import { detectNetwork } from "../utils/address";
 import { TronIcon, EthIcon, BtcIcon, ContactIcon, CopyIcon, AddContactIcon } from "../components/icons";
 import { saveLogToLocal } from "../services/logService";
+import { getErrorMessage } from "../utils/format";
 import { copyToClipboard } from "../utils/clipboard";
 import { AddressBookSkeleton } from "../components/Skeleton";
 import type { AddressEntry } from "../types";
@@ -153,8 +154,8 @@ export default function AddressBookScreen() {
       showToast(formMode === "add" ? "联系人已添加" : "联系人已更新");
       closeForm();
       loadContacts();
-    } catch (err: any) {
-      alert("错误", err.message || "操作失败");
+    } catch (err: unknown) {
+      alert("错误", getErrorMessage(err, "操作失败"));
     } finally {
       setSubmitting(false);
     }
@@ -364,8 +365,8 @@ export default function AddressBookScreen() {
                     setShowDeleteConfirm(false);
                     setDeletingEntry(null);
                     loadContacts();
-                  } catch (err: any) {
-                    showToast("删除失败: " + (err.message || "未知错误"));
+                  } catch (err: unknown) {
+                    showToast("删除失败: " + getErrorMessage(err, "未知错误"));
                     setShowDeleteConfirm(false);
                     setDeletingEntry(null);
                   }

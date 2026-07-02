@@ -148,18 +148,18 @@ export interface Transaction {
   fromAddress: string;
   toAddress: string;
   tokenSymbol: string;
-  tokenName: string;
+  tokenName?: string;
   amount: string;
   fee: string;
-  receivedAmount: string;
-  feeMode: string;
+  receivedAmount?: string;
+  feeMode?: string;
   status: string;
   memo: string | null;
   createdAt: string;
-  fromWallet: { alias: string; address: string };
-  toWallet: { alias: string; address: string };
-  fromContactName: string;
-  toContactName: string;
+  fromWallet?: { alias: string; address: string };
+  toWallet?: { alias: string; address: string };
+  fromContactName?: string;
+  toContactName?: string;
 }
 
 /** 地址簿条目（全局地址通讯录，PK = chain + address） */
