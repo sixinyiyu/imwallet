@@ -22,6 +22,8 @@ pub enum AppError {
     Conflict(String),
     #[error("Internal server error")]
     Internal(String),
+    #[error("Too many requests: {0}")]
+    TooManyRequests(String),
 }
 
 impl AppError {
@@ -33,12 +35,14 @@ impl AppError {
             AppError::NotFound(_) => StatusCode::NOT_FOUND,
             AppError::Conflict(_) => StatusCode::CONFLICT,
             AppError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            AppError::TooManyRequests(_) => StatusCode::TOO_MANY_REQUESTS,
         }
     }
 }
 
 #[derive(Serialize)]
 struct ErrorResponse {
+    code: String,
     message: String,
 }
 
@@ -59,8 +63,35 @@ fn format_error_chain(err: &dyn std::error::Error) -> String {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let status = self.status_code();
-        // C7: 仅返回 message，不暴露 debug 信息
-        // Internal 变体只返回固定字符串，内部原因仅记日志
+        let code = match &self {
+            AppError::Unauthorized(_) => "UNAUTHORIZED",
+            AppError::Forbidden(_) => "FORBIDDEN",
+            AppError::BadRequest(msg) => {
+                if msg.contains("余额不足") {
+                    "INSUFFICIENT_BALANCE"
+                } else if msg.contains("地址") {
+                    "INVALID_ADDRESS"
+                } else if msg.contains("不在") {
+                    "NOT_IN_SYSTEM"
+                } else {
+                    "BAD_REQUEST"
+                }
+            }
+            AppError::NotFound(msg) => {
+                if msg.contains("钱包") {
+                    "WALLET_NOT_FOUND"
+                } else if msg.contains("交易") {
+                    "TRANSACTION_NOT_FOUND"
+                } else if msg.contains("代币") {
+                    "ASSET_NOT_FOUND"
+                } else {
+                    "NOT_FOUND"
+                }
+            }
+            AppError::Conflict(_) => "CONFLICT",
+            AppError::Internal(_) => "INTERNAL_ERROR",
+            AppError::TooManyRequests(_) => "RATE_LIMITED",
+        };
         let message = match &self {
             AppError::Internal(detail) => {
                 // 遍历错误链输出完整原因（比 Backtrace 更可靠，release 构建也能用）
@@ -76,7 +107,10 @@ impl IntoResponse for AppError {
             }
             _ => self.to_string(),
         };
-        let body = ErrorResponse { message };
+        let body = ErrorResponse {
+            code: code.to_string(),
+            message,
+        };
         (status, Json(body)).into_response()
     }
 }

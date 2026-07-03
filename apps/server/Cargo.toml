@@ -46,6 +46,8 @@ simple_logger = "5"
 thiserror = "2"
 anyhow = "1"
 lru = "0.18"
+arc-swap = "1"
+tokio-util = { version = "0.7", features = ["rt"] }
 
 # ── Blockchain ──
 # tronic = { version = "0.5", features = ["tonic-tls"] }  # Uncomment when Tron interaction is needed

@@ -145,24 +145,31 @@ async fn ensure_asset_balances(
         return Ok(());
     }
 
-    // 批量构建 VALUES 子句
-    let values: Vec<String> = assets
+    // 参数化批量 INSERT：每个资产一组 ($N, $N+1, $N+2, $N+3, 0) 占位符
+    let mut args: Vec<rbs::value::Value> = Vec::new();
+    let placeholders: Vec<String> = assets
         .iter()
-        .map(|a| {
+        .enumerate()
+        .map(|(i, a)| {
+            let base = i * 4 + 1;
+            args.push(rbs::value::Value::String(uuid::Uuid::new_v4().to_string()));
+            args.push(rbs::value::Value::String(_address_id.to_string()));
+            args.push(rbs::value::Value::String(a.id.clone()));
+            args.push(rbs::value::Value::String(chain.to_string()));
             format!(
-                "('{}', '{}', '{}', '{}', 0)",
-                uuid::Uuid::new_v4(),
-                _address_id,
-                a.id,
-                chain
+                "(${}, ${}, ${}, ${}, 0)",
+                base,
+                base + 1,
+                base + 2,
+                base + 3
             )
         })
         .collect();
     let sql = format!(
         "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance) VALUES {} ON CONFLICT (address_id, asset_id) DO NOTHING",
-        values.join(", ")
+        placeholders.join(", ")
     );
-    exec(rb, &sql, vals![]).await?;
+    exec(rb, &sql, args).await?;
     Ok(())
 }
 pub async fn get_wallet_addresses(

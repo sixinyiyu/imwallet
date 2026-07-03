@@ -40,6 +40,12 @@ pub struct DatabaseConfig {
     pub password: String,
     #[serde(default)]
     pub url: String,
+    #[serde(default = "default_pool_max")]
+    pub pool_max_connections: u32,
+    #[serde(default = "default_pool_min")]
+    pub pool_min_connections: u32,
+    #[serde(default = "default_pool_timeout")]
+    pub pool_acquire_timeout_secs: u64,
 }
 
 fn default_db_type() -> String {
@@ -47,6 +53,15 @@ fn default_db_type() -> String {
 }
 fn default_db_user() -> String {
     "postgres".into()
+}
+fn default_pool_max() -> u32 {
+    20
+}
+fn default_pool_min() -> u32 {
+    5
+}
+fn default_pool_timeout() -> u64 {
+    30
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -206,7 +221,10 @@ pub struct AppConfig {
     pub database_type: String,
     pub database_user_name: String,
     pub database_password: String,
-    pub database_url: String, // host:port/dbname?params
+    pub database_url: String,
+    pub pool_max_connections: u32,
+    pub pool_min_connections: u32,
+    pub pool_acquire_timeout_secs: u64,
     pub fee_rate: f64,
     pub fee_mode: String,
     pub tx_restrict_wallet: bool,
@@ -284,6 +302,9 @@ impl From<ConfigFile> for AppConfig {
             database_user_name: db_user,
             database_password: db_pwd,
             database_url: db_url,
+            pool_max_connections: c.database.pool_max_connections,
+            pool_min_connections: c.database.pool_min_connections,
+            pool_acquire_timeout_secs: c.database.pool_acquire_timeout_secs,
             fee_rate: c.fee.rate,
             fee_mode: c.fee.mode,
             tx_restrict_wallet: c.fee.tx_restrict_wallet,
@@ -352,6 +373,9 @@ pub fn init_config() -> anyhow::Result<AppConfig> {
                 user_name: default_db_user(),
                 password: String::new(),
                 url: String::new(),
+                pool_max_connections: default_pool_max(),
+                pool_min_connections: default_pool_min(),
+                pool_acquire_timeout_secs: default_pool_timeout(),
             },
             fee: FeeConfig::default(),
             service: ServiceConfig::default(),

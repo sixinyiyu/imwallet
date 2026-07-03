@@ -62,7 +62,7 @@ interface WalletState {
 
   loadLocalState: () => Promise<void>;
   syncWalletsWithServer: () => Promise<void>;
-  syncSubscribedWalletsAsync: () => void;
+  syncSubscribedWalletsAsync: () => Promise<void>;
   fetchWallets: () => Promise<void>;
   fetchWalletsAggregate: () => Promise<SimpleWallet[]>;
   fetchAccounts: (walletId: string) => Promise<void>;
@@ -129,7 +129,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       await get().fetchWallets();
 
       // 5. 异步加载订阅钱包（从后端获取当前设备的钱包列表，发现本地不存在时以 SUBSCRIBE 写入）
-      get().syncSubscribedWalletsAsync();
+      await get().syncSubscribedWalletsAsync();
 
       // 6. 启动时同步通知到本地
       try {
@@ -148,43 +148,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
    * Recovers from server data loss by re-registering wallets and re-syncing addresses.
    */
   syncWalletsWithServer: async () => {
-    try {
-      const localWallets = await localWalletService.getAllWallets();
-      for (const wallet of localWallets) {
-        try {
-          // Re-register wallet (idempotent: creates if missing, updates alias if exists)
-          await syncService.registerWallet(
-            wallet.source as "CREATE" | "IMPORT",
-            wallet.id,
-            wallet.name
-          );
-        } catch {
-          // Wallet might already exist or network error, continue
-        }
-
-        // Re-sync all accounts (addresses) for this wallet
-        const accounts = await localAccountService.getWalletAccounts(wallet.id);
-        for (const account of accounts) {
-          try {
-            const serverAddress = await syncService.syncAddress(
-              wallet.id,
-              account.chain,
-              account.address
-            );
-            // Update server_address_id if it changed (server was reset → new UUID)
-            if (serverAddress.id !== account.serverAddressId) {
-              await localAccountService.updateAccount(account.id, {
-                server_address_id: serverAddress.id,
-              });
-            }
-          } catch {
-            // Individual address sync failure, continue with next
-          }
-        }
-      }
-    } catch {
-      // silent — sync failure should not block app startup
-    }
+    await walletSyncService.syncWalletsWithServer();
   },
 
   /**
@@ -192,71 +156,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
    * 发现本地不存在时以 SUBSCRIBE 写入本地并同步地址。
    * 不阻塞启动，异步执行。
    */
-  syncSubscribedWalletsAsync: () => {
-    // 异步执行，不阻塞启动
-    (async () => {
-      try {
-        // 从后端获取当前设备订阅的所有钱包
-        const { wallets: serverWallets } = await walletService.getWallets();
-        const localWallets = await localWalletService.getAllWallets();
-        const localIds = new Set(localWallets.map((w) => w.id));
-
-        // 找出本地不存在但后端存在的钱包（即订阅钱包）
-        const newWallets = serverWallets.filter((w) => !localIds.has(w.id));
-        if (newWallets.length === 0) return;
-
-        for (const w of newWallets) {
-          try {
-            // 写入本地 wallets 表
-            await localWalletService.createWallet({
-              id: w.id,
-              name: w.name,
-              source: "SUBSCRIBE",
-              password_hash: "",
-              password_hint: "",
-              mnemonic_hash: "",
-            });
-
-            // 从后端获取该钱包的地址列表并写入本地
-            const { addresses } = await walletService.getWalletAddresses(w.id);
-            for (const addr of addresses) {
-              const existingAccount = await localAccountService.getAccountByAddress(addr.address);
-              if (!existingAccount) {
-                const { generateUUID } = await import("../db/database");
-                const accountId = generateUUID();
-                await localAccountService.createAccount({
-                  id: accountId,
-                  wallet_id: w.id,
-                  chain: addr.chain,
-                  derivation_path: "",
-                  address: addr.address,
-                  extended_pubkey: "",
-                  account_index: -1,
-                  name: `${addr.chain} Account`,
-                  server_address_id: addr.id,
-                });
-
-                await localAddressService.upsertAddress({
-                  chain: addr.chain,
-                  address: addr.address,
-                  walletId: w.id,
-                  name: `${addr.chain} Account`,
-                  type: "internalWallet",
-                  status: "verified",
-                });
-              }
-            }
-          } catch {
-            // 单个钱包同步失败，继续下一个
-          }
-        }
-
-        // 刷新钱包列表
-        await get().fetchWallets();
-      } catch {
-        // silent — 异步同步失败不影响用户
-      }
-    })();
+  syncSubscribedWalletsAsync: async () => {
+    try {
+      await walletSyncService.syncSubscribedWallets();
+      await get().fetchWallets();
+    } catch {
+      // silent — 异步同步失败不影响用户
+    }
   },
 
   /** Fetch wallets from local SQLite */

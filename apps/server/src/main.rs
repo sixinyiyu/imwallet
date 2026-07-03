@@ -45,7 +45,12 @@ async fn main() -> anyhow::Result<()> {
     log::info!("rs-wallet starting...");
 
     // 3. 初始化数据库连接
-    let db = Arc::new(db::init_db(&config.database_full_url())?);
+    let db = Arc::new(db::init_db(
+        &config.database_full_url(),
+        config.pool_max_connections,
+        config.pool_min_connections,
+        config.pool_acquire_timeout_secs,
+    )?);
     log::info!("Database connected ({})", config.database_masked_url());
 
     // 4. 执行数据库迁移（flyway 驱动 V*.sql，DDL + 种子数据一步完成）
@@ -75,7 +80,13 @@ async fn main() -> anyhow::Result<()> {
         )
     };
 
-    let app = routes::build_routes(db, config.clone()).await?.layer(
+    let (app, cancel) = routes::build_routes(
+        db,
+        config.clone(),
+        tokio_util::sync::CancellationToken::new(),
+    )
+    .await?;
+    let app = app.layer(
         CorsLayer::new()
             .allow_origin(cors_origin)
             .allow_methods([
@@ -99,7 +110,16 @@ async fn main() -> anyhow::Result<()> {
     log::info!("Server listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            // 监听 Ctrl+C 信号，触发优雅关闭
+            tokio::signal::ctrl_c()
+                .await
+                .expect("failed to listen for ctrl+c");
+            log::info!("Received shutdown signal, gracefully shutting down...");
+            cancel.cancel();
+        })
+        .await?;
 
     Ok(())
 }

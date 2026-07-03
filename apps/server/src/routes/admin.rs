@@ -363,22 +363,8 @@ async fn list_wallets(
             icon_url: String,
             total_balance: rust_decimal::Decimal,
         }
-        // 参数化 IN 子句：WHERE ws.wallet_id IN ($1, $2, ...) + vals
-        let placeholders: Vec<String> = wallet_ids
-            .iter()
-            .enumerate()
-            .map(|(i, _)| format!("${}", i + 1))
-            .collect();
-        let in_sql = placeholders.join(",");
-        let args: Vec<rbs::value::Value> = wallet_ids
-            .iter()
-            .map(|id| rbs::value::Value::String(id.clone()))
-            .collect();
-        let sql = format!(
-            "SELECT ws.wallet_id, aa.asset_id, a.symbol, a.name, aa.chain, a.icon_url, SUM(aa.balance) as total_balance FROM assets_addresses aa JOIN assets a ON a.id = aa.asset_id JOIN wallet_subscriptions ws ON ws.address_id = aa.address_id WHERE ws.wallet_id IN ({}) AND ws.address_id != '' GROUP BY ws.wallet_id, aa.asset_id, a.symbol, a.name, aa.chain, a.icon_url",
-            in_sql
-        );
-        let balance_rows: Vec<BalanceRow> = query(&state.db, &sql, args).await?;
+        let sql = "SELECT ws.wallet_id, aa.asset_id, a.symbol, a.name, aa.chain, a.icon_url, SUM(aa.balance) as total_balance FROM assets_addresses aa JOIN assets a ON a.id = aa.asset_id JOIN wallet_subscriptions ws ON ws.address_id = aa.address_id WHERE ws.wallet_id IN (SELECT unnest($1::text[])) AND ws.address_id != '' GROUP BY ws.wallet_id, aa.asset_id, a.symbol, a.name, aa.chain, a.icon_url";
+        let balance_rows: Vec<BalanceRow> = query(&state.db, sql, vals![&wallet_ids]).await?;
 
         // 按钱包分组
         let mut balance_map: std::collections::HashMap<String, Vec<AssetBalanceBrief>> =

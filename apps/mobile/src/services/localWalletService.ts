@@ -1,5 +1,6 @@
 import "react-native-get-random-values";
 import { sha256 } from "@noble/hashes/sha2.js";
+import { pbkdf2 } from "@noble/hashes/pbkdf2";
 import { getDatabase, nowISO } from "../db/database";
 import type { LocalWallet } from "../types";
 
@@ -10,8 +11,20 @@ function bytesToHex(bytes: Uint8Array): string {
     .join("");
 }
 
-/** 计算密码的 SHA-256 hex 哈希 */
+// ── 密码哈希版本 ──
+// v1: SHA-256（旧版，兼容已创建钱包）
+// v2: PBKDF2-SHA256（新版，更安全）
+const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_SALT = new TextEncoder().encode("imwallet_password_salt_v2");
+
+/** 计算密码的 PBKDF2-SHA256 hex 哈希（v2） */
 export function hashPassword(password: string): string {
+  const derived = pbkdf2(sha256, password, PBKDF2_SALT, PBKDF2_ITERATIONS, 32);
+  return bytesToHex(derived);
+}
+
+/** 计算密码的 SHA-256 hex 哈希（v1 旧版，用于兼容验证） */
+function hashPasswordLegacy(password: string): string {
   const data = new TextEncoder().encode(password);
   return bytesToHex(sha256(data));
 }
@@ -133,7 +146,20 @@ export const localWalletService = {
     const wallet = rowToWallet(row);
     if (wallet.source === "SUBSCRIBE") return false;
     if (!wallet.password_hash) return false;
-    return hashPassword(password) === wallet.password_hash;
+
+    // 先尝试 PBKDF2 v2 哈希
+    const v2Hash = hashPassword(password);
+    if (v2Hash === wallet.password_hash) return true;
+
+    // 兼容旧版 SHA-256 v1 哈希
+    const v1Hash = hashPasswordLegacy(password);
+    if (v1Hash === wallet.password_hash) {
+      // 自动升级：旧哈希验证成功后，更新为 PBKDF2 v2 哈希
+      await this.updatePassword(id, v2Hash);
+      return true;
+    }
+
+    return false;
   },
 
   async verifyMnemonicHash(id: string, mnemonicHash: string): Promise<boolean> {

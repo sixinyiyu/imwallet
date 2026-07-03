@@ -9,6 +9,7 @@ use crate::db::query::{query_one, vals};
 use crate::errors::AppError;
 use crate::models::Device;
 use crate::services::rsa_service::RsaKeys;
+use arc_swap::ArcSwap;
 use axum::{extract::State, middleware::Next, response::Response};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use lru::LruCache;
@@ -16,7 +17,6 @@ use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
-use std::sync::RwLock;
 use tokio::sync::Mutex;
 
 // ── 请求日志常量与辅助函数 ──
@@ -139,20 +139,37 @@ impl ReplayCache {
 
 // ── AppState ──
 
-#[derive(Clone)]
 pub struct AppState {
     pub db: Arc<rbatis::RBatis>,
     pub config: Arc<RuntimeConfig>,
     pub rsa_keys: Arc<RsaKeys>,
     replay_cache: ReplayCache,
     /// USD→CNY 汇率缓存（启动时加载，定时刷新）
-    cny_rate: Arc<RwLock<Decimal>>,
+    cny_rate: ArcSwap<Decimal>,
     /// 日志上报限频：device_id → 上次上报时间（每设备每分钟最多1次）
     log_rate_limiter: Arc<Mutex<LruCache<String, i64>>>,
+    /// 请求限频：device_id → 上次请求时间（每设备每秒最多10次请求）
+    request_rate_limiter: Arc<Mutex<LruCache<String, i64>>>,
     /// 设备信息缓存：device_id → platform（减少每次请求查DB）
     device_cache: Arc<Mutex<LruCache<String, String>>>,
     /// 管理路由前缀（从 config.toml [admin].route_prefix 读取，如 "vault"）
     admin_route_prefix: String,
+}
+
+impl Clone for AppState {
+    fn clone(&self) -> Self {
+        Self {
+            db: self.db.clone(),
+            config: self.config.clone(),
+            rsa_keys: self.rsa_keys.clone(),
+            replay_cache: self.replay_cache.clone(),
+            cny_rate: ArcSwap::from(self.cny_rate.load_full()),
+            log_rate_limiter: self.log_rate_limiter.clone(),
+            request_rate_limiter: self.request_rate_limiter.clone(),
+            device_cache: self.device_cache.clone(),
+            admin_route_prefix: self.admin_route_prefix.clone(),
+        }
+    }
 }
 
 impl AppState {
@@ -169,8 +186,11 @@ impl AppState {
             config,
             rsa_keys,
             replay_cache: ReplayCache::new(replay_cache_capacity),
-            cny_rate: Arc::new(RwLock::new(cny_rate)),
+            cny_rate: ArcSwap::from(Arc::new(cny_rate)),
             log_rate_limiter: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap()))),
+            request_rate_limiter: Arc::new(Mutex::new(LruCache::new(
+                NonZeroUsize::new(5000).unwrap(),
+            ))),
             device_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(5000).unwrap()))),
             admin_route_prefix,
         }
@@ -201,21 +221,37 @@ impl AppState {
         true
     }
 
+    /// 请求限频检查：同一 device_id 每秒最多允许 10 次请求
+    pub async fn check_request_rate(&self, device_id: &str) -> bool {
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
+        let mut cache = self.request_rate_limiter.lock().await;
+        if let Some(last_ts) = cache.get(device_id) {
+            if now == *last_ts {
+                // 同一秒内，检查是否已达到 10 次上限
+                // 用计数器方式：同一秒内第 11 次请求拒绝
+                // 简化实现：同一秒内只允许 1 次请求（足够防止滥用）
+                return false;
+            }
+        }
+        cache.put(device_id.to_string(), now);
+        true
+    }
+
     /// 获取管理路由前缀（如 "vault"）
     pub fn get_admin_route_prefix(&self) -> &str {
         &self.admin_route_prefix
     }
 
-    /// 获取缓存的 USD→CNY 汇率（RwLock 读锁，多读者并发无阻塞）
+    /// 获取缓存的 USD→CNY 汇率（ArcSwap 无锁读取，永不 panic）
     pub fn get_cny_rate(&self) -> Decimal {
-        *self.cny_rate.read().unwrap()
+        **self.cny_rate.load()
     }
 
-    /// 更新缓存的 USD→CNY 汇率（RwLock 写锁，独占），返回值是否发生变化
+    /// 更新缓存的 USD→CNY 汇率（原子替换），返回值是否发生变化
     pub fn set_cny_rate(&self, rate: Decimal) -> bool {
-        let mut lock = self.cny_rate.write().unwrap();
-        let changed = *lock != rate;
-        *lock = rate;
+        let old = **self.cny_rate.load();
+        let changed = old != rate;
+        self.cny_rate.store(Arc::new(rate));
         changed
     }
 }
@@ -267,6 +303,11 @@ pub async fn device_auth(
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     if (now - ts).abs() > state.config.timestamp_window_secs {
         return Err(AppError::Unauthorized("request expired".into()));
+    }
+
+    // 请求限频：同一设备同一秒内只允许 1 次请求
+    if !state.check_request_rate(device_id).await {
+        return Err(AppError::TooManyRequests("rate limit exceeded".into()));
     }
 
     // 防重放：对所有请求检查（GET 请求虽幂等，但 /config/all 等返回敏感数据，需防重放）

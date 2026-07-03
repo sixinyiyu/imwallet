@@ -44,8 +44,10 @@ function toCamelCase(str: string): string {
 
 /** 递归转换对象的所有 key */
 function transformKeys(obj: any, transformer: (key: string) => string): any {
+  if (obj === null || obj === undefined) return obj;
+  if (obj instanceof Date) return obj; // 保留 Date 对象
   if (Array.isArray(obj)) return obj.map((item) => transformKeys(item, transformer));
-  if (obj !== null && typeof obj === "object") {
+  if (typeof obj === "object") {
     const result: Record<string, any> = {};
     for (const [key, value] of Object.entries(obj)) {
       result[transformer(key)] = transformKeys(value, transformer);

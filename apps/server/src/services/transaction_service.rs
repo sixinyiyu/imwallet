@@ -245,34 +245,38 @@ pub async fn get_transactions(
     let l = limit as i64;
     use crate::db::query::{query, query_count};
 
-    // CTE: 当前钱包关联的所有链上地址（去重），只计算一次
+    // 子查询：当前钱包关联的所有链上地址（去重）
     // 空地址集时 IN 自然匹配不到，无需额外空检查
-    let cte = "WITH wallet_addr AS (\n      SELECT DISTINCT wa.address\n      FROM wallet_subscriptions ws\n      JOIN wallets_addresses wa ON wa.id = ws.address_id\n      WHERE ws.wallet_id = $1 AND ws.address_id != ''\n    )";
+    // 使用子查询替代 CTE，避免 CTE 在 COUNT 和 SELECT 中重复定义
+    let addr_subquery = "SELECT DISTINCT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.address_id != ''";
+    let where_clause = "(t.from_address IN ({sub}) OR t.to_address IN ({sub}))";
 
     let (rows, total) = if let Some(sym) = token_symbol {
+        let where_sql = where_clause.replace("{sub}", addr_subquery);
         let rows: Vec<crate::models::Transaction> = query(
             &rb,
-            &format!("{cte}\n      SELECT t.* FROM transactions t\n      WHERE (t.from_address IN (SELECT address FROM wallet_addr)\n         OR t.to_address IN (SELECT address FROM wallet_addr))\n        AND t.token_symbol = $2\n      ORDER BY t.created_at DESC LIMIT $3 OFFSET $4"),
+            &format!("SELECT t.* FROM transactions t WHERE {where_sql} AND t.token_symbol = $2 ORDER BY t.created_at DESC LIMIT $3 OFFSET $4"),
             vals![wallet_id, sym, l, o],
         )
         .await?;
         let total = query_count(
             &rb,
-            &format!("{cte}\n      SELECT COUNT(*) as cnt FROM transactions t\n      WHERE (t.from_address IN (SELECT address FROM wallet_addr)\n         OR t.to_address IN (SELECT address FROM wallet_addr))\n        AND t.token_symbol = $2"),
+            &format!("SELECT COUNT(*) as cnt FROM transactions t WHERE {where_sql} AND t.token_symbol = $2"),
             vals![wallet_id, sym],
         )
         .await?;
         (rows, total)
     } else {
+        let where_sql = where_clause.replace("{sub}", addr_subquery);
         let rows: Vec<crate::models::Transaction> = query(
             &rb,
-            &format!("{cte}\n      SELECT t.* FROM transactions t\n      WHERE t.from_address IN (SELECT address FROM wallet_addr)\n         OR t.to_address IN (SELECT address FROM wallet_addr)\n      ORDER BY t.created_at DESC LIMIT $2 OFFSET $3"),
+            &format!("SELECT t.* FROM transactions t WHERE {where_sql} ORDER BY t.created_at DESC LIMIT $2 OFFSET $3"),
             vals![wallet_id, l, o],
         )
         .await?;
         let total = query_count(
             &rb,
-            &format!("{cte}\n      SELECT COUNT(*) as cnt FROM transactions t\n      WHERE t.from_address IN (SELECT address FROM wallet_addr)\n         OR t.to_address IN (SELECT address FROM wallet_addr)"),
+            &format!("SELECT COUNT(*) as cnt FROM transactions t WHERE {where_sql}"),
             vals![wallet_id],
         )
         .await?;

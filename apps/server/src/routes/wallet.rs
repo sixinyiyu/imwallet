@@ -459,39 +459,17 @@ async fn get_my_recharges(
         }));
     }
 
-    // 参数化 IN 子句：WHERE wallet_id IN ($1, $2, ...) + vals
-    let placeholders: Vec<String> = filtered_wids
-        .iter()
-        .enumerate()
-        .map(|(i, _)| format!("${}", i + 1))
-        .collect();
-    let in_sql = placeholders.join(",");
-    let args: Vec<rbs::value::Value> = filtered_wids
-        .iter()
-        .map(|w| rbs::value::Value::String(w.clone()))
-        .collect();
-
     let total: u64 = crate::db::query::query_count(
         &state.db,
-        &format!(
-            "SELECT COUNT(*) as cnt FROM recharges WHERE wallet_id IN ({})",
-            in_sql
-        ),
-        args.clone(),
+        "SELECT COUNT(*) as cnt FROM recharges WHERE wallet_id IN (SELECT unnest($1::text[]))",
+        vals![&filtered_wids],
     )
     .await?;
 
-    // 分页参数追加到 args 末尾
-    let mut page_args = args;
-    page_args.push(rbs::value::Value::I64(query.limit as i64));
-    page_args.push(rbs::value::Value::I64(offset as i64));
-    let limit_placeholder = format!("${}", filtered_wids.len() + 1);
-    let offset_placeholder = format!("${}", filtered_wids.len() + 2);
-
     let rows: Vec<crate::models::Recharge> = crate::db::query::query(
         &state.db,
-        &format!("SELECT * FROM recharges WHERE wallet_id IN ({}) ORDER BY created_at DESC LIMIT {} OFFSET {}", in_sql, limit_placeholder, offset_placeholder),
-        page_args,
+        "SELECT * FROM recharges WHERE wallet_id IN (SELECT unnest($1::text[])) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        vals![&filtered_wids, query.limit as i64, offset as i64],
     ).await?;
 
     Ok(Json(MyRechargesResponse {

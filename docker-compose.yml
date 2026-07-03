@@ -36,6 +36,12 @@ services:
     volumes:
       - rs-wallet-keys:/opt/rs-wallet/keys
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   pgdata:
