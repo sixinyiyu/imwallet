@@ -12,6 +12,7 @@ import { deriveAddressFromMnemonic, getDerivationPath } from "../utils/derivatio
 import { ensureDeviceKeys, ensureDeviceRegistered } from "../services/api";
 import { useAuthStore } from "./authStore";
 import { uploadLog, saveLogToLocal } from "../services/logService";
+import { getErrorMessage } from "../utils/format";
 import type { SimpleWallet, Account, AssetBalance, LocalWallet } from "../types";
 
 const MNEMONIC_KEY_PREFIX = "aquad_mnemonic_";
@@ -375,8 +376,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     let mnemonic: string;
     try {
       mnemonic = await generateMnemonic();
-    } catch (err: any) {
-      saveLogToLocal("mnemonic", `[createWallet] generateMnemonic threw: ${err?.message || String(err)}`);
+    } catch (err: unknown) {
+      saveLogToLocal("mnemonic", `[createWallet] generateMnemonic threw: ${getErrorMessage(err, "未知错误")}`);
       throw new Error("助记词生成失败，请重试");
     }
     if (!mnemonic || mnemonic.trim().split(/\s+/).length !== 12) {
@@ -557,7 +558,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       });
 
       await get().fetchAccounts(walletId);
-    } catch (err: any) {
+    } catch (err: unknown) {
       throw err;
     }
   },
@@ -589,7 +590,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       if (walletId) {
         await get().fetchAccounts(walletId);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       throw err;
     }
   },
@@ -667,7 +668,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       // 4. 刷新钱包列表
       await get().fetchWallets();
-    } catch (err: any) {
+    } catch (err: unknown) {
       throw err;
     }
   },
@@ -684,8 +685,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       // 3. 刷新钱包列表
       await get().fetchWallets();
-    } catch (err: any) {
+    } catch (err: unknown) {
       throw err;
     }
   },
-}));
+  }));

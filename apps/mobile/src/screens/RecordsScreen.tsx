@@ -21,6 +21,8 @@ import type { Transaction, AddressEntry } from "../types";
 import { SearchIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
 import { formatTime } from "../utils/date";
 import { configService, type FeeConfig } from "../services/configService";
+import { saveLogToLocal } from "../services/logService";
+import { getErrorMessage } from "../utils/format";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type RecordsRoute = RouteProp<RootStackParamList, "Records">;
@@ -82,7 +84,9 @@ export default function RecordsScreen() {
     });
     configService.getFeeConfig().then((cfg) => {
       if (cfg) setFeeConfig(cfg);
-    }).catch(() => {});
+    }).catch((err: unknown) => {
+      saveLogToLocal("info", `[RecordsScreen] getFeeConfig failed: ${getErrorMessage(err, "未知错误")}`);
+    });
   }, [navigation, filterExpanded]);
 
   const loadTransactions = useCallback(

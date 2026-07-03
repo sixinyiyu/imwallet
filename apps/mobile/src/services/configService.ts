@@ -5,6 +5,7 @@ import { encryptPassword } from "../utils/rsaEncrypt";
 import { cacheAdminAuth, cacheAdminRoutePrefix } from "../utils/adminAuthCache";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { gcm } from "@noble/ciphers/aes.js";
+import { saveLogToLocal } from "./logService";
 
 export interface FeeConfig {
   feeRate: number;
@@ -220,7 +221,7 @@ export const configService = {
       const prefix = new TextDecoder().decode(plaintext);
       await cacheAdminRoutePrefix(prefix);
     } catch (e) {
-      console.warn("[configService] decrypt route prefix failed:", e);
+      saveLogToLocal("info", `[configService] decrypt route prefix failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   },
 };

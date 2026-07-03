@@ -16,6 +16,7 @@ import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { WalletIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import { ChevronRightIcon } from "../components/icons";
+import { ReadOnlyIcon } from "../components/icons";
 import type { AggregateWallet } from "../types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -208,11 +209,11 @@ export default function WalletManageScreen() {
                   {networks.length}个账户
                 </Text>
                 <Text style={styles.walletBackupStatus}>
-                  {item.isReadOnly ? "📖 只读" : backedUpWallets.has(item.id) ? "✅ 已备份" : "⚠️ 未备份"}
+                  {item.isReadOnly ? <ReadOnlyIcon size={14} color="#9CA3AF" /> : backedUpWallets.has(item.id) ? "✅ 已备份" : "⚠️ 未备份"}
                 </Text>
               </View>
 
-              {/* Actions: 左侧提示/图标 + 右侧添加账户 */}
+              {/* Actions: 左侧提示/图标 + 右侧添加账户（订阅钱包只读，不显示添加入口） */}
               <View style={styles.cardActions}>
                 <View style={styles.actionLeft}>
                   {hasAccounts ? (
@@ -222,15 +223,22 @@ export default function WalletManageScreen() {
                         return IconComp ? <IconComp key={i} size={20} /> : null;
                       })}
                     </View>
+                  ) : item.isReadOnly ? (
+                    <View style={styles.readOnlyHintWrap}>
+                      <ReadOnlyIcon size={16} color="#9CA3AF" />
+                      <Text style={styles.noAccountHint}>只读钱包</Text>
+                    </View>
                   ) : (
                     <Text style={styles.noAccountHint}>使用之前，先添加账户</Text>
                   )}
                 </View>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("WalletAddAccount", { walletId: item.id })}
-                >
-                  <Text style={styles.addAccountLink}>+ 添加账户</Text>
-                </TouchableOpacity>
+                {!item.isReadOnly && (
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate("WalletAddAccount", { walletId: item.id })}
+                  >
+                    <Text style={styles.addAccountLink}>+ 添加账户</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           );
@@ -338,6 +346,11 @@ const styles = StyleSheet.create({
   noAccountHint: {
     fontSize: 13,
     color: "#9CA3AF",
+  },
+  readOnlyHintWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   addAccountLink: {
     fontSize: 13,

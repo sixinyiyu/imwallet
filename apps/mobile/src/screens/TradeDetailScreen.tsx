@@ -27,6 +27,7 @@ import * as Sharing from "expo-sharing";
 import { formatFullTime } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";
 import { getErrorMessage } from "../utils/format";
+import { saveLogToLocal } from "../services/logService";
 
 type Route = RouteProp<RootStackParamList, "TradeDetail">;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -58,7 +59,9 @@ export default function TradeDetailScreen() {
         map.set(c.address, c);
       }
       setContactMap(map);
-    }).catch(() => {});
+    }).catch((err: unknown) => {
+      saveLogToLocal("info", `[TradeDetail] getAllContacts failed: ${getErrorMessage(err, "未知错误")}`);
+    });
   }, []);
 
   useEffect(() => {

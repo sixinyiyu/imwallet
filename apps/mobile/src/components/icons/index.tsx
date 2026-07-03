@@ -29,6 +29,7 @@ export { default as AddContactIcon } from "./AddContactIcon";
 export { default as AndroidIcon } from "./AndroidIcon";
 export { default as IosIcon } from "./IosIcon";
 export { default as SubscribeIcon } from "./SubscribeIcon";
+export { default as ReadOnlyIcon } from "./ReadOnlyIcon";
 
 import React from "react";
 import { Text } from "react-native";

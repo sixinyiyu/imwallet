@@ -1,6 +1,7 @@
 import "react-native-get-random-values";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { saveLogToLocal } from "../services/logService";
+import { getErrorMessage } from "../utils/format";
 
 // ─── BIP39 English wordlist (2048 words) ───
 export const BIP39_WORDLIST: string[] = [
@@ -57,18 +58,18 @@ export async function generateMnemonic(): Promise<string> {
   let entropy: Uint8Array;
   try {
     entropy = crypto.getRandomValues(new Uint8Array(16));
-  } catch (err: any) {
-    saveLogToLocal("mnemonic", `[generateMnemonic] crypto.getRandomValues FAILED: ${err?.message || String(err)}, typeof crypto=${typeof crypto}`);
-    throw new Error(`RNG failed: ${err?.message || String(err)}`);
+  } catch (err: unknown) {
+    saveLogToLocal("mnemonic", `[generateMnemonic] crypto.getRandomValues FAILED: ${getErrorMessage(err, "RNG failed")}, typeof crypto=${typeof crypto}`);
+    throw new Error(`RNG failed: ${getErrorMessage(err, "未知错误")}`);
   }
 
   // Step 2: SHA-256 checksum
   let hashArray: Uint8Array;
   try {
     hashArray = sha256(entropy);
-  } catch (err: any) {
-    saveLogToLocal("mnemonic", `[generateMnemonic] sha256 FAILED: ${err?.message || String(err)}, entropyLen=${entropy?.length}`);
-    throw new Error(`SHA256 failed: ${err?.message || String(err)}`);
+  } catch (err: unknown) {
+    saveLogToLocal("mnemonic", `[generateMnemonic] sha256 FAILED: ${getErrorMessage(err, "SHA256 failed")}, entropyLen=${entropy?.length}`);
+    throw new Error(`SHA256 failed: ${getErrorMessage(err, "未知错误")}`);
   }
 
   // For 128-bit entropy, checksum = 128/32 = 4 bits

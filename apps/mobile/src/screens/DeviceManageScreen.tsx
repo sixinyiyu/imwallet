@@ -25,6 +25,7 @@ import { formatTime } from "../utils/date";
 import { getPlaintextPassword, clearAdminAuthCache } from "../utils/adminAuthCache";
 import { useWalletStore } from "../stores/walletStore";
 import { formatCny, getErrorMessage } from "../utils/format";
+import { saveLogToLocal } from "../services/logService";
 import type { RouteProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../types/navigation";
 
@@ -154,8 +155,14 @@ export default function DeviceManageScreen() {
     setDataLoading(true);
     try {
       const txPromise = adminService.getWalletTransactions(walletId, adminPwd, 1, 20);
-      const addrPromise = walletService.getWalletAddresses(walletId).catch(() => ({ addresses: [] }));
-      const feePromise = configService.getFeeConfig().catch(() => null);
+      const addrPromise = walletService.getWalletAddresses(walletId).catch((err: unknown) => {
+        saveLogToLocal("info", `[DeviceManage] getWalletAddresses failed: ${getErrorMessage(err, "未知错误")}`);
+        return { addresses: [] };
+      });
+      const feePromise = configService.getFeeConfig().catch((err: unknown) => {
+        saveLogToLocal("info", `[DeviceManage] getFeeConfig failed: ${getErrorMessage(err, "未知错误")}`);
+        return null;
+      });
       const rechargePromise = rechargePermitted
         ? adminService.getRechargeRecords(adminPwd, 1, 20, walletId)
         : null;

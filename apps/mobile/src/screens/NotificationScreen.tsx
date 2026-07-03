@@ -17,7 +17,9 @@ import { renderTokenIcon } from "../components/icons";
 import { NotificationSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import type { Notification } from "../types";
-import { formatDateTime } from "../utils/date";
+import { formatTime } from "../utils/date";
+import { saveLogToLocal } from "../services/logService";
+import { getErrorMessage } from "../utils/format";
 
 function getTypeIcon(type: string) {
   switch (type) {
@@ -158,7 +160,7 @@ function SwipeableRow({
               {displayContent}
             </Text>
             <Text style={styles.dateText}>
-              {formatDateTime(item.createdAt)}
+              {formatTime(item.createdAt)}
             </Text>
           </View>
         </TouchableOpacity>
@@ -174,12 +176,21 @@ export default function NotificationScreen() {
   const [loading, setLoading] = useState(true);
   const [openRowId, setOpenRowId] = useState<string | null>(null);
 
+  // Toast 状态
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMsg, setToastMsg] = useState("");
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setToastVisible(true);
+    setTimeout(() => setToastVisible(false), 2000);
+  };
+
   const loadLocal = async () => {
     try {
       const data = await localNotificationService.getAllNotifications();
       setNotifications(data);
-    } catch {
-      // silent
+    } catch (err: unknown) {
+      saveLogToLocal("info", `[NotificationScreen] loadLocal failed: ${getErrorMessage(err, "加载失败")}`);
     }
   };
 
@@ -188,8 +199,8 @@ export default function NotificationScreen() {
     try {
       await notificationSyncService.syncNotifications();
       await loadLocal();
-    } catch {
-      // silent
+    } catch (err: unknown) {
+      saveLogToLocal("info", `[NotificationScreen] onRefresh failed: ${getErrorMessage(err, "刷新失败")}`);
     }
     setLoading(false);
   };
@@ -206,8 +217,8 @@ export default function NotificationScreen() {
       setNotifications(prev =>
         prev.map(n => n.id === id ? { ...n, isRead: true } : n)
       );
-    } catch {
-      // silent
+    } catch (err: unknown) {
+      showToast("标记已读失败: " + getErrorMessage(err, "请稍后重试"));
     }
   };
 
@@ -215,8 +226,8 @@ export default function NotificationScreen() {
     try {
       await localNotificationService.markAllAsRead();
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-    } catch {
-      // silent
+    } catch (err: unknown) {
+      showToast("全部标记已读失败: " + getErrorMessage(err, "请稍后重试"));
     }
   };
 
@@ -240,8 +251,8 @@ export default function NotificationScreen() {
     try {
       await localNotificationService.deleteNotification(id);
       setNotifications(prev => prev.filter(n => n.id !== id));
-    } catch {
-      // silent
+    } catch (err: unknown) {
+      showToast("删除失败: " + getErrorMessage(err, "请稍后重试"));
     }
   };
 
@@ -301,6 +312,15 @@ export default function NotificationScreen() {
         }
         contentContainerStyle={notifications.length === 0 ? styles.emptyList : undefined}
       />
+
+      {/* Toast */}
+      {toastVisible && (
+        <View style={styles.toastWrap} pointerEvents="none">
+          <View style={styles.toast}>
+            <Text style={styles.toastText}>{toastMsg}</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -380,4 +400,8 @@ const styles = StyleSheet.create({
   contentText: { fontSize: 13, color: "#6B7280", marginTop: 4, lineHeight: 18 },
   dateText: { fontSize: 12, color: "#9CA3AF", marginTop: 6 },
   emptyList: { flexGrow: 1, justifyContent: "center" },
+  // ── Toast ──
+  toastWrap: { position: "absolute", bottom: 80, left: 0, right: 0, alignItems: "center" },
+  toast: { backgroundColor: "rgba(0,0,0,0.75)", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
+  toastText: { color: "#FFFFFF", fontSize: 14 },
 });

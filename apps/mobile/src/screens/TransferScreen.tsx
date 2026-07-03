@@ -30,6 +30,7 @@ import { useAlert } from "../hooks/useAlert";
 import { useBackupGuard } from "../hooks/useBackupGuard";
 import BackupGuardModal from "../components/BackupGuardModal";
 import { getErrorMessage } from "../utils/format";
+import { saveLogToLocal } from "../services/logService";
 
 /** 根据错误信息给出针对性建议 */
 function getSuggestion(error?: string): string {
@@ -146,8 +147,14 @@ export default function TransferScreen() {
   // 获取手续费配置 + 交易限制配置
   useEffect(() => {
     Promise.all([
-      configService.getFeeConfig().catch(() => null),
-      configService.getTxRestrictWallet().catch(() => false),
+      configService.getFeeConfig().catch((err: unknown) => {
+        saveLogToLocal("info", `[TransferScreen] getFeeConfig failed: ${getErrorMessage(err, "未知错误")}`);
+        return null;
+      }),
+      configService.getTxRestrictWallet().catch((err: unknown) => {
+        saveLogToLocal("info", `[TransferScreen] getTxRestrictWallet failed: ${getErrorMessage(err, "未知错误")}`);
+        return false;
+      }),
     ]).then(([fee, restrict]) => {
       if (fee) setFeeConfig(fee);
       setTxRestrictWallet(restrict);

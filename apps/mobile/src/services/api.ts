@@ -162,8 +162,8 @@ export async function ensureDeviceRegistered(publicKeyHex: string): Promise<void
       platform,
     });
     await SecureStore.setItemAsync(DEVICE_REGISTERED, "true");
-  } catch (err: any) {
-    if (err.response?.status === 409) {
+  } catch (err: unknown) {
+    if ((err as { response?: { status?: number } }).response?.status === 409) {
       await SecureStore.setItemAsync(DEVICE_REGISTERED, "true");
     }
   }
