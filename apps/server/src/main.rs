@@ -45,12 +45,15 @@ async fn main() -> anyhow::Result<()> {
     log::info!("rs-wallet starting...");
 
     // 3. 初始化数据库连接
-    let db = Arc::new(db::init_db(
-        &config.database_full_url(),
-        config.pool_max_connections,
-        config.pool_min_connections,
-        config.pool_acquire_timeout_secs,
-    )?);
+    let db = Arc::new(
+        db::init_db(
+            &config.database_full_url(),
+            config.pool_max_connections,
+            config.pool_min_connections,
+            config.pool_acquire_timeout_secs,
+        )
+        .await?,
+    );
     log::info!("Database connected ({})", config.database_masked_url());
 
     // 4. 执行数据库迁移（flyway 驱动 V*.sql，DDL + 种子数据一步完成）

@@ -15,7 +15,7 @@ use std::time::Duration;
 /// max_conn: 最大连接数（默认 20）
 /// min_conn: 最小空闲连接数（默认 5）
 /// timeout_secs: 获取连接超时秒数（默认 30）
-pub fn init_db(
+pub async fn init_db(
     database_url: &str,
     max_conn: u32,
     min_conn: u32,
@@ -24,14 +24,11 @@ pub fn init_db(
     let pool = rbdc_pool_fast::FastPool::new_url(PgDriver {}, database_url)
         .map_err(|e| anyhow::anyhow!("创建数据库连接池失败: {}", e))?;
 
-    // 先配置连接池参数，再 init_pool（pool 会被 move）
-    let rt = tokio::runtime::Handle::current();
-    rt.block_on(async {
-        pool.set_max_open_conns(max_conn as u64).await;
-        pool.set_max_idle_conns(min_conn as u64).await;
-        pool.set_timeout(Some(Duration::from_secs(timeout_secs)))
-            .await;
-    });
+    // 配置连接池参数（异步方法，直接 await 即可）
+    pool.set_max_open_conns(max_conn as u64).await;
+    pool.set_max_idle_conns(min_conn as u64).await;
+    pool.set_timeout(Some(Duration::from_secs(timeout_secs)))
+        .await;
 
     let rb = RBatis::new();
     rb.init_pool(pool)
