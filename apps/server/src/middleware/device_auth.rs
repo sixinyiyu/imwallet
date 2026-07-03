@@ -148,8 +148,8 @@ pub struct AppState {
     cny_rate: ArcSwap<Decimal>,
     /// 日志上报限频：device_id → 上次上报时间（每设备每分钟最多1次）
     log_rate_limiter: Arc<Mutex<LruCache<String, i64>>>,
-    /// 请求限频：device_id → 上次请求时间（每设备每秒最多10次请求）
-    request_rate_limiter: Arc<Mutex<LruCache<String, i64>>>,
+    /// 请求限频：device_id → (秒级时间戳, 该秒内已请求次数)（每设备每秒最多10次请求）
+    request_rate_limiter: Arc<Mutex<LruCache<String, (i64, u32)>>>,
     /// 设备信息缓存：device_id → platform（减少每次请求查DB）
     device_cache: Arc<Mutex<LruCache<String, String>>>,
     /// 管理路由前缀（从 config.toml [admin].route_prefix 读取，如 "vault"）
@@ -223,17 +223,24 @@ impl AppState {
 
     /// 请求限频检查：同一 device_id 每秒最多允许 10 次请求
     pub async fn check_request_rate(&self, device_id: &str) -> bool {
+        const MAX_PER_SEC: u32 = 10;
         let now = time::OffsetDateTime::now_utc().unix_timestamp();
         let mut cache = self.request_rate_limiter.lock().await;
-        if let Some(last_ts) = cache.get(device_id) {
-            if now == *last_ts {
-                // 同一秒内，检查是否已达到 10 次上限
-                // 用计数器方式：同一秒内第 11 次请求拒绝
-                // 简化实现：同一秒内只允许 1 次请求（足够防止滥用）
-                return false;
+        // 先取出旧值（copy），避免 get/put 借用冲突
+        let prev = cache.get(device_id).copied();
+        if let Some((ts, count)) = prev {
+            if now == ts {
+                // 同一秒内，检查是否已达到上限
+                if count >= MAX_PER_SEC {
+                    return false;
+                }
+                // 未达上限，递增计数
+                cache.put(device_id.to_string(), (now, count + 1));
+                return true;
             }
         }
-        cache.put(device_id.to_string(), now);
+        // 新的一秒，计数从 1 开始
+        cache.put(device_id.to_string(), (now, 1));
         true
     }
 
@@ -305,7 +312,7 @@ pub async fn device_auth(
         return Err(AppError::Unauthorized("request expired".into()));
     }
 
-    // 请求限频：同一设备同一秒内只允许 1 次请求
+    // 请求限频：同一设备每秒最多 10 次请求
     if !state.check_request_rate(device_id).await {
         return Err(AppError::TooManyRequests("rate limit exceeded".into()));
     }

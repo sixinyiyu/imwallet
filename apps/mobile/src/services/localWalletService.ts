@@ -20,13 +20,13 @@ const PBKDF2_SALT_MNEMONIC = new TextEncoder().encode("imwallet_mnemonic_salt_v2
 
 /** 计算密码的 PBKDF2-SHA256 hex 哈希（v2） */
 export function hashPassword(password: string): string {
-  const derived = pbkdf2(sha256, password, PBKDF2_SALT_PASSWORD, PBKDF2_ITERATIONS, 32);
+  const derived = pbkdf2(sha256, password, PBKDF2_SALT_PASSWORD, { c: PBKDF2_ITERATIONS, dkLen: 32 });
   return bytesToHex(derived);
 }
 
 /** 计算助记词的 PBKDF2-SHA256 hex 哈希（v2） */
 export function hashMnemonic(mnemonic: string): string {
-  const derived = pbkdf2(sha256, mnemonic, PBKDF2_SALT_MNEMONIC, PBKDF2_ITERATIONS, 32);
+  const derived = pbkdf2(sha256, mnemonic, PBKDF2_SALT_MNEMONIC, { c: PBKDF2_ITERATIONS, dkLen: 32 });
   return bytesToHex(derived);
 }
 
