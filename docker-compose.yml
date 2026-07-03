@@ -6,7 +6,7 @@ services:
     container_name: imwallet-db
     environment:
       POSTGRES_USER: imwallet
-      POSTGRES_PASSWORD: imwallet_dev
+      POSTGRES_PASSWORD: ****
       POSTGRES_DB: imwallet
     ports:
       - "5432:5432"
@@ -24,9 +24,9 @@ services:
       dockerfile: Dockerfile
     container_name: imwallet-server
     environment:
-      DATABASE_URL: postgresql://imwallet:imwallet_dev@postgres:5432/imwallet
+      DATABASE_URL: postgresql://imwallet:****@postgres:5432/imwallet
       PORT: 3000
-      SERVER_PWD: dev_server_pwd
+      SERVER_PWD: ****
       RUST_BACKTRACE: 1
     ports:
       - "3000:3000"

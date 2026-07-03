@@ -2,11 +2,12 @@ import { create } from "zustand";
 import * as SecureStore from "../utils/secureStorage";
 import { walletService } from "../services/walletService";
 import { syncService } from "../services/syncService";
-import { localWalletService, hashPassword } from "../services/localWalletService";
+import { localWalletService, hashPassword, hashMnemonic } from "../services/localWalletService";
 import { localAccountService } from "../services/localAccountService";
 import { localAddressService } from "../services/localAddressService";
 import { notificationSyncService } from "../services/notificationSyncService";
 import { localNotificationService } from "../services/localNotificationService";
+import { walletSyncService } from "../services/walletSyncService";
 import { generateMnemonic, cleanMnemonic, generateIdentifier } from "../utils/mnemonic";
 import { deriveAddressFromMnemonic, getDerivationPath } from "../utils/derivation";
 import { ensureDeviceKeys, ensureDeviceRegistered } from "../services/api";
@@ -299,7 +300,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     // 3. 生成密码 hash 和助记词 hash
     const passwordHash = hashPassword(password);
-    const mnemonicHash = hashPassword(mnemonic);
+    const mnemonicHash = hashMnemonic(mnemonic);
 
     // 4. 在本地 SQLite 创建钱包记录
     await localWalletService.createWallet({
@@ -331,7 +332,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     // 3. 生成密码 hash 和助记词 hash
     const passwordHash = hashPassword(password);
-    const mnemonicHash = hashPassword(cleaned);
+    const mnemonicHash = hashMnemonic(cleaned);
 
     // 4. 在本地 SQLite 创建钱包记录
     await localWalletService.createWallet({
@@ -357,10 +358,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   /** Reset wallet password — verify mnemonic locally then update password */
   resetPassword: async (walletId: string, mnemonic: string, password: string, passwordHint?: string): Promise<void> => {
     const cleaned = cleanMnemonic(mnemonic);
-    const mnemonicHash = hashPassword(cleaned);
 
-    // 本地验证助记词哈希
-    const valid = await localWalletService.verifyMnemonicHash(walletId, mnemonicHash);
+    // 本地验证助记词哈希（传入原始助记词，内部自动判断 v1/v2 版本）
+    const valid = await localWalletService.verifyMnemonicHash(walletId, cleaned);
     if (!valid) {
       throw new Error("助记词与当前钱包不匹配");
     }
