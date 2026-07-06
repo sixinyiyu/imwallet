@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/wallets", get(get_wallets).post(create_wallet))
+        .route("/wallets/sync", post(batch_sync_wallets))
         .route("/wallets/aggregate", get(get_wallets_aggregate))
         .route("/wallets/all", get(get_all_wallets))
         .route("/wallets/{id}", get(get_wallet).delete(delete_wallet))
@@ -207,6 +208,31 @@ async fn create_wallet(
         axum::http::StatusCode::CREATED,
         Json(WalletResponse::from(wallet)),
     ))
+}
+
+/// POST /wallets/sync — 批量同步钱包+地址（启动时一次请求替代 N+M 次串行同步）
+#[derive(Debug, Deserialize)]
+struct BatchSyncRequest {
+    wallets: Vec<wallet_service::SyncWalletInput>,
+}
+
+#[derive(Debug, Serialize)]
+struct BatchSyncResponse {
+    results: Vec<wallet_service::SyncResult>,
+}
+
+async fn batch_sync_wallets(
+    State(state): State<AppState>,
+    Extension(device): Extension<DevicePayload>,
+    Json(body): Json<BatchSyncRequest>,
+) -> Result<Json<BatchSyncResponse>, AppError> {
+    let results = wallet_service::batch_sync_wallets(
+        state.db.clone(),
+        &device.device_id,
+        body.wallets,
+    )
+    .await?;
+    Ok(Json(BatchSyncResponse { results }))
 }
 
 /// GET /wallets — 获取当前设备的钱包列表

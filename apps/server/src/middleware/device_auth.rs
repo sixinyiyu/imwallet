@@ -371,10 +371,12 @@ pub async fn device_auth(
         .get("x-platform")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("ios");
-    let (platform, _should_update) = if let Some(cached_platform) =
+    let (platform, should_update) = if let Some(cached_platform) =
         state.get_cached_device_platform(device_id).await
     {
-        // 缓存命中，无需查 DB
+        // 缓存命中，无需查 DB — 但仍需判断是否更新 last_active_at
+        // 缓存命中意味着设备已存在，检查距上次 DB 更新是否超过 5 分钟
+        // 简化处理：缓存命中时跳过 last_active_at 更新（上次 DB 查询时已更新）
         (cached_platform, false)
     } else {
         let existing: Option<Device> = query_one(
@@ -407,18 +409,21 @@ pub async fn device_auth(
         };
         (plat, should_upd)
     };
-    if let Err(e) = crate::db::query::exec(
-        &state.db,
-        "UPDATE devices SET last_active_at = NOW() WHERE id = $1",
-        vals![device_id],
-    )
-    .await
-    {
-        log::warn!(
-            "Failed to update last_active_at for device {}: {}",
-            device_id,
-            e
-        );
+    // 仅在距上次更新超过 5 分钟时才写入 last_active_at，避免每个请求都写 DB
+    if should_update {
+        if let Err(e) = crate::db::query::exec(
+            &state.db,
+            "UPDATE devices SET last_active_at = NOW() WHERE id = $1",
+            vals![device_id],
+        )
+        .await
+        {
+            log::warn!(
+                "Failed to update last_active_at for device {}: {}",
+                device_id,
+                e
+            );
+        }
     }
 
     // 重建 request

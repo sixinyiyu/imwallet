@@ -410,6 +410,173 @@ pub async fn unsubscribe_wallet_readonly(
     Ok(())
 }
 
+/// 批量同步钱包+地址 — 一次请求完成所有钱包和地址的幂等同步。
+/// 前端启动时调用此接口替代逐钱包/逐地址的串行同步。
+/// 事务保护：钱包和地址的创建/订阅在同一个事务中完成。
+/// 返回每个地址的服务端 ID，前端据此更新本地 `server_address_id`。
+#[derive(Debug, serde::Deserialize)]
+pub struct SyncWalletInput {
+    pub wallet_id: String,
+    pub source: String,
+    pub alias: String,
+    pub addresses: Vec<SyncAddressInput>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct SyncAddressInput {
+    pub chain: String,
+    pub address: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct SyncResult {
+    pub wallet_id: String,
+    pub addresses: Vec<SyncAddressResult>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct SyncAddressResult {
+    pub chain: String,
+    pub address: String,
+    pub server_address_id: String,
+}
+
+pub async fn batch_sync_wallets(
+    rb: Arc<RBatis>,
+    device_id: &str,
+    wallets: Vec<SyncWalletInput>,
+) -> Result<Vec<SyncResult>, AppError> {
+    if wallets.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let tx = rb.acquire_begin().await?;
+    let mut results = Vec::new();
+
+    for w in &wallets {
+        // 1. 确保钱包存在（幂等）
+        let src = if w.source == "IMPORT" { "IMPORT" } else { "CREATE" };
+        let inserted: Option<Wallet> = crate::db::query::tx_query_one(
+            &tx,
+            "INSERT INTO wallets (id, alias, source) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING RETURNING *",
+            vals![&w.wallet_id, &w.alias, src],
+        )
+        .await?;
+        // 钱包已存在时也确保别名可更新（前端可能修改了别名）
+        if inserted.is_none() {
+            crate::db::query::tx_exec(
+                &tx,
+                "UPDATE wallets SET alias = $1 WHERE id = $2 AND alias != $1",
+                vals![&w.alias, &w.wallet_id],
+            )
+            .await?;
+        }
+
+        // 2. 确保设备有空订阅占位（与 create_wallet_and_subscribe 一致）
+        crate::db::query::tx_exec(
+            &tx,
+            "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES ($1, $2, '', '') ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
+            vals![&w.wallet_id, device_id, "", ""],
+        )
+        .await?;
+
+        let mut address_results = Vec::new();
+
+        for a in &w.addresses {
+            // 3. 地址验证
+            let v = address_validator::validate_address_for_chain(&a.address, &a.chain);
+            if !v.is_valid {
+                log::warn!(
+                    "[批量同步] 地址验证失败 — 链={}, 地址前8={}, 错误={}",
+                    &a.chain,
+                    &a.address[..8.min(a.address.len())],
+                    v.error.unwrap_or_default()
+                );
+                continue; // 跳过无效地址，不中断整个同步
+            }
+
+            // 4. 确保地址存在（幂等）
+            let addr_id = uuid::Uuid::new_v4().to_string();
+            let inserted_addr: Option<WalletAddress> = crate::db::query::tx_query_one(
+                &tx,
+                "INSERT INTO wallets_addresses (id, chain, address) VALUES ($1, $2, $3) ON CONFLICT (chain, address) DO NOTHING RETURNING *",
+                vals![&addr_id, &a.chain, &a.address],
+            )
+            .await?;
+
+            let wa = if let Some(wa) = inserted_addr {
+                // 新地址：初始化该链的默认代币余额
+                // 注意：ensure_asset_balances 需要非事务连接，这里在事务内用 tx_query
+                let assets: Vec<crate::models::Asset> = crate::db::query::tx_query(
+                    &tx,
+                    "SELECT * FROM assets WHERE chain = $1 AND is_default = true",
+                    vals![&a.chain],
+                )
+                .await?;
+                if !assets.is_empty() {
+                    let mut args: Vec<rbs::value::Value> = Vec::new();
+                    let placeholders: Vec<String> = assets
+                        .iter()
+                        .enumerate()
+                        .map(|(i, asset)| {
+                            let base = i * 4 + 1;
+                            args.push(rbs::value::Value::String(uuid::Uuid::new_v4().to_string()));
+                            args.push(rbs::value::Value::String(wa.id.clone()));
+                            args.push(rbs::value::Value::String(asset.id.clone()));
+                            args.push(rbs::value::Value::String(a.chain.clone()));
+                            format!("(${}, ${}, ${}, ${}, 0)", base, base + 1, base + 2, base + 3)
+                        })
+                        .collect();
+                    let sql = format!(
+                        "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance) VALUES {} ON CONFLICT (address_id, asset_id) DO NOTHING",
+                        placeholders.join(", ")
+                    );
+                    crate::db::query::tx_exec(&tx, &sql, args).await?;
+                }
+                wa
+            } else {
+                // 地址已存在，查询已有记录
+                let existing: WalletAddress = crate::db::query::tx_query_one(
+                    &tx,
+                    "SELECT * FROM wallets_addresses WHERE chain = $1 AND address = $2",
+                    vals![&a.chain, &a.address],
+                )
+                .await?
+                .ok_or_else(|| AppError::Internal("地址同步失败".into()))?;
+                existing
+            };
+
+            // 5. 确保设备订阅该地址（幂等）
+            crate::db::query::tx_exec(
+                &tx,
+                "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES ($1, $2, $3, $4) ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
+                vals![&w.wallet_id, device_id, &a.chain, &wa.id],
+            )
+            .await?;
+
+            address_results.push(SyncAddressResult {
+                chain: a.chain.clone(),
+                address: a.address.clone(),
+                server_address_id: wa.id,
+            });
+        }
+
+        results.push(SyncResult {
+            wallet_id: w.wallet_id.clone(),
+            addresses: address_results,
+        });
+    }
+
+    tx.commit().await?;
+    log::info!(
+        "[批量同步] 完成 — 设备={}, 钱包数={}, 总地址数={}",
+        device_id,
+        wallets.len(),
+        results.iter().map(|r| r.addresses.len()).sum::<usize>()
+    );
+    Ok(results)
+}
+
 pub async fn get_all_wallets(
     rb: Arc<RBatis>,
     search: Option<&str>,
