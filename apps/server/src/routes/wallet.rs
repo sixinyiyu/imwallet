@@ -508,7 +508,8 @@ async fn get_my_recharges(
 
 /// GET /recharges — 查询所有充值记录（不做 device_id 过滤）
 /// 仅需 device_auth + 充值白名单，不需要管理密码
-/// 支持 wallet_id / start_time / end_time 筛选
+/// 支持 wallet_id / time_range 筛选
+/// time_range: "today" / "7d" / "30d" / "90d"，后端内部转换为 timestamp 比较
 #[derive(Debug, Deserialize)]
 struct AllRechargesQuery {
     #[serde(default = "default_page")]
@@ -518,9 +519,7 @@ struct AllRechargesQuery {
     #[serde(default)]
     wallet_id: Option<String>,
     #[serde(default)]
-    start_time: Option<String>,
-    #[serde(default)]
-    end_time: Option<String>,
+    time_range: Option<String>,
 }
 
 #[allow(unused_assignments)]
@@ -539,7 +538,7 @@ async fn get_all_recharges(
 
     let offset = (query.page - 1) * query.limit;
 
-    // 动态构建 WHERE 条件：不做 device_id 过滤，支持 wallet_id / start_time / end_time
+    // 动态构建 WHERE 条件：不做 device_id 过滤，支持 wallet_id / time_range
     let mut conditions: Vec<String> = Vec::new();
     let mut args: Vec<rbs::value::Value> = Vec::new();
     #[allow(unused_assignments)]
@@ -550,14 +549,24 @@ async fn get_all_recharges(
         args.push(rbs::value!(wid));
         param_idx += 1;
     }
-    if let Some(ref st) = query.start_time {
+    if let Some(ref tr) = query.time_range {
+        // time_range: "today" / "7d" / "30d" / "90d"
+        // 后端内部转换为 start/end timestamp，避免前端传 ISO 字符串导致类型不匹配
+        let now = time::OffsetDateTime::now_utc();
+        let start_date = match tr.as_str() {
+            "today" => now.date(),
+            "7d" => (now - time::Duration::days(6)).date(),
+            "30d" => (now - time::Duration::days(29)).date(),
+            "90d" => (now - time::Duration::days(89)).date(),
+            _ => now.date(), // 未知值默认今日
+        };
+        let start_ts = start_date.with_time(time::Time::MIDNIGHT).assume_utc();
+        let end_ts = (now + time::Duration::days(1)).date().with_time(time::Time::MIDNIGHT).assume_utc();
         conditions.push(format!("r.created_at >= ${}::timestamp", param_idx));
-        args.push(rbs::value!(st));
+        args.push(rbs::value!(start_ts.format(&time::format_description::well_known::Iso8601::DEFAULT).unwrap_or_default()));
         param_idx += 1;
-    }
-    if let Some(ref et) = query.end_time {
-        conditions.push(format!("r.created_at <= ${}::timestamp", param_idx));
-        args.push(rbs::value!(et));
+        conditions.push(format!("r.created_at < ${}::timestamp", param_idx));
+        args.push(rbs::value!(end_ts.format(&time::format_description::well_known::Iso8601::DEFAULT).unwrap_or_default()));
         param_idx += 1;
     }
 

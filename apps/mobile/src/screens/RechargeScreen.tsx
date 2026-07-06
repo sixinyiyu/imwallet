@@ -34,33 +34,6 @@ const TIME_OPTIONS: { label: string; value: TimeFilter }[] = [
   { label: "近90天", value: "90d" },
 ];
 
-/** 将 TimeFilter 转换为 ISO 8601 时间字符串 */
-function timeFilterToRange(tf: TimeFilter): { startTime: string; endTime: string } {
-  const now = new Date();
-  // endTime: 当前时刻的明天0点（确保包含今天全天）
-  const end = new Date(now);
-  end.setDate(end.getDate() + 1);
-  end.setHours(0, 0, 0, 0);
-  const endTime = end.toISOString();
-
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  switch (tf) {
-    case "today":
-      break;
-    case "7d":
-      start.setDate(start.getDate() - 6);
-      break;
-    case "30d":
-      start.setDate(start.getDate() - 29);
-      break;
-    case "90d":
-      start.setDate(start.getDate() - 89);
-      break;
-  }
-  return { startTime: start.toISOString(), endTime };
-}
-
 export default function RechargeScreen() {
   const [assets, setAssets] = useState<AssetInfo[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<SimpleWallet | null>(null);
@@ -261,13 +234,9 @@ export default function RechargeScreen() {
   const loadRecords = async (page = 1, append = false, showLoading = true) => {
     if (showLoading) setRecordsLoading(true);
     try {
-      const filters: { walletId?: string; startTime?: string; endTime?: string } = {};
+      const filters: { walletId?: string; timeRange?: string } = {};
       if (filterWallet) filters.walletId = filterWallet.id;
-      if (filterTime) {
-        const range = timeFilterToRange(filterTime);
-        filters.startTime = range.startTime;
-        filters.endTime = range.endTime;
-      }
+      if (filterTime) filters.timeRange = filterTime;
 
       const res = await rechargeService.getAllRechargeRecords(page, 20, filters);
       setRecords((prev) => (append ? [...prev, ...res.recharges] : res.recharges));
