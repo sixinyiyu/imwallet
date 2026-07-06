@@ -351,8 +351,7 @@ async fn list_wallets(
 
     // 批量查询每个钱包的代币余额（单条 SQL，避免 N+1）
     let cny_rate = state.get_cny_rate();
-    let wallet_ids: Vec<String> = items.iter().map(|i| i.id.clone()).collect();
-    if !wallet_ids.is_empty() {
+    if !items.is_empty() {
         #[derive(serde::Deserialize)]
         struct BalanceRow {
             wallet_id: String,
@@ -363,8 +362,9 @@ async fn list_wallets(
             icon_url: String,
             total_balance: rust_decimal::Decimal,
         }
-        let sql = "SELECT ws.wallet_id, aa.asset_id, a.symbol, a.name, aa.chain, a.icon_url, SUM(aa.balance) as total_balance FROM assets_addresses aa JOIN assets a ON a.id = aa.asset_id JOIN wallet_subscriptions ws ON ws.address_id = aa.address_id WHERE ws.wallet_id IN (SELECT unnest($1::text[])) AND ws.address_id != '' GROUP BY ws.wallet_id, aa.asset_id, a.symbol, a.name, aa.chain, a.icon_url";
-        let balance_rows: Vec<BalanceRow> = query(&state.db, sql, vals![&wallet_ids]).await?;
+        let sql = "SELECT ws.wallet_id, aa.asset_id, a.symbol, a.name, aa.chain, a.icon_url, SUM(aa.balance) as total_balance FROM assets_addresses aa JOIN assets a ON a.id = aa.asset_id JOIN wallet_subscriptions ws ON ws.address_id = aa.address_id WHERE ws.wallet_id IN (SELECT id FROM wallets ORDER BY created_at DESC LIMIT $1 OFFSET $2) AND ws.address_id != '' GROUP BY ws.wallet_id, aa.asset_id, a.symbol, a.name, aa.chain, a.icon_url";
+        let balance_rows: Vec<BalanceRow> =
+            query(&state.db, sql, vals![auth.limit as i64, offset as i64]).await?;
 
         // 按钱包分组
         let mut balance_map: std::collections::HashMap<String, Vec<AssetBalanceBrief>> =

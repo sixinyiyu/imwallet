@@ -420,57 +420,57 @@ async fn get_my_recharges(
         crate::services::config_service::is_recharge_permitted(state.db.clone(), &device.device_id)
             .await?;
     if !permitted {
-        return Err(AppError::Forbidden(
-            "该设备不在充值白名单中，无权查看充值记录".into(),
-        ));
+        return Err(AppError::Forbidden("无权查看充值记录".into()));
     }
 
     let offset = (query.page - 1) * query.limit;
 
-    // 查询当前设备关联的所有钱包ID
-    #[derive(serde::Deserialize)]
-    struct WId {
-        wallet_id: String,
-    }
-    let wallet_ids: Vec<WId> = crate::db::query::query(
-        &state.db,
-        "SELECT DISTINCT ws.wallet_id FROM wallet_subscriptions ws WHERE ws.device_id = $1 AND ws.address_id != ''",
-        vals![&device.device_id],
-    ).await?;
-
-    let wid_list: Vec<String> = wallet_ids.into_iter().map(|w| w.wallet_id).collect();
-
-    // 如果指定了 wallet_id，还需校验该钱包属于当前设备
-    let filtered_wids: Vec<String> = if let Some(ref wid) = query.wallet_id {
-        if !wid_list.contains(wid) {
+    // 如果指定了 wallet_id，先校验该钱包属于当前设备
+    if let Some(ref wid) = query.wallet_id {
+        let cnt: u64 = crate::db::query::query_count(
+            &state.db,
+            "SELECT COUNT(*) as cnt FROM wallet_subscriptions WHERE wallet_id = $1 AND device_id = $2 AND address_id != ''",
+            vals![wid, &device.device_id],
+        )
+        .await?;
+        if cnt == 0 {
             return Err(AppError::Forbidden("该钱包不属于当前设备".into()));
         }
-        vec![wid.clone()]
-    } else {
-        wid_list
-    };
-
-    if filtered_wids.is_empty() {
-        return Ok(Json(MyRechargesResponse {
-            recharges: vec![],
-            total: 0,
-            page: query.page,
-            limit: query.limit,
-        }));
     }
+
+    // JOIN wallet_subscriptions 一步完成：只传 device_id（和可选的 wallet_id），无需先查 ID 再 IN
+    let (where_extra, mut args) = if let Some(ref wid) = query.wallet_id {
+        (" AND r.wallet_id = $2", vals![&device.device_id, wid])
+    } else {
+        ("", vals![&device.device_id])
+    };
+    let base_where = format!("r.wallet_id IN (SELECT DISTINCT ws.wallet_id FROM wallet_subscriptions ws WHERE ws.device_id = $1 AND ws.address_id != ''){}", where_extra);
 
     let total: u64 = crate::db::query::query_count(
         &state.db,
-        "SELECT COUNT(*) as cnt FROM recharges WHERE wallet_id IN (SELECT unnest($1::text[]))",
-        vals![&filtered_wids],
+        &format!(
+            "SELECT COUNT(*) as cnt FROM recharges r WHERE {}",
+            base_where
+        ),
+        args.clone(),
     )
     .await?;
 
+    // 分页参数追加到 args 末尾
+    args.push(rbs::value!(query.limit as i64));
+    args.push(rbs::value!(offset as i64));
+    let limit_ph = format!("${}", args.len() - 1);
+    let offset_ph = format!("${}", args.len());
+
     let rows: Vec<crate::models::Recharge> = crate::db::query::query(
         &state.db,
-        "SELECT * FROM recharges WHERE wallet_id IN (SELECT unnest($1::text[])) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
-        vals![&filtered_wids, query.limit as i64, offset as i64],
-    ).await?;
+        &format!(
+            "SELECT r.* FROM recharges r WHERE {} ORDER BY r.created_at DESC LIMIT {} OFFSET {}",
+            base_where, limit_ph, offset_ph
+        ),
+        args,
+    )
+    .await?;
 
     Ok(Json(MyRechargesResponse {
         recharges: rows,

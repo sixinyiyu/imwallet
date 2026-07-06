@@ -7,7 +7,7 @@ import { localAccountService } from "../services/localAccountService";
 import { localAddressService } from "../services/localAddressService";
 import { notificationSyncService } from "../services/notificationSyncService";
 import { localNotificationService } from "../services/localNotificationService";
-import { walletSyncService } from "../services/walletSyncService";
+import { syncWalletsWithServer, syncSubscribedWallets } from "../services/walletSyncService";
 import { generateMnemonic, cleanMnemonic, generateIdentifier } from "../utils/mnemonic";
 import { deriveAddressFromMnemonic, getDerivationPath } from "../utils/derivation";
 import { ensureDeviceKeys, ensureDeviceRegistered } from "../services/api";
@@ -21,6 +21,9 @@ const BACKED_UP_KEY_PREFIX = "aquad_backed_up_";
 const ACTIVE_WALLET_KEY = "aquad_active_wallet";
 
 /** Build per-wallet SecureStore key for mnemonic */
+/** In-flight dedup for fetchBalance: prevents duplicate concurrent requests */
+const balanceFetchInFlight: Record<string, boolean> = {};
+
 function mnemonicKey(walletId: string): string {
   return `${MNEMONIC_KEY_PREFIX}${walletId}`;
 }
@@ -102,44 +105,44 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     return get().backedUpWallets.has(walletId);
   },
 
-  /** Load local state: initialize device identity then load wallets from local SQLite */
+  /** Load local state: local data first (no network dependency), then network sync */
   loadLocalState: async () => {
+    // ── 阶段 1：本地数据加载（不依赖网络，必须成功才能判断路由）──
     try {
-      // 1. Initialize device identity (generate keys + register)
+      await get().fetchWallets();
+    } catch {
+      // 本地数据读取失败（IndexedDB/SQLite 异常），这才是真正无法判断是否有钱包的情况
+      set({ hasFetched: true, hasWallets: false });
+      return;
+    }
+
+    // ── 阶段 2：设备初始化 + 网络同步（失败不影响本地数据已加载的事实）──
+    try {
       const keys = await ensureDeviceKeys();
       if (keys) {
         await ensureDeviceRegistered(keys.publicKeyHex);
         await useAuthStore.getState().initDevice();
       }
-
-      // 2. Load per-wallet backup status from SecureStore
-      const localWallets = await localWalletService.getAllWallets();
-      const backedUpSet = new Set<string>();
-      for (const w of localWallets) {
-        const flag = await SecureStore.getItemAsync(backedUpKey(w.id));
-        if (flag === "true") {
-          backedUpSet.add(w.id);
-        }
-      }
-      set({ backedUpWallets: backedUpSet });
-
-      // 3. Re-sync local wallets & addresses to server (recover from server data loss)
-      await get().syncWalletsWithServer();
-
-      // 4. Fetch wallet state from local SQLite (优先加载本地数据)
-      await get().fetchWallets();
-
-      // 5. 异步加载订阅钱包（从后端获取当前设备的钱包列表，发现本地不存在时以 SUBSCRIBE 写入）
-      await get().syncSubscribedWalletsAsync();
-
-      // 6. 启动时同步通知到本地
-      try {
-        await notificationSyncService.syncNotifications();
-      } catch {
-        // 同步失败不阻塞启动
-      }
     } catch {
-      set({ hasFetched: true, hasWallets: false });
+      // 设备注册失败不影响本地钱包数据展示
+    }
+
+    try {
+      await get().syncWalletsWithServer();
+    } catch {
+      // 服务端同步失败不影响本地数据
+    }
+
+    try {
+      await get().syncSubscribedWalletsAsync();
+    } catch {
+      // 订阅钱包同步失败不影响本地数据
+    }
+
+    try {
+      await notificationSyncService.syncNotifications();
+    } catch {
+      // 通知同步失败不阻塞启动
     }
   },
 
@@ -149,8 +152,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
    * Recovers from server data loss by re-registering wallets and re-syncing addresses.
    */
   syncWalletsWithServer: async () => {
-    await walletSyncService.syncWalletsWithServer();
-  },
+     await syncWalletsWithServer();  },
 
   /**
    * 异步加载订阅钱包 — 从后端获取当前设备的钱包列表，
@@ -159,8 +161,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
    */
   syncSubscribedWalletsAsync: async () => {
     try {
-      await walletSyncService.syncSubscribedWallets();
-      await get().fetchWallets();
+       await syncSubscribedWallets();      await get().fetchWallets();
     } catch {
       // silent — 异步同步失败不影响用户
     }
@@ -187,12 +188,18 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         }
       }
 
-      // Load per-wallet backup status
-      const backedUpSet = new Set<string>();
-      for (const w of wallets) {
-        const flag = await SecureStore.getItemAsync(backedUpKey(w.id));
-        if (flag === "true") {
-          backedUpSet.add(w.id);
+      // Load per-wallet backup status (only on first load; subsequent calls reuse memory Set)
+      const currentBackedUp = get().backedUpWallets;
+      const backedUpSet = get().hasFetched
+        ? new Set(currentBackedUp)  // 复用内存中的 Set
+        : new Set<string>();
+      if (!get().hasFetched) {
+        // 首次加载：从 SecureStore 读取备份标记
+        for (const w of wallets) {
+          const flag = await SecureStore.getItemAsync(backedUpKey(w.id));
+          if (flag === "true") {
+            backedUpSet.add(w.id);
+          }
         }
       }
 
@@ -218,26 +225,26 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     try {
       const localWallets = await localWalletService.getAllWallets();
 
-      // 为每个钱包查询本地账户，填充 networks 字段
-      const wallets = await Promise.all(
-        localWallets.map(async (w) => {
-          const accounts = await localAccountService.getWalletAccounts(w.id);
-          const networks = [...new Set(accounts.map((a) => a.chain))];
-          return {
-            ...localToSimple(w),
-            networks,
-          };
-        })
-      );
-
-      // Load per-wallet backup status
-      const backedUpSet = new Set<string>();
-      for (const w of wallets) {
-        const flag = await SecureStore.getItemAsync(backedUpKey(w.id));
-        if (flag === "true") {
-          backedUpSet.add(w.id);
-        }
+      // 一次性查询所有账户，内存中按 wallet_id 分组（消除 N+1 查询）
+      const allAccounts = await localAccountService.getAllAccounts();
+      const accountsByWallet = new Map<string, Account[]>();
+      for (const acc of allAccounts) {
+        const list = accountsByWallet.get(acc.walletId) || [];
+        list.push(acc);
+        accountsByWallet.set(acc.walletId, list);
       }
+
+      const wallets = localWallets.map((w) => {
+        const walletAccounts = accountsByWallet.get(w.id) || [];
+        const networks = [...new Set(walletAccounts.map((a) => a.chain))];
+        return {
+          ...localToSimple(w),
+          networks,
+        };
+      });
+
+      // 复用内存中的备份标记（不再重复读取 SecureStore）
+      const backedUpSet = new Set(get().backedUpWallets);
 
       set({
         wallets,
@@ -272,6 +279,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   setActiveWallet: (wallet: SimpleWallet) => {
     set({ activeWallet: wallet });
     get().fetchAccounts(wallet.id);
+    get().fetchBalance(wallet.id);
   },
 
   setActiveAccount: (account: Account) => {
@@ -384,6 +392,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // 删除本地助记词和备份标记
       await SecureStore.deleteItemAsync(mnemonicKey(walletId));
       await SecureStore.deleteItemAsync(backedUpKey(walletId));
+
+      // 从内存 Set 中移除备份标记
+      const backedUpSet = new Set(get().backedUpWallets);
+      backedUpSet.delete(walletId);
+      set({ backedUpWallets: backedUpSet });
 
       // 删除服务端钱包（取消订阅）
       await syncService.deleteWallet(walletId);
@@ -501,8 +514,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  /** Fetch balance for wallet (from server API) */
+  /** Fetch balance for wallet (from server API, with in-flight dedup) */
   fetchBalance: async (walletId: string) => {
+    // In-flight dedup: 同一 walletId 的并发请求只发一次
+    if (balanceFetchInFlight[walletId]) return;
+    balanceFetchInFlight[walletId] = true;
     set({ balanceLoading: true });
     try {
       const detail = await walletService.getWalletBalanceDetail(walletId);
@@ -513,6 +529,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       });
     } catch {
       set({ balanceLoading: false });
+    } finally {
+      delete balanceFetchInFlight[walletId];
     }
   },
 

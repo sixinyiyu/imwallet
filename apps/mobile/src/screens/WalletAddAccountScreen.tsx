@@ -271,11 +271,6 @@ export default function WalletAddAccountScreen() {
           </View>
           )}
 
-          {/* 提示文字 */}
-          {!hasNewSelection && (
-            <Text style={drawerStyles.hintText}>请先选择账户</Text>
-          )}
-
           {/* 确认按钮 */}
           <TouchableOpacity
             style={[
@@ -289,7 +284,12 @@ export default function WalletAddAccountScreen() {
             {creating ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <Text style={drawerStyles.confirmButtonText}>确认</Text>
+              <Text style={[
+                drawerStyles.confirmButtonText,
+                !hasNewSelection && drawerStyles.confirmButtonTextDisabled,
+              ]}>
+                {hasNewSelection ? "确认" : "请先选择账户"}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -467,11 +467,8 @@ const drawerStyles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 18,
   },
-  hintText: {
-    fontSize: 13,
-    color: "#F59E0B",
-    marginTop: 16,
-    marginBottom: 4,
+  confirmButtonTextDisabled: {
+    color: "#9CA3AF",
   },
   confirmButton: {
     backgroundColor: "#287220",

@@ -181,6 +181,7 @@ export default function TransferScreen() {
   const addressFormatValid = useMemo(() => isValidAddressFormat(toAddress), [toAddress]);
 
   // 地址格式正确时，调用后端接口检查地址是否在系统中 + 本地检查是否在地址本中
+  // 加 400ms debounce，避免快速输入时多发请求
   useEffect(() => {
     if (!addressFormatValid || !toAddress.trim()) {
       setAddressCheckResult(null);
@@ -190,27 +191,34 @@ export default function TransferScreen() {
     let cancelled = false;
     setCheckingAddress(true);
 
-    // 本地检查：地址是否已在地址本中（type=contact）
-    const network = detectNetwork(toAddress.trim());
-    const localCheck = network
-      ? localAddressService.isContact(network, toAddress.trim())
-      : Promise.resolve(false);
+    const timer = setTimeout(() => {
+      // 本地检查：地址是否已在地址本中（type=contact）
+      const network = detectNetwork(toAddress.trim());
+      const localCheck = network
+        ? localAddressService.isContact(network, toAddress.trim())
+        : Promise.resolve(false);
 
-    // 服务端检查：地址是否在系统内
-    const serverCheck = transactionService.checkAddress(toAddress.trim());
+      // 服务端检查：地址是否在系统内
+      const serverCheck = transactionService.checkAddress(toAddress.trim());
 
-    Promise.all([serverCheck, localCheck]).then(([result, inContacts]) => {
-      if (cancelled) return;
-      setAddressCheckResult(result);
-      setAddressInContacts(inContacts);
-    }).catch(() => {
-      if (cancelled) return;
-      setAddressCheckResult(null);
-      setAddressInContacts(false);
-    }).finally(() => {
-      if (!cancelled) setCheckingAddress(false);
-    });
-    return () => { cancelled = true; };
+      Promise.all([serverCheck, localCheck]).then(([result, inContacts]) => {
+        if (cancelled) return;
+        setAddressCheckResult(result);
+        setAddressInContacts(inContacts);
+      }).catch(() => {
+        if (cancelled) return;
+        setAddressCheckResult(null);
+        setAddressInContacts(false);
+      }).finally(() => {
+        if (!cancelled) setCheckingAddress(false);
+      });
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      setCheckingAddress(false);
+    };
   }, [addressFormatValid, toAddress]);
 
   // 地址有效 = 格式合法（链上地址格式正确即可转账，无需收款方在系统中存在）

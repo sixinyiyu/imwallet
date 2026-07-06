@@ -209,7 +209,7 @@ export default function WalletManageScreen() {
                   {networks.length}个账户
                 </Text>
                 <Text style={styles.walletBackupStatus}>
-                  {item.isReadOnly ? <ReadOnlyIcon size={14} color="#9CA3AF" /> : backedUpWallets.has(item.id) ? "✅ 已备份" : "⚠️ 未备份"}
+                  {item.isReadOnly ? <View style={styles.readOnlyHintWrap}><ReadOnlyIcon size={14} color="#9CA3AF" /><Text style={styles.readOnlyHintText}>订阅钱包</Text></View> : backedUpWallets.has(item.id) ? "✅ 已备份" : "⚠️ 未备份"}
                 </Text>
               </View>
 
@@ -351,6 +351,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+  },
+  readOnlyHintText: {
+    fontSize: 12,
+    color: "#9CA3AF",
   },
   addAccountLink: {
     fontSize: 13,

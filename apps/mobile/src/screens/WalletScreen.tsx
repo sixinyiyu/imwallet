@@ -60,19 +60,14 @@ export default function WalletScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchWallets();
-      // 每次进入钱包页面都刷新余额（充值后余额可能已变化）
+      // 每次聚焦刷新余额（充值后余额可能已变化）
+      // fetchBalance 已有 in-flight dedup，不会重复请求
       const w = useWalletStore.getState().activeWallet;
       if (w) {
         fetchBalance(w.id);
       }
     }, [])
   );
-
-  useEffect(() => {
-    if (activeWallet) {
-      fetchBalance(activeWallet.id);
-    }
-  }, [activeWallet]);
 
   const onRefresh = async () => {
     setRefreshing(true);

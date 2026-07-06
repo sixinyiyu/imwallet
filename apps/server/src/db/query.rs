@@ -7,6 +7,23 @@ use rbatis::RBatis;
 macro_rules! vals { ($($e:expr),* $(,)?) => { vec![$(rbs::value!($e),)*] }; }
 pub(crate) use vals;
 
+/// 动态拼接 IN 子句的占位符和参数值。
+/// rbdc_pg 把 Vec<String> 序列化为 JSON 而非 text[]，导致 `cannot cast type json to text[]`。
+/// 此函数将每个元素作为独立参数传入，避免类型转换问题。
+///
+/// 返回 (占位符字符串, 参数值列表)，例如：
+/// - 3 个元素 → ("($1, $2, $3)", [val1, val2, val3])
+/// - 起始参数编号可通过 start 从非 1 开始（用于前面已有其他参数的情况）
+pub fn in_clause(ids: &[String], start: usize) -> (String, Vec<rbs::value::Value>) {
+    let placeholders: Vec<String> = ids
+        .iter()
+        .enumerate()
+        .map(|(i, _)| format!("${}", start + i))
+        .collect();
+    let args: Vec<rbs::value::Value> = ids.iter().map(|id| rbs::value!(id)).collect();
+    (format!("({})", placeholders.join(", ")), args)
+}
+
 /// 生成参数摘要（最多展示前 3 个参数，避免日志过长）
 fn args_summary(args: &[rbs::value::Value]) -> String {
     if args.is_empty() {

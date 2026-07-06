@@ -117,17 +117,17 @@ pub async fn get_wallet_networks(
         return Ok(Vec::new());
     }
 
-    // 使用 unnest 实现参数化 IN 查询（PostgreSQL 特有）
-    // 传入一个数组参数，unnest 将其展开为行
+    // 使用 in_clause 实现参数化 IN 查询，避免 rbdc_pg 将 Vec<String> 序列化为 JSON 导致类型转换失败
     #[derive(serde::Deserialize)]
     struct R {
         wallet_id: String,
         chain: String,
     }
+    let (in_ph, in_args) = crate::db::query::in_clause(wallet_ids, 1);
     let rows: Vec<R> = query(
         &rb,
-        "SELECT ws.wallet_id, wa.chain FROM unnest($1::text[]) AS wid(wallet_id) JOIN wallet_subscriptions ws ON ws.wallet_id = wid.wallet_id JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.address_id != '' ORDER BY ws.wallet_id, wa.chain",
-        vals![wallet_ids],
+        &format!("SELECT ws.wallet_id, wa.chain FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id IN {} AND ws.address_id != '' ORDER BY ws.wallet_id, wa.chain", in_ph),
+        in_args,
     )
     .await?;
 
