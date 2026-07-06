@@ -1,49 +1,61 @@
-import { walletService } from "./walletService";
+import { walletService, type BatchSyncWalletInput } from "./walletService";
 import { localWalletService } from "./localWalletService";
 import { localAccountService } from "./localAccountService";
 import { localAddressService } from "./localAddressService";
-import { syncService } from "./syncService";
+import type { Account } from "../types";
 
 /**
  * 钱包同步服务 — 从 walletStore 中抽离的同步逻辑。
  * 负责：
- *   1. 启动时重新同步本地钱包到服务端（恢复服务端数据丢失）
+ *   1. 启动时批量同步本地钱包到服务端（一次请求替代 N+M 次串行同步）
  *   2. 异步加载订阅钱包（从后端获取当前设备的钱包列表）
  */
 
-/** 重新同步所有本地钱包和账户到服务端（幂等，安全在每次启动时调用） */
+/** 批量同步本地钱包+地址到服务端（幂等，安全在每次启动时调用）
+ *  优化：从原来的 N钱包+M地址 = N+M 次串行请求，改为 1 次批量请求。
+ *  后端在事务中幂等处理所有钱包和地址的注册/订阅。
+ *  返回每个地址的 server_address_id，前端据此更新本地记录。
+ */
 export async function syncWalletsWithServer(): Promise<void> {
   try {
     const localWallets = await localWalletService.getAllWallets();
-    for (const wallet of localWallets) {
-      try {
-        // 重新注册钱包（幂等：创建如果缺失，更新别名如果存在）
-        await syncService.registerWallet(
-          wallet.source as "CREATE" | "IMPORT",
-          wallet.id,
-          wallet.name
-        );
-      } catch {
-        // 钱包可能已存在或网络错误，继续
-      }
+    if (localWallets.length === 0) return;
 
-      // 重新同步所有账户（地址）
-      const accounts = await localAccountService.getWalletAccounts(wallet.id);
-      for (const account of accounts) {
-        try {
-          const serverAddress = await syncService.syncAddress(
-            wallet.id,
-            account.chain,
-            account.address
-          );
-          // 更新 server_address_id 如果它改变了（服务端重置 → 新 UUID）
-          if (serverAddress.id !== account.serverAddressId) {
-            await localAccountService.updateAccount(account.id, {
-              server_address_id: serverAddress.id,
-            });
-          }
-        } catch {
-          // 单个地址同步失败，继续下一个
+    // 一次性查询所有账户，内存中按 wallet_id 分组（消除 N+1 查询）
+    const allAccounts = await localAccountService.getAllAccounts();
+    const accountsByWallet = new Map<string, Account[]>();
+    for (const acc of allAccounts) {
+      const list = accountsByWallet.get(acc.walletId) || [];
+      list.push(acc);
+      accountsByWallet.set(acc.walletId, list);
+    }
+
+    // 构建批量同步请求体
+    const syncInputs: BatchSyncWalletInput[] = localWallets
+      .filter((w) => w.source !== "SUBSCRIBE") // 只读订阅钱包不需要同步到服务端
+      .map((w) => ({
+        walletId: w.id,
+        source: w.source === "IMPORT" ? "IMPORT" : "CREATE",
+        alias: w.name,
+        addresses: (accountsByWallet.get(w.id) || []).map((a) => ({
+          chain: a.chain,
+          address: a.address,
+        })),
+      }));
+
+    if (syncInputs.length === 0) return;
+
+    // 一次请求完成所有同步
+    const results = await walletService.batchSyncWallets(syncInputs);
+
+    // 更新本地 server_address_id（如果服务端重置导致 ID 变化）
+    for (const r of results) {
+      for (const a of r.addresses) {
+        const localAccount = await localAccountService.getAccountByAddress(a.address);
+        if (localAccount && localAccount.serverAddressId !== a.serverAddressId) {
+          await localAccountService.updateAccount(localAccount.id, {
+            server_address_id: a.serverAddressId,
+          });
         }
       }
     }

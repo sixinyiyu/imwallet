@@ -116,6 +116,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
 
     // ── 阶段 2：设备初始化 + 网络同步（失败不影响本地数据已加载的事实）──
+    // 设备初始化必须先完成（后续 API 请求需要签名），钱包同步和通知同步可并行
     try {
       const keys = await ensureDeviceKeys();
       if (keys) {
@@ -126,23 +127,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // 设备注册失败不影响本地钱包数据展示
     }
 
-    try {
-      await get().syncWalletsWithServer();
-    } catch {
-      // 服务端同步失败不影响本地数据
-    }
-
-    try {
-      await get().syncSubscribedWalletsAsync();
-    } catch {
-      // 订阅钱包同步失败不影响本地数据
-    }
-
-    try {
-      await notificationSyncService.syncNotifications();
-    } catch {
-      // 通知同步失败不阻塞启动
-    }
+    // ── 阶段 3：网络同步（并行执行，失败不影响本地数据）──
+    await Promise.allSettled([
+      get().syncWalletsWithServer(),
+      get().syncSubscribedWalletsAsync(),
+      notificationSyncService.syncNotifications(),
+    ]);
   },
 
   /**

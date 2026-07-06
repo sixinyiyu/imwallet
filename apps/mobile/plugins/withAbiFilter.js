@@ -8,13 +8,27 @@ const path = require("path");
  * 2. Enables minification (R8) and resource shrinking for release builds
  * 3. Reads API_BASE_URL env var and injects into app.json extra.apiBaseUrl
  * 4. Reads EAS_PROJECT_ID env var and injects into app.json extra.eas.projectId
+ * 5. Reads version from package.json and injects into app.json expo.version
  */
 function withAbiFilter(config) {
   const abi = process.env.BUILD_ABI;
   const apiBaseUrl = process.env.API_BASE_URL;
   const easProjectId = process.env.EAS_PROJECT_ID;
 
-  // 0. Inject env vars into app config extra
+  // 0. Inject version from package.json into app.json
+  try {
+    const pkgPath = path.resolve(__dirname, "..", "package.json");
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+      if (pkg.version) {
+        config.version = pkg.version;
+      }
+    }
+  } catch (_) {
+    // ignore - keep app.json version as fallback
+  }
+
+  // 1. Inject env vars into app config extra
   if (config.extra) {
     if (apiBaseUrl) {
       config.extra.apiBaseUrl = apiBaseUrl;

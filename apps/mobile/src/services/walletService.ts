@@ -117,4 +117,47 @@ export const walletService = {
   async unsubscribeWallet(walletId: string): Promise<void> {
     await api.delete(`/devices/wallets/${walletId}`);
   },
+
+  /** 批量同步钱包+地址 — 一次请求替代 N+M 次串行同步
+   *  传入本地所有钱包和地址，后端在事务中幂等处理。
+   *  返回每个地址的 server_address_id，前端据此更新本地记录。
+   */
+  async batchSyncWallets(wallets: BatchSyncWalletInput[]): Promise<BatchSyncResult[]> {
+    const { data } = await api.post("/wallets/sync", { wallets });
+    return (data.results || []).map((r: any) => ({
+      walletId: r.walletId,
+      addresses: (r.addresses || []).map((a: any) => ({
+        chain: a.chain,
+        address: a.address,
+        serverAddressId: a.serverAddressId,
+      })),
+    }));
+  },
 };
+
+/** 批量同步请求中的钱包输入 */
+export interface BatchSyncWalletInput {
+  walletId: string;
+  source: string;
+  alias: string;
+  addresses: BatchSyncAddressInput[];
+}
+
+/** 批量同步请求中的地址输入 */
+export interface BatchSyncAddressInput {
+  chain: string;
+  address: string;
+}
+
+/** 批量同步返回的地址结果 */
+export interface BatchSyncAddressResult {
+  chain: string;
+  address: string;
+  serverAddressId: string;
+}
+
+/** 批量同步返回的钱包结果 */
+export interface BatchSyncResult {
+  walletId: string;
+  addresses: BatchSyncAddressResult[];
+}
