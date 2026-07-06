@@ -1,13 +1,14 @@
 //! 钱包路由 — /api/v1/wallets
 //! 迁移自 IMWallet routes/wallet.ts (9 个接口)
 
+use crate::db::query::vals;
 use crate::errors::AppError;
 use crate::middleware::{AppState, DevicePayload};
 use crate::models::{Wallet, WalletAddress};
 use crate::services::{device_service, wallet_service};
 use axum::{
     extract::{Path, Query, State},
-    routing::{delete, get},
+    routing::{delete, get, post},
     Extension, Json, Router,
 };
 use rbdc::DateTime;
@@ -28,6 +29,11 @@ pub fn router() -> Router<AppState> {
             "/wallets/{id}/addresses/{address_id}",
             delete(delete_address),
         )
+        .route(
+            "/wallets/{id}/subscribe",
+            post(subscribe_wallet_readonly).delete(unsubscribe_wallet_readonly),
+        )
+        .route("/recharges/my", get(get_my_recharges))
 }
 
 // ── Response DTOs ──
@@ -143,6 +149,12 @@ impl From<WalletAddress> for AddressResponse {
             created_at: a.created_at,
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+struct SubscribeWalletResponse {
+    wallet: WalletResponse,
+    addresses: Vec<AddressResponse>,
 }
 
 #[derive(Debug, Serialize)]
@@ -293,6 +305,14 @@ async fn subscribe_chain(
     Path(wallet_id): Path<String>,
     Json(body): Json<SyncAddressRequest>,
 ) -> Result<(axum::http::StatusCode, Json<AddressResponse>), AppError> {
+    log::info!(
+        "[链上账户] 创建 — 钱包={}, 链={}, 地址={}, 设备={}",
+        wallet_id,
+        body.chain,
+        &body.address[..8.min(body.address.len())],
+        device.device_id
+    );
+
     let wa = wallet_service::subscribe_chain(state.db.clone(), &body.chain, &body.address).await?;
 
     // 创建订阅记录
@@ -311,7 +331,37 @@ async fn subscribe_chain(
     ))
 }
 
-/// GET /wallets/:id/addresses — 获取钱包的所有链上地址
+/// POST /wallets/:id/subscribe — 只读订阅钱包（当前设备订阅一个已存在的钱包）
+async fn subscribe_wallet_readonly(
+    State(state): State<AppState>,
+    Extension(device): Extension<DevicePayload>,
+    Path(wallet_id): Path<String>,
+) -> Result<(axum::http::StatusCode, Json<SubscribeWalletResponse>), AppError> {
+    let (wallet, addresses) =
+        wallet_service::subscribe_wallet_readonly(state.db.clone(), &wallet_id, &device.device_id)
+            .await?;
+
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(SubscribeWalletResponse {
+            wallet: WalletResponse::from(wallet),
+            addresses: addresses.into_iter().map(AddressResponse::from).collect(),
+        }),
+    ))
+}
+
+/// DELETE /wallets/:id/subscribe — 取消只读订阅（删除当前设备对该钱包的订阅记录）
+async fn unsubscribe_wallet_readonly(
+    State(state): State<AppState>,
+    Extension(device): Extension<DevicePayload>,
+    Path(wallet_id): Path<String>,
+) -> Result<axum::http::StatusCode, AppError> {
+    wallet_service::unsubscribe_wallet_readonly(state.db.clone(), &wallet_id, &device.device_id)
+        .await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// GET /wallets/:id/addresseses — 获取钱包的所有链上地址
 async fn get_wallet_addresses(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -329,4 +379,103 @@ async fn delete_address(
 ) -> Result<axum::http::StatusCode, AppError> {
     wallet_service::delete_address(state.db.clone(), &address_id).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
+}
+// ── 充值记录查询（白名单设备，无需管理密码） ──
+
+/// GET /recharges/my — 查询当前设备关联钱包的充值记录
+/// 仅需 device_auth + 充值白名单，不需要管理密码
+/// 与管理视角的 POST /{prefix}/recharges 不同，此接口只返回当前设备有权查看的数据
+#[derive(Debug, Deserialize)]
+struct MyRechargesQuery {
+    #[serde(default = "default_page")]
+    page: u64,
+    #[serde(default = "default_limit")]
+    limit: u64,
+    #[serde(default)]
+    wallet_id: Option<String>,
+}
+
+fn default_page() -> u64 {
+    1
+}
+fn default_limit() -> u64 {
+    20
+}
+
+#[derive(Debug, Serialize)]
+struct MyRechargesResponse {
+    recharges: Vec<crate::models::Recharge>,
+    total: u64,
+    page: u64,
+    limit: u64,
+}
+
+async fn get_my_recharges(
+    State(state): State<AppState>,
+    Extension(device): Extension<DevicePayload>,
+    Query(query): Query<MyRechargesQuery>,
+) -> Result<Json<MyRechargesResponse>, AppError> {
+    // 校验充值白名单：只有白名单中的设备才能查看充值记录
+    let permitted =
+        crate::services::config_service::is_recharge_permitted(state.db.clone(), &device.device_id)
+            .await?;
+    if !permitted {
+        return Err(AppError::Forbidden("无权查看充值记录".into()));
+    }
+
+    let offset = (query.page - 1) * query.limit;
+
+    // 如果指定了 wallet_id，先校验该钱包属于当前设备
+    if let Some(ref wid) = query.wallet_id {
+        let cnt: u64 = crate::db::query::query_count(
+            &state.db,
+            "SELECT COUNT(*) as cnt FROM wallet_subscriptions WHERE wallet_id = $1 AND device_id = $2 AND address_id != ''",
+            vals![wid, &device.device_id],
+        )
+        .await?;
+        if cnt == 0 {
+            return Err(AppError::Forbidden("该钱包不属于当前设备".into()));
+        }
+    }
+
+    // JOIN wallet_subscriptions 一步完成：只传 device_id（和可选的 wallet_id），无需先查 ID 再 IN
+    let (where_extra, mut args) = if let Some(ref wid) = query.wallet_id {
+        (" AND r.wallet_id = $2", vals![&device.device_id, wid])
+    } else {
+        ("", vals![&device.device_id])
+    };
+    let base_where = format!("r.wallet_id IN (SELECT DISTINCT ws.wallet_id FROM wallet_subscriptions ws WHERE ws.device_id = $1 AND ws.address_id != ''){}", where_extra);
+
+    let total: u64 = crate::db::query::query_count(
+        &state.db,
+        &format!(
+            "SELECT COUNT(*) as cnt FROM recharges r WHERE {}",
+            base_where
+        ),
+        args.clone(),
+    )
+    .await?;
+
+    // 分页参数追加到 args 末尾
+    args.push(rbs::value!(query.limit as i64));
+    args.push(rbs::value!(offset as i64));
+    let limit_ph = format!("${}", args.len() - 1);
+    let offset_ph = format!("${}", args.len());
+
+    let rows: Vec<crate::models::Recharge> = crate::db::query::query(
+        &state.db,
+        &format!(
+            "SELECT r.* FROM recharges r WHERE {} ORDER BY r.created_at DESC LIMIT {} OFFSET {}",
+            base_where, limit_ph, offset_ph
+        ),
+        args,
+    )
+    .await?;
+
+    Ok(Json(MyRechargesResponse {
+        recharges: rows,
+        total,
+        page: query.page,
+        limit: query.limit,
+    }))
 }

@@ -1,5 +1,5 @@
 # rs-wallet Docker 镜像
-# 多阶段构建 → distroless 最终镜像（~10MB）
+# 多阶段构建 → distroless 最终镜像（~5MB）
 
 FROM rust:1.95-slim-bookworm AS builder
 
@@ -17,7 +17,7 @@ RUN rm -rf src
 COPY src/ src/
 COPY migrations/ migrations/
 
-# 实际构建
+# 实际构建（Cargo.toml release profile: strip=symbols, debug=0, LTO=true）
 RUN cargo build --release
 
 # ── Runtime Stage ──
@@ -27,11 +27,12 @@ WORKDIR /etc/rs-wallet
 
 COPY --from=builder /build/target/release/rs-wallet /usr/local/bin/rs-wallet
 COPY --from=builder /build/migrations/ /etc/rs-wallet/migrations/
-COPY --from=builder /build/config.toml* /etc/rs-wallet/config.toml*
+# config.toml 不打包进镜像 — 所有配置通过环境变量传入
+# 程序启动时 config.toml 找不到会使用默认值 + 环境变量覆盖
 
 EXPOSE 3000
 
-ENV DATABASE_URL=postgresql://imwallet:CHANGE_ME@db:5432/imwallet
+# 所有敏感配置通过环境变量传入，此处仅设非敏感默认值
 ENV PORT=3000
 ENV MIGRATION_DIR=/etc/rs-wallet/migrations
 

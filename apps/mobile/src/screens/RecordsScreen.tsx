@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -18,8 +18,11 @@ import EmptyState from "../components/EmptyState";
 import { transactionService, type TransactionFilter } from "../services/transactionService";
 import { localAddressService } from "../services/localAddressService";
 import type { Transaction, AddressEntry } from "../types";
-import { SearchIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
+import { SearchIcon, renderTokenIcon } from "../components/icons";
 import { formatTime } from "../utils/date";
+import { configService, type FeeConfig } from "../services/configService";
+import { saveLogToLocal } from "../services/logService";
+import { getErrorMessage } from "../utils/format";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type RecordsRoute = RouteProp<RootStackParamList, "Records">;
@@ -64,7 +67,10 @@ export default function RecordsScreen() {
   const [timeFilter, setTimeFilter] = useState<TimeFilter | null>(null);
   const [searchText, setSearchText] = useState("");
 
-  // 设置导航栏右侧搜索 icon
+  // 手续费配置（用于计算实到金额）
+  const [feeConfig, setFeeConfig] = useState<FeeConfig>({ feeRate: 0.005, feeMode: "DEDUCTED" });
+
+  // 设置导航栏右侧搜索 icon + 加载手续费配置
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -75,6 +81,11 @@ export default function RecordsScreen() {
           <SearchIcon size={22} color={filterExpanded ? "#3B82F6" : "#374151"} />
         </TouchableOpacity>
       ),
+    });
+    configService.getFeeConfig().then((cfg) => {
+      if (cfg) setFeeConfig(cfg);
+    }).catch((err: unknown) => {
+      saveLogToLocal("info", `[RecordsScreen] getFeeConfig failed: ${getErrorMessage(err, "未知错误")}`);
     });
   }, [navigation, filterExpanded]);
 
@@ -154,7 +165,7 @@ export default function RecordsScreen() {
       {filterExpanded && (
         <View style={styles.filterPanel}>
           {/* 交易类型 */}
-          <Text style={styles.filterLabel}>交易类型</Text>
+          <Text style={styles.filterLabel}>交易类型 <Text style={styles.filterHint}>（暂不支持筛选）</Text></Text>
           <View style={styles.filterRow}>
             {TYPE_OPTIONS.map((opt) => (
               <TouchableOpacity
@@ -178,7 +189,7 @@ export default function RecordsScreen() {
           </View>
 
           {/* 时间范围 */}
-          <Text style={styles.filterLabel}>时间范围</Text>
+          <Text style={styles.filterLabel}>时间范围 <Text style={styles.filterHint}>（暂不支持筛选）</Text></Text>
           <View style={styles.filterRow}>
             {TIME_OPTIONS.map((opt) => (
               <TouchableOpacity
@@ -236,6 +247,7 @@ export default function RecordsScreen() {
             <TransactionCard
               transaction={item}
               currentAddress={currentWalletAddress}
+              feeMode={feeConfig.feeMode}
               onPress={(tx) => navigation.navigate("TradeDetail", { tradeId: tx.id })}
             />
           )}
@@ -262,19 +274,26 @@ export default function RecordsScreen() {
   );
 }
 
-/** 圆角卡片式交易记录 */
+/** 圆角卡片式交易记录
+ * 发送方(A)：显示金额 + 手续费 + 实到金额
+ * 接收方(B)：只显示到账金额，不显示手续费
+ * DEDUCTED 模式：A转100，手续费0.5，B到账99.5
+ *   - A 看到: -100 USDT, 手续费 0.5, 实到 99.5
+ *   - B 看到: +99.5 USDT (无手续费信息)
+ */
 export function TransactionCard({
   transaction,
   currentAddress,
+  feeMode = "DEDUCTED",
   onPress,
 }: {
   transaction: Transaction;
   currentAddress: string;
+  feeMode?: string;
   onPress?: (tx: Transaction) => void;
 }) {
   const isReceive = transaction.toAddress === currentAddress;
   const label = isReceive ? "收到" : "发送";
-  const prefix = isReceive ? "+" : "-";
   const amountColor = isReceive ? "#10B981" : "#EF4444";
   const iconBgColor = isReceive ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)";
 
@@ -283,6 +302,14 @@ export function TransactionCard({
   const counterpartyAddress = isReceive ? transaction.fromAddress : transaction.toAddress;
 
   const feeNum = parseFloat(transaction.fee) || 0;
+  const amountNum = parseFloat(transaction.amount) || 0;
+
+  // 计算实到金额：DEDUCTED 模式 = amount - fee, EXTRA 模式 = amount
+  const receivedNum = feeMode === "EXTRA" ? amountNum : amountNum - feeNum;
+
+  // 接收方看到的金额是实到金额，发送方看到的是转账金额
+  const displayAmount = isReceive ? receivedNum : amountNum;
+  const prefix = isReceive ? "+" : "-";
 
   return (
     <TouchableOpacity
@@ -301,7 +328,7 @@ export function TransactionCard({
           <Text style={card.label}>{label}</Text>
         </View>
         <Text style={[card.amount, { color: amountColor }]}>
-          {prefix}{transaction.amount} {transaction.tokenSymbol}
+          {prefix}{displayAmount.toFixed(6)} {transaction.tokenSymbol}
         </Text>
       </View>
 
@@ -319,11 +346,12 @@ export function TransactionCard({
         ) : null}
       </View>
 
-      {/* 第三行：时间 + 手续费 */}
+      {/* 第三行：时间 + 手续费（仅发送方显示） */}
       <View style={card.bottomRow}>
         <Text style={card.time}>{formatTime(transaction.createdAt)}</Text>
-        {feeNum > 0 && (
-          <Text style={card.fee}>手续费 {transaction.fee} {transaction.tokenSymbol}</Text>
+        {/* 接收方(B)不显示手续费，发送方(A)显示手续费和实到金额 */}
+        {!isReceive && feeNum > 0 && (
+          <Text style={card.fee}>手续费 {feeNum.toFixed(6)} {transaction.tokenSymbol} · 实到 {receivedNum.toFixed(6)}</Text>
         )}
       </View>
     </TouchableOpacity>
@@ -343,6 +371,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#E5E7EB",
   },
   filterLabel: { fontSize: 13, color: "#6B7280", fontWeight: "500", marginTop: 12, marginBottom: 6 },
+  filterHint: { fontSize: 11, color: "#9CA3AF", fontWeight: "400" },
   filterRow: { flexDirection: "row", gap: 8 },
   filterChip: {
     paddingHorizontal: 14,

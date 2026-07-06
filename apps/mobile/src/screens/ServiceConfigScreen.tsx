@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,11 +6,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import Constants from "expo-constants";
 import api from "../services/api";
+import { getErrorMessage } from "../utils/format";
 
 export default function ServiceConfigScreen() {
   const [serverUrl, setServerUrl] = useState("");
@@ -38,12 +38,12 @@ export default function ServiceConfigScreen() {
       } else {
         setTestResult(`⚠️ 服务器返回异常状态码: ${res.status}`);
       }
-    } catch (err: any) {
-      const status = err?.response?.status;
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
       if (status) {
         setTestResult(`❌ 连接失败 (HTTP ${status})`);
       } else {
-        setTestResult(`❌ 连接失败: ${err?.message || "网络不可达"}`);
+        setTestResult(`❌ 连接失败: ${getErrorMessage(err, "网络不可达")}`);
       }
     }
     setTesting(false);

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { configService, type FeeConfig } from "../services/configService";
@@ -21,7 +22,8 @@ import { ConfigManageSkeleton } from "../components/Skeleton";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
-import { cacheAdminAuth } from "../utils/adminAuthCache";
+import { cacheAdminAuth, clearAdminAuthCache } from "../utils/adminAuthCache";
+import { getErrorMessage } from "../utils/format";
 
 export default function ConfigManageScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -64,7 +66,7 @@ export default function ConfigManageScreen() {
   const loadConfig = async () => {
     setLoading(true);
     try {
-      const allConfigs = await configService.getAllConfigs();
+      const allConfigs = await configService.getAllConfigs(true);
       const feeRateItem = allConfigs.find((c) => c.key === "fee_rate");
       const feeModeItem = allConfigs.find((c) => c.key === "fee_mode");
       setFeeConfig({
@@ -120,12 +122,12 @@ export default function ConfigManageScreen() {
       await loadConfig();
       setShowEditModal(false);
       showToast("费率已更新");
-    } catch (err: any) {
-      const status = err?.response?.status;
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 403) {
         setEditError("管理密码错误");
       } else {
-        setEditError(err?.response?.data?.error || "更新失败，请重试");
+        setEditError(getErrorMessage(err, "更新失败，请重试"));
       }
     }
     setSaving(false);
@@ -156,12 +158,12 @@ export default function ConfigManageScreen() {
       setShowTogglePwdDrawer(false);
       setTogglePwdInput("");
       setPendingToggleValue(null);
-    } catch (err: any) {
-      const status = err?.response?.status;
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 403) {
         setTogglePwdError("密码错误，请重试");
       } else {
-        setTogglePwdError(err?.response?.data?.error || "更新失败，请重试");
+        setTogglePwdError(getErrorMessage(err, "更新失败，请重试"));
       }
     }
     setTogglePwdVerifying(false);
@@ -190,13 +192,17 @@ export default function ConfigManageScreen() {
     setDevicePwdVerifying(true);
     setDevicePwdError(null);
     try {
+      // 清除旧缓存，确保用本次输入的密码验证（而非缓存的旧密码）
+      clearAdminAuthCache();
       await adminService.listDevices(devicePwdInput.trim());
       // 密码验证成功 → 缓存加密密码 + 跳转到设备管理页面
       await cacheAdminAuth(devicePwdInput.trim());
       setShowDevicePwdDrawer(false);
-      navigation.navigate("DeviceManage", { verified: true });
-    } catch {
-      setDevicePwdError("密码验证失败，请重试");
+      navigation.navigate("DeviceManage", { verified: true, rechargePermitted });
+    } catch (err: unknown) {
+      // 后端返回的错误信息（如密码验证失败）直接展示给用户
+      // 前端内部错误（RSA加密失败、路由前缀缺失等）不暴露技术细节，统一提示网络/验证问题
+      setDevicePwdError(getErrorMessage(err, "验证请求发送失败，请检查网络后重试"));
     }
     setDevicePwdVerifying(false);
   };
@@ -319,8 +325,10 @@ export default function ConfigManageScreen() {
 
       {/* 编辑费率弹窗（含密码输入） */}
       <Modal visible={showEditModal} transparent animationType="fade">
-        <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss}>
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
+            <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss}>
+              <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>修改费率</Text>
             <Text style={styles.modalDesc}>请输入 0~1 之间的数值，如 0.005 表示 0.5%</Text>
             <TextInput
@@ -365,8 +373,10 @@ export default function ConfigManageScreen() {
                 )}
               </TouchableOpacity>
             </View>
+            </Pressable>
           </Pressable>
-        </Pressable>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* 交易限制开关密码抽屉 */}
@@ -380,8 +390,9 @@ export default function ConfigManageScreen() {
           style={styles.drawerOverlay}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <Pressable style={styles.drawerBackdrop} onPress={handleCloseTogglePwdDrawer} />
-          <View style={styles.drawerContent}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+            <Pressable style={styles.drawerBackdrop} onPress={handleCloseTogglePwdDrawer} />
+            <View style={styles.drawerContent}>
             <View style={styles.drawerHandle} />
             <Text style={styles.drawerTitle}>请输入管理密码</Text>
             <Text style={styles.drawerDesc}>
@@ -422,6 +433,7 @@ export default function ConfigManageScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -436,8 +448,9 @@ export default function ConfigManageScreen() {
           style={styles.drawerOverlay}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <Pressable style={styles.drawerBackdrop} onPress={handleCloseDevicePwdDrawer} />
-          <View style={styles.drawerContent}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+            <Pressable style={styles.drawerBackdrop} onPress={handleCloseDevicePwdDrawer} />
+            <View style={styles.drawerContent}>
             <View style={styles.drawerHandle} />
             <Text style={styles.drawerTitle}>请输入管理密码</Text>
             <Text style={styles.drawerDesc}>进入设备管理需要验证管理密码</Text>
@@ -476,6 +489,7 @@ export default function ConfigManageScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
     </View>

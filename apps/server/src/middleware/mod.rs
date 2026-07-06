@@ -1,9 +1,6 @@
 //! 中间件模块
-//! 迁移自 IMWallet middleware/
 
 pub mod device_auth;
-pub mod request_logger;
-// pub mod validate; — removed dead code
+// request_logger 已合并到 device_auth 中（只缓冲一次 body）
 
 pub use device_auth::{AppState, DevicePayload};
-pub use request_logger::request_logger;

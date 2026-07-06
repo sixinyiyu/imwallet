@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { TouchableOpacity, Animated, StyleSheet, Platform } from "react-native";
 
 /** 绿色主题自定义开关 */

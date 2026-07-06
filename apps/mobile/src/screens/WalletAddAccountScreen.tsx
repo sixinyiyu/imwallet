@@ -17,7 +17,7 @@ import { useWalletStore } from "../stores/walletStore";
 import { accountService } from "../services/accountService";
 import { localAccountService } from "../services/localAccountService";
 import { LinearGradient } from "expo-linear-gradient";
-import { TOKEN_ICONS, renderTokenIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
+import { TOKEN_ICONS, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import type { ChainInfo } from "../types";
 import { useAlert } from "../hooks/useAlert";
 import { configService } from "../services/configService";
@@ -52,8 +52,6 @@ export default function WalletAddAccountScreen() {
   const [chainsLoaded, setChainsLoaded] = useState(false);
   /** 已有账户的链集合（该链下所有代币账户都已存在） */
   const [existingChains, setExistingChains] = useState<Set<string>>(new Set());
-  /** 已有部分账户的链集合（该链下部分代币账户已存在） */
-  const [partialChains, setPartialChains] = useState<Set<string>>(new Set());
   /** 同链多账户开关（本地配置，默认关闭） */
   const [multiAccountEnabled, setMultiAccountEnabled] = useState(false);
 
@@ -82,14 +80,12 @@ export default function WalletAddAccountScreen() {
 
       // 判断每条链的状态：全部已有 / 部分已有
       const fullSet = new Set<string>();
-      const partialSet = new Set<string>();
       for (const chain of chainsResult.chains) {
         if (accountsByChain.has(chain.name)) {
           fullSet.add(chain.name);
         }
       }
       setExistingChains(fullSet);
-      setPartialChains(partialSet);
     } catch {
       // API 失败，使用预置链
       setChains([
@@ -142,8 +138,13 @@ export default function WalletAddAccountScreen() {
     }
     setDrawerVisible(false);
     setCreating(false);
-    // 跳转到钱包备份引导页
-    navigation.replace("BackupGuide", { walletId: effectiveWalletId!, source: "create" });
+    // 已备份（导入钱包）→ 直接回主页；未备份（创建钱包）→ 跳备份引导
+    const backedUp = useWalletStore.getState().isWalletBackedUp(effectiveWalletId!);
+    if (backedUp) {
+      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+    } else {
+      navigation.replace("BackupGuide", { walletId: effectiveWalletId!, source: "create" });
+    }
   };
 
   // 只有新选择的链才算有效选择（已有账户的不算，除非开启了同链多账户）
@@ -214,7 +215,7 @@ export default function WalletAddAccountScreen() {
             {chains.map((chain) => {
               const isSelected = selectedChains.has(chain.name);
               const isLocked = !multiAccountEnabled && existingChains.has(chain.name);
-              const isPartial = !multiAccountEnabled && partialChains.has(chain.name);
+              
               const IconComp = CHAIN_ICONS[chain.name];
 
               return (
@@ -266,11 +267,6 @@ export default function WalletAddAccountScreen() {
           </View>
           )}
 
-          {/* 提示文字 */}
-          {!hasNewSelection && (
-            <Text style={drawerStyles.hintText}>请先选择账户</Text>
-          )}
-
           {/* 确认按钮 */}
           <TouchableOpacity
             style={[
@@ -284,7 +280,12 @@ export default function WalletAddAccountScreen() {
             {creating ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <Text style={drawerStyles.confirmButtonText}>确认</Text>
+              <Text style={[
+                drawerStyles.confirmButtonText,
+                !hasNewSelection && drawerStyles.confirmButtonTextDisabled,
+              ]}>
+                {hasNewSelection ? "确认" : "请先选择账户"}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -462,11 +463,8 @@ const drawerStyles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 18,
   },
-  hintText: {
-    fontSize: 13,
-    color: "#F59E0B",
-    marginTop: 16,
-    marginBottom: 4,
+  confirmButtonTextDisabled: {
+    color: "#9CA3AF",
   },
   confirmButton: {
     backgroundColor: "#287220",

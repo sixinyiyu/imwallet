@@ -6,6 +6,7 @@ use crate::errors::AppError;
 use rbatis::RBatis;
 use rbdc::DateTime;
 use serde::Serialize;
+use serde_json::Value;
 use std::sync::Arc;
 
 #[derive(Debug, Serialize)]
@@ -15,6 +16,7 @@ pub struct NotificationResult {
     pub title: String,
     pub content: String,
     pub r#type: String,
+    pub metadata: Value,
     pub created_at: Option<DateTime>,
 }
 
@@ -31,17 +33,18 @@ pub async fn get_notifications_by_device(
         title: String,
         content: String,
         r#type: String,
+        metadata: Option<Value>,
         created_at: Option<DateTime>,
     }
 
     let sql = if since.is_some() {
-        "SELECT n.id, n.wallet_id, n.title, n.content, n.type as \"type\", n.created_at \
+        "SELECT n.id, n.wallet_id, n.title, n.content, n.type as \"type\", n.metadata, n.created_at \
          FROM notifications n \
          JOIN wallet_subscriptions ws ON ws.wallet_id = n.wallet_id \
          WHERE ws.device_id = $1 AND n.created_at >= $2 \
          ORDER BY n.created_at DESC LIMIT 100"
     } else {
-        "SELECT n.id, n.wallet_id, n.title, n.content, n.type as \"type\", n.created_at \
+        "SELECT n.id, n.wallet_id, n.title, n.content, n.type as \"type\", n.metadata, n.created_at \
          FROM notifications n \
          JOIN wallet_subscriptions ws ON ws.wallet_id = n.wallet_id \
          WHERE ws.device_id = $1 \
@@ -62,6 +65,7 @@ pub async fn get_notifications_by_device(
             title: r.title,
             content: r.content,
             r#type: r.r#type,
+            metadata: r.metadata.unwrap_or(Value::Object(serde_json::Map::new())),
             created_at: r.created_at,
         })
         .collect())

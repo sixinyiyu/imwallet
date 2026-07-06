@@ -1,9 +1,17 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Modal, FlatList, Pressable } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../types/navigation";
 import type { AssetBalance } from "../types";
+import { useWalletStore } from "../stores/walletStore";
+import { useBackupGuard } from "../hooks/useBackupGuard";
+import BackupGuardModal from "./BackupGuardModal";
 import TronIcon from "./icons/TronIcon";
 import { USDTIcon, TransferIcon, ReceiveIcon, RecordsIcon } from "./icons";
+
+type Nav = NativeStackNavigationProp<RootStackParamList, "Main">;
 
 function renderTokenIcon(symbol: string, size: number) {
   if (symbol === "TRX") return <TronIcon size={size} />;
@@ -23,8 +31,24 @@ export default function ActionButtons({
   onRecords,
   assets,
 }: Props) {
+  const navigation = useNavigation<Nav>();
+  const activeWallet = useWalletStore((s) => s.activeWallet);
+  const { guardCheck, showGuard, closeGuard, goToBackup, guardType } = useBackupGuard(activeWallet?.id);
+
   const [showTokenPicker, setShowTokenPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<"receive" | "transfer">("receive");
+
+  const handleTransferPress = () => {
+    if (!guardCheck()) return;
+    setPickerMode("transfer");
+    setShowTokenPicker(true);
+  };
+
+  const handleReceivePress = () => {
+    if (!guardCheck()) return;
+    setPickerMode("receive");
+    setShowTokenPicker(true);
+  };
 
   return (
     <>
@@ -34,21 +58,16 @@ export default function ActionButtons({
         end={{ x: 1, y: 0 }}
         style={styles.container}
       >
-        <TouchableOpacity style={styles.button} onPress={() => {
-          setPickerMode("transfer");
-          setShowTokenPicker(true);
-        }}>
-          <View style={styles.iconCircle}>
-            <TransferIcon size={22} color="#FFFFFF" />
-          </View>
-          <Text style={styles.label}>转账</Text>
-        </TouchableOpacity>
+        {/* 转账 */}
+        <TouchableOpacity style={styles.button} onPress={handleTransferPress}>
+            <View style={styles.iconCircle}>
+              <TransferIcon size={22} color="#FFFFFF" />
+            </View>
+            <Text style={styles.label}>转账</Text>
+          </TouchableOpacity>
         <TouchableOpacity
           style={styles.button}
-          onPress={() => {
-            setPickerMode("receive");
-            setShowTokenPicker(true);
-          }}
+          onPress={handleReceivePress}
         >
           <View style={styles.iconCircle}>
             <ReceiveIcon size={22} color="#FFFFFF" />
@@ -62,6 +81,14 @@ export default function ActionButtons({
           <Text style={styles.label}>交易</Text>
         </TouchableOpacity>
       </LinearGradient>
+
+      {/* 备份提示弹窗 */}
+      <BackupGuardModal
+        visible={showGuard}
+        guardType={guardType ?? "backup"}
+        onClose={closeGuard}
+        onBackup={() => goToBackup(navigation)}
+      />
 
       {/* Token picker modal */}
       <Modal visible={showTokenPicker} transparent animationType="fade">

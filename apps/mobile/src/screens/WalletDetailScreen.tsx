@@ -10,6 +10,8 @@ import {
   Modal,
   Pressable,
   Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import EmptyState from "../components/EmptyState";
@@ -17,7 +19,6 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { WalletDetailSkeleton } from "../components/Skeleton";
-import { saveLogToLocal } from "../services/logService";
 import { useAlert } from "../hooks/useAlert";
 import { walletService } from "../services/walletService";
 import { localWalletService } from "../services/localWalletService";
@@ -36,6 +37,7 @@ import {
 import type { Wallet, SimpleWallet } from "../types";
 import { formatDate } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";
+import { getErrorMessage } from "../utils/format";
 
 /** 根据网络名获取对应图标组件（PascalCase） */
 function getNetworkIcon(network: string): React.FC<{ size?: number; color?: string }> | null {
@@ -55,7 +57,7 @@ export default function WalletDetailScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const walletId = route.params?.walletId;
-  const { wallets, accounts, fetchAccounts, deleteWallet, fetchWallets, verifyPassword, assets } = useWalletStore();
+  const { wallets, accounts, fetchAccounts, deleteWallet, fetchWallets, verifyPassword } = useWalletStore();
 
   const [detail, setDetail] = useState<SimpleWallet | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,7 +93,6 @@ export default function WalletDetailScreen() {
 
   const walletFromStore = wallets.find((w) => w.id === walletId);
   const wallet = detail || walletFromStore;
-  const isWalletBackedUp = useWalletStore((s) => s.isWalletBackedUp);
   const backedUpWallets = useWalletStore((s) => s.backedUpWallets);
   const walletIsBackedUp = walletId ? backedUpWallets.has(walletId) : false;
 
@@ -101,27 +102,47 @@ export default function WalletDetailScreen() {
     setTimeout(() => setToastVisible(false), 2000);
   }, []);
 
-  // Set header right: "移除" link
+  // Set header right: "移除" link (普通钱包) / "取消订阅" link (只读钱包)
   useEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity
-          onPress={() => {
-            // 未备份钱包：提示先备份
-            if (!walletIsBackedUp) {
-              setShowNotBackedUpDrawer(true);
-            } else {
-              setShowConfirmDrawer(true);
-            }
-          }}
-          style={{ marginRight: 16 }}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Text style={{ color: "#EF4444", fontSize: 15, fontWeight: "500" }}>移除</Text>
-        </TouchableOpacity>
-      ),
+      headerRight: () => {
+        if (wallet?.isReadOnly) {
+          return (
+            <TouchableOpacity
+              onPress={async () => {
+                try {
+                  await useWalletStore.getState().unsubscribeWallet(wallet.id);
+                  navigation.goBack();
+                } catch (err: unknown) {
+                  showToast(getErrorMessage(err, "取消订阅失败"));
+                }
+              }}
+              style={{ marginRight: 16 }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={{ color: "#6B7280", fontSize: 15, fontWeight: "500" }}>取消订阅</Text>
+            </TouchableOpacity>
+          );
+        }
+        return (
+          <TouchableOpacity
+            onPress={() => {
+              // 未备份钱包：提示先备份
+              if (!walletIsBackedUp) {
+                setShowNotBackedUpDrawer(true);
+              } else {
+                setShowConfirmDrawer(true);
+              }
+            }}
+            style={{ marginRight: 16 }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={{ color: "#EF4444", fontSize: 15, fontWeight: "500" }}>移除</Text>
+          </TouchableOpacity>
+        );
+      },
     });
-  }, [navigation, walletIsBackedUp]);
+  }, [navigation, walletIsBackedUp, wallet?.isReadOnly]);
 
   useEffect(() => {
     loadDetail();
@@ -165,9 +186,8 @@ export default function WalletDetailScreen() {
       setDetail(null);
       await fetchWallets();
       setShowEditModal(false);
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || err.message || "修改失败";
-      alert("提示", msg);
+    } catch (err: unknown) {
+      alert("提示", getErrorMessage(err, "修改失败"));
     }
     setSavingAlias(false);
   };
@@ -184,7 +204,7 @@ export default function WalletDetailScreen() {
         // 删除最后一个钱包后跳转到 Start 导航页
         const remaining = useWalletStore.getState().wallets;
         if (remaining.length === 0) {
-          navigation.replace("Start" as any);
+          navigation.replace("Start");
         } else {
           navigation.goBack();
         }
@@ -235,6 +255,24 @@ export default function WalletDetailScreen() {
           </View>
           <View style={styles.infoDivider} />
 
+          {/* 标识符 */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>标识符</Text>
+            <TouchableOpacity
+              onPress={async () => {
+                const ok = await copyToClipboard(wallet.id);
+                showToast(ok ? "标识符已复制" : "复制失败");
+              }}
+              activeOpacity={0.6}
+            >
+              <View style={styles.identifierRow}>
+                <Text style={styles.identifierValue} selectable>{wallet.id}</Text>
+                <CopyIcon size={16} color="#9CA3AF" />
+              </View>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.infoDivider} />
+
           {/* 账户数 */}
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>账户数</Text>
@@ -245,14 +283,16 @@ export default function WalletDetailScreen() {
           {/* 来源 */}
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>来源</Text>
-            <Text style={styles.infoValue}>{wallet.source === "CREATE" ? "创建" : "导入"}</Text>
+            <Text style={styles.infoValue}>{wallet.source === "CREATE" ? "创建" : wallet.source === "IMPORT" ? "导入" : wallet.source === "SUBSCRIBE" ? "订阅" : wallet.source}</Text>
           </View>
           <View style={styles.infoDivider} />
 
           {/* 备份状态 */}
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>备份状态</Text>
-            {walletIsBackedUp ? (
+            {wallet.isReadOnly ? (
+              <Text style={styles.noBackupNeededText}>无需备份</Text>
+            ) : walletIsBackedUp ? (
               <Text style={styles.backedUpText}>已备份</Text>
             ) : (
               <TouchableOpacity
@@ -275,8 +315,8 @@ export default function WalletDetailScreen() {
             <Text style={styles.infoValue}>{formatDate(wallet.createdAt)}</Text>
           </View>
 
-          {/* 密码提示 */}
-          {passwordHint !== undefined && passwordHint !== null && (
+          {/* 密码提示（订阅钱包不显示） */}
+          {!wallet.isReadOnly && passwordHint !== undefined && passwordHint !== null && (
             <>
               <View style={styles.infoDivider} />
               <View style={styles.infoRow}>
@@ -307,14 +347,16 @@ export default function WalletDetailScreen() {
         {/* Account list section */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>账户列表</Text>
-          <TouchableOpacity
-            style={styles.addAccountLink}
-            onPress={() => navigation.navigate("WalletAddAccount", { walletId: wallet.id })}
-            activeOpacity={0.6}
-          >
-            <PlusCircleIcon size={18} color="#287220" />
-            <Text style={styles.addAccountLinkText}>添加账户</Text>
-          </TouchableOpacity>
+          {!wallet.isReadOnly && (
+            <TouchableOpacity
+              style={styles.addAccountLink}
+              onPress={() => navigation.navigate("WalletAddAccount", { walletId: wallet.id })}
+              activeOpacity={0.6}
+            >
+              <PlusCircleIcon size={18} color="#287220" />
+              <Text style={styles.addAccountLinkText}>添加账户</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {accounts.length === 0 ? (
@@ -349,6 +391,7 @@ export default function WalletDetailScreen() {
             </View>
           ))
         )}
+
       </ScrollView>
 
       {/* Toast */}
@@ -451,6 +494,8 @@ export default function WalletDetailScreen() {
         animationType="slide"
         onRequestClose={() => setShowRemoveDrawer(false)}
       >
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <Pressable style={styles.drawerOverlay} onPress={() => setShowRemoveDrawer(false)}>
           <Pressable style={styles.drawerContent} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.drawerPasswordTitle}>密码</Text>
@@ -511,10 +556,14 @@ export default function WalletDetailScreen() {
             </TouchableOpacity>
           </Pressable>
         </Pressable>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Password verification modal (for backup) */}
       <Modal visible={showPasswordModal} transparent animationType="fade">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <Pressable style={styles.modalOverlay} onPress={() => Keyboard.dismiss()}>
           <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>验证钱包密码</Text>
@@ -593,6 +642,8 @@ export default function WalletDetailScreen() {
             </View>
           </Pressable>
         </Pressable>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Password error dialog (forgot password / retry) */}
@@ -637,6 +688,8 @@ export default function WalletDetailScreen() {
 
       {/* Edit alias modal */}
       <Modal visible={showEditModal} transparent animationType="fade">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>修改钱包名称</Text>
@@ -673,6 +726,8 @@ export default function WalletDetailScreen() {
             </View>
           </View>
         </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -760,6 +815,18 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#F3F4F6",
   },
+  // 标识符行（标签与值在同一行，值过长时换行）
+  identifierRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: 2,
+  },
+  identifierValue: {
+    fontSize: 13,
+    color: "#6B7280",
+    fontFamily: "monospace",
+    lineHeight: 18,
+  },
   hintRight: {
     flexDirection: "row",
     alignItems: "center",
@@ -779,6 +846,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#22C55E",
     fontWeight: "600",
+  },
+  noBackupNeededText: {
+    fontSize: 14,
+    color: "#9CA3AF",
+    fontWeight: "500",
   },
   // Section header
   sectionHeader: {

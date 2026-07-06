@@ -22,11 +22,15 @@ import { transactionService } from "../services/transactionService";
 import { localAddressService } from "../services/localAddressService";
 import { configService } from "../services/configService";
 import type { FeeConfig } from "../services/configService";
-import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
+import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, renderTokenIcon } from "../components/icons";
 
 import type { AddressEntry, AssetBalance } from "../types";
 import { detectNetwork, isValidAddressFormat } from "../utils/address";
 import { useAlert } from "../hooks/useAlert";
+import { useBackupGuard } from "../hooks/useBackupGuard";
+import BackupGuardModal from "../components/BackupGuardModal";
+import { getErrorMessage } from "../utils/format";
+import { saveLogToLocal } from "../services/logService";
 
 /** 根据错误信息给出针对性建议 */
 function getSuggestion(error?: string): string {
@@ -58,8 +62,14 @@ export default function TransferScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const { activeWallet, assets, accounts } = useWalletStore();
+  const { guardCheck, showGuard, closeGuard, goToBackup, guardType } = useBackupGuard(activeWallet?.id);
   const [toAddress, setToAddress] = useState("");
   const [selectedToken, setSelectedToken] = useState<AssetBalance | null>(null);
+
+  // 进入转账页时检查备份状态
+  useEffect(() => {
+    guardCheck();
+  }, []);
 
   // 根据路由参数初始化选中的代币
   useEffect(() => {
@@ -137,8 +147,14 @@ export default function TransferScreen() {
   // 获取手续费配置 + 交易限制配置
   useEffect(() => {
     Promise.all([
-      configService.getFeeConfig().catch(() => null),
-      configService.getTxRestrictWallet().catch(() => false),
+      configService.getFeeConfig().catch((err: unknown) => {
+        saveLogToLocal("info", `[TransferScreen] getFeeConfig failed: ${getErrorMessage(err, "未知错误")}`);
+        return null;
+      }),
+      configService.getTxRestrictWallet().catch((err: unknown) => {
+        saveLogToLocal("info", `[TransferScreen] getTxRestrictWallet failed: ${getErrorMessage(err, "未知错误")}`);
+        return false;
+      }),
     ]).then(([fee, restrict]) => {
       if (fee) setFeeConfig(fee);
       setTxRestrictWallet(restrict);
@@ -165,6 +181,7 @@ export default function TransferScreen() {
   const addressFormatValid = useMemo(() => isValidAddressFormat(toAddress), [toAddress]);
 
   // 地址格式正确时，调用后端接口检查地址是否在系统中 + 本地检查是否在地址本中
+  // 加 400ms debounce，避免快速输入时多发请求
   useEffect(() => {
     if (!addressFormatValid || !toAddress.trim()) {
       setAddressCheckResult(null);
@@ -174,27 +191,34 @@ export default function TransferScreen() {
     let cancelled = false;
     setCheckingAddress(true);
 
-    // 本地检查：地址是否已在地址本中（type=contact）
-    const network = detectNetwork(toAddress.trim());
-    const localCheck = network
-      ? localAddressService.isContact(network, toAddress.trim())
-      : Promise.resolve(false);
+    const timer = setTimeout(() => {
+      // 本地检查：地址是否已在地址本中（type=contact）
+      const network = detectNetwork(toAddress.trim());
+      const localCheck = network
+        ? localAddressService.isContact(network, toAddress.trim())
+        : Promise.resolve(false);
 
-    // 服务端检查：地址是否在系统内
-    const serverCheck = transactionService.checkAddress(toAddress.trim());
+      // 服务端检查：地址是否在系统内
+      const serverCheck = transactionService.checkAddress(toAddress.trim());
 
-    Promise.all([serverCheck, localCheck]).then(([result, inContacts]) => {
-      if (cancelled) return;
-      setAddressCheckResult(result);
-      setAddressInContacts(inContacts);
-    }).catch(() => {
-      if (cancelled) return;
-      setAddressCheckResult(null);
-      setAddressInContacts(false);
-    }).finally(() => {
-      if (!cancelled) setCheckingAddress(false);
-    });
-    return () => { cancelled = true; };
+      Promise.all([serverCheck, localCheck]).then(([result, inContacts]) => {
+        if (cancelled) return;
+        setAddressCheckResult(result);
+        setAddressInContacts(inContacts);
+      }).catch(() => {
+        if (cancelled) return;
+        setAddressCheckResult(null);
+        setAddressInContacts(false);
+      }).finally(() => {
+        if (!cancelled) setCheckingAddress(false);
+      });
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      setCheckingAddress(false);
+    };
   }, [addressFormatValid, toAddress]);
 
   // 地址有效 = 格式合法（链上地址格式正确即可转账，无需收款方在系统中存在）
@@ -243,8 +267,8 @@ export default function TransferScreen() {
       setAddressInContacts(true);
       setAddressCheckResult((prev) => prev ? { ...prev, inSystem: true } : prev);
       showToast("已添加到地址本");
-    } catch (err: any) {
-      alert("提示", "添加到地址本失败: " + (err.message || "未知错误"));
+    } catch (err: unknown) {
+      alert("提示", "添加到地址本失败: " + getErrorMessage(err, "未知错误"));
     } finally {
       setAddingToContacts(false);
     }
@@ -275,9 +299,8 @@ export default function TransferScreen() {
         receivedAmount: tx.receivedAmount,
         fee: tx.fee,
       });
-    } catch (err: any) {
-      const serverError = err.response?.data?.error || err.response?.data?.details?.[0]?.message || err.message;
-      setResult({ success: false, error: serverError || "转账失败，请稍后重试" });
+    } catch (err: unknown) {
+      setResult({ success: false, error: getErrorMessage(err, "转账失败，请稍后重试") });
     } finally {
       setSubmitting(false);
     }
@@ -299,8 +322,8 @@ export default function TransferScreen() {
         const { Share } = require("react-native");
         await Share.share({ message: `AquaD 转账 ${amount} ${tokenSymbol}` });
       }
-    } catch (err: any) {
-      alert("分享失败", err.message || "请尝试截图后手动分享");
+    } catch (err: unknown) {
+      alert("分享失败", getErrorMessage(err, "请尝试截图后手动分享"));
     }
   };
 
@@ -661,6 +684,14 @@ export default function TransferScreen() {
           </View>
         </View>
       )}
+
+      {/* 备份提示弹窗 */}
+      <BackupGuardModal
+        visible={showGuard}
+        guardType={guardType ?? "backup"}
+        onClose={closeGuard}
+        onBackup={() => goToBackup(navigation)}
+      />
     </React.Fragment>
     );
 }

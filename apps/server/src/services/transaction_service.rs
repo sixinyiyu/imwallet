@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
+use crate::utils::short_addr;
+
 // NotificationType 常量
 const TRANSFER_IN: &str = "TRANSFER_IN";
 const TRANSFER_OUT: &str = "TRANSFER_OUT";
@@ -100,10 +102,10 @@ pub async fn execute_transfer(
 
     let fee_rate = Decimal::from_f64_retain(cfg.fee_rate).unwrap_or(Decimal::new(5, 3));
     let fee_mode = FeeMode::from_str(&cfg.fee_mode);
-    let fee = input.amount * fee_rate;
+    let fee = (input.amount * fee_rate).round_dp(6);
     let (received, total_debit) = match fee_mode {
-        FeeMode::Deducted => (input.amount - fee, input.amount),
-        FeeMode::Extra => (input.amount, input.amount + fee),
+        FeeMode::Deducted => ((input.amount - fee).round_dp(6), input.amount),
+        FeeMode::Extra => (input.amount, (input.amount + fee).round_dp(6)),
     };
     if bal.balance < total_debit {
         return Err(AppError::BadRequest("余额不足".into()));
@@ -156,8 +158,19 @@ pub async fn execute_transfer(
     let tx_hash = format!("0x{}", hex::encode(Sha256::digest(hash.as_bytes())));
     tx_exec(&tx, "INSERT INTO transactions (id, tx_hash, from_address, to_address, token_symbol, amount, fee, status, memo, platform, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, 'CONFIRMED', $8, $9, NOW(), NOW())", vals![&tx_id, &tx_hash, &from_addr.address, &input.to_address, &input.token_symbol, rbdc::Decimal::new(&input.amount.to_string()).unwrap(), rbdc::Decimal::new(&fee.to_string()).unwrap(), input.memo.as_deref().unwrap_or(""), platform]).await?;
 
+    // 通知内容：金额统一 round_dp(6) 避免精度溢出（如 3.9799999999999999995836663656）
+    let amount_display = input.amount.round_dp(6);
+    let received_display = received.round_dp(6);
+
+    // 通知 metadata：轻量提示信息，不存地址（详情页已有完整信息）
+    let out_meta = serde_json::json!({
+        "transaction_id": tx_id,
+        "token_symbol": input.token_symbol,
+        "chain": input.network,
+        "amount": amount_display.to_string()
+    });
     let nid1 = uuid::Uuid::new_v4().to_string();
-    tx_exec(&tx, "INSERT INTO notifications (id, wallet_id, title, content, type, created_at) VALUES ($1, $2, '转账成功', $3, $4, NOW())", vals![&nid1, &input.from_wallet_id, &format!("转出 {} {}", input.amount, input.token_symbol), TRANSFER_OUT]).await?;
+    tx_exec(&tx, "INSERT INTO notifications (id, wallet_id, title, content, type, metadata, created_at) VALUES ($1, $2, '转账成功', $3, $4, $5, NOW())", vals![&nid1, &input.from_wallet_id, &format!("转出 {} {}", amount_display, input.token_symbol), TRANSFER_OUT, &out_meta]).await?;
 
     if let Some(to) = to_addr.first() {
         #[derive(serde::Deserialize)]
@@ -171,12 +184,34 @@ pub async fn execute_transfer(
         )
         .await?;
         for w in wallets {
+            let in_meta = serde_json::json!({
+                "transaction_id": tx_id,
+                "token_symbol": input.token_symbol,
+                "chain": input.network,
+                "amount": received_display.to_string()
+            });
             let nid2 = uuid::Uuid::new_v4().to_string();
-            tx_exec(&tx, "INSERT INTO notifications (id, wallet_id, title, content, type, created_at) VALUES ($1, $2, '收到转账', $3, $4, NOW())", vals![&nid2, &w.wallet_id, &format!("收到 {} {}", received, input.token_symbol), TRANSFER_IN]).await?;
+            tx_exec(&tx, "INSERT INTO notifications (id, wallet_id, title, content, type, metadata, created_at) VALUES ($1, $2, '收到转账', $3, $4, $5, NOW())", vals![&nid2, &w.wallet_id, &format!("收到 {} {}", received_display, input.token_symbol), TRANSFER_IN, &in_meta]).await?;
         }
     }
 
     tx.commit().await?;
+
+    log::info!(
+        "[转账] 完成 — 交易ID={}, 发送方(地址{}) -- {}({}) --> 接收方(地址{}), 转账金额 {} {}, 手续费 {}, 实到 {}, 手续费模式{}, 转账结果：已确认, 交易哈希{}",
+        &tx_id,
+        short_addr(&from_addr.address),
+        &input.token_symbol,
+        &input.network,
+        short_addr(&input.to_address),
+        input.amount,
+        &input.token_symbol,
+        fee,
+        received,
+        &cfg.fee_mode,
+        &tx_hash
+    );
+
     Ok(TransferResult {
         id: tx_id,
         tx_hash,
@@ -210,34 +245,38 @@ pub async fn get_transactions(
     let l = limit as i64;
     use crate::db::query::{query, query_count};
 
-    // CTE: 当前钱包关联的所有链上地址（去重），只计算一次
+    // 子查询：当前钱包关联的所有链上地址（去重）
     // 空地址集时 IN 自然匹配不到，无需额外空检查
-    let cte = "WITH wallet_addr AS (\n      SELECT DISTINCT wa.address\n      FROM wallet_subscriptions ws\n      JOIN wallets_addresses wa ON wa.id = ws.address_id\n      WHERE ws.wallet_id = $1 AND ws.address_id != ''\n    )";
+    // 使用子查询替代 CTE，避免 CTE 在 COUNT 和 SELECT 中重复定义
+    let addr_subquery = "SELECT DISTINCT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.address_id != ''";
+    let where_clause = "(t.from_address IN ({sub}) OR t.to_address IN ({sub}))";
 
     let (rows, total) = if let Some(sym) = token_symbol {
+        let where_sql = where_clause.replace("{sub}", addr_subquery);
         let rows: Vec<crate::models::Transaction> = query(
             &rb,
-            &format!("{cte}\n      SELECT t.* FROM transactions t\n      WHERE (t.from_address IN (SELECT address FROM wallet_addr)\n         OR t.to_address IN (SELECT address FROM wallet_addr))\n        AND t.token_symbol = $2\n      ORDER BY t.created_at DESC LIMIT $3 OFFSET $4"),
+            &format!("SELECT t.* FROM transactions t WHERE {where_sql} AND t.token_symbol = $2 ORDER BY t.created_at DESC LIMIT $3 OFFSET $4"),
             vals![wallet_id, sym, l, o],
         )
         .await?;
         let total = query_count(
             &rb,
-            &format!("{cte}\n      SELECT COUNT(*) as cnt FROM transactions t\n      WHERE (t.from_address IN (SELECT address FROM wallet_addr)\n         OR t.to_address IN (SELECT address FROM wallet_addr))\n        AND t.token_symbol = $2"),
+            &format!("SELECT COUNT(*) as cnt FROM transactions t WHERE {where_sql} AND t.token_symbol = $2"),
             vals![wallet_id, sym],
         )
         .await?;
         (rows, total)
     } else {
+        let where_sql = where_clause.replace("{sub}", addr_subquery);
         let rows: Vec<crate::models::Transaction> = query(
             &rb,
-            &format!("{cte}\n      SELECT t.* FROM transactions t\n      WHERE t.from_address IN (SELECT address FROM wallet_addr)\n         OR t.to_address IN (SELECT address FROM wallet_addr)\n      ORDER BY t.created_at DESC LIMIT $2 OFFSET $3"),
+            &format!("SELECT t.* FROM transactions t WHERE {where_sql} ORDER BY t.created_at DESC LIMIT $2 OFFSET $3"),
             vals![wallet_id, l, o],
         )
         .await?;
         let total = query_count(
             &rb,
-            &format!("{cte}\n      SELECT COUNT(*) as cnt FROM transactions t\n      WHERE t.from_address IN (SELECT address FROM wallet_addr)\n         OR t.to_address IN (SELECT address FROM wallet_addr)"),
+            &format!("SELECT COUNT(*) as cnt FROM transactions t WHERE {where_sql}"),
             vals![wallet_id],
         )
         .await?;

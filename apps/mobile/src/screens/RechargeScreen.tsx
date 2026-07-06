@@ -12,16 +12,17 @@ import {
   RefreshControl,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { walletService } from "../services/walletService";
 import { assetService } from "../services/assetService";
 import { localAddressService } from "../services/localAddressService";
 import { localWalletService } from "../services/localWalletService";
+import { walletService } from "../services/walletService";
 import { rechargeService, type RechargeRecord } from "../services/rechargeService";
 import type { SimpleWallet, AssetInfo, AddressEntry, ServerWalletAddress } from "../types";
-import { TOKEN_ICONS, renderTokenIcon, ChevronRightIcon, CopyIcon } from "../components/icons";
+import { TOKEN_ICONS, ChevronRightIcon, CopyIcon } from "../components/icons";
 import { RechargeSkeleton } from "../components/Skeleton";
 import { formatTime as formatDate } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";
+import { getErrorMessage } from "../utils/format";
 
 
 export default function RechargeScreen() {
@@ -32,7 +33,6 @@ export default function RechargeScreen() {
   const [memo, setMemo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [formCollapsed, setFormCollapsed] = useState(true);
 
   // 服务端钱包列表（搜索+分页）
   const [serverWallets, setServerWallets] = useState<SimpleWallet[]>([]);
@@ -49,6 +49,7 @@ export default function RechargeScreen() {
   const [recordsPage, setRecordsPage] = useState(1);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [formCollapsed, setFormCollapsed] = useState(true);
 
   // 地址本缓存（用于充值记录中匹配联系人名称）
   const [addressMap, setAddressMap] = useState<Map<string, AddressEntry>>(new Map());
@@ -67,7 +68,6 @@ export default function RechargeScreen() {
   }, []);
 
   const loadData = async () => {
-    setLoading(true);
     try {
       const [assetsRes, contacts] = await Promise.all([
         assetService.getAssets(),
@@ -83,7 +83,6 @@ export default function RechargeScreen() {
     } catch {
       showToast("加载数据失败");
     }
-    setLoading(false);
   };
 
   /** 根据代币网络获取钱包在该网络上的链地址 */
@@ -172,24 +171,27 @@ export default function RechargeScreen() {
     }
   };
 
-  const loadRecords = async (page = 1, append = false) => {
-    if (recordsLoading) return;
-    setRecordsLoading(true);
+  const loadRecords = async (page = 1, append = false, showLoading = true) => {
+    if (showLoading) setRecordsLoading(true);
     try {
-      const res = await rechargeService.getRecharges({ page, limit: 20 });
+      const res = await rechargeService.getMyRechargeRecords(page, 20, selectedWallet?.id);
       setRecords((prev) => (append ? [...prev, ...res.recharges] : res.recharges));
       setRecordsTotal(res.total);
       setRecordsPage(page);
     } catch {
       if (!append) setRecords([]);
     }
-    setRecordsLoading(false);
+    if (showLoading) setRecordsLoading(false);
   };
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
-      loadRecords(1);
+      setLoading(true);
+      setRecordsLoading(true);
+      Promise.all([loadData(), loadRecords(1, false, false)]).finally(() => {
+        setLoading(false);
+        setRecordsLoading(false);
+      });
     }, [])
   );
 
@@ -232,6 +234,7 @@ export default function RechargeScreen() {
         setSubmitting(false);
         return;
       }
+      // 充值不需要管理密码，仅需 device_auth + 白名单
       await rechargeService.recharge({
         walletId: selectedWallet.id,
         walletAlias: selectedWallet.name,
@@ -245,9 +248,8 @@ export default function RechargeScreen() {
       setAmount("");
       setMemo("");
       await loadRecords(1);
-    } catch (err: any) {
-      const serverError = err?.response?.data?.error || "充值失败，请重试";
-      showToast(serverError);
+    } catch (err: unknown) {
+      showToast(getErrorMessage(err, "充值失败，请重试"));
     }
     setSubmitting(false);
   };
@@ -351,7 +353,7 @@ export default function RechargeScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={selectedWallet ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
-                  {selectedWallet ? `${selectedWallet.name}` : "请选择钱包"}
+                  {selectedWallet ? `${selectedWallet.name}(${shortAddr(selectedWallet.id)})` : "请选择钱包"}
                 </Text>
                 <ChevronRightIcon size={18} color="#9CA3AF" />
               </TouchableOpacity>
@@ -367,11 +369,12 @@ export default function RechargeScreen() {
                   {selectedToken && TOKEN_ICONS[selectedToken.symbol]
                     ? React.createElement(TOKEN_ICONS[selectedToken.symbol], { size: 18 })
                     : null}
-                <Text style={selectedToken ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
-                  {selectedToken
-                    ? `${selectedToken.symbol} · ${shortAddr(getAssetAddress(selectedToken))}`
-                    : "请选择代币"}
-                </Text>                </View>
+                  <Text style={selectedToken ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
+                    {selectedToken
+                      ? `${selectedToken.symbol} · ${shortAddr(getAssetAddress(selectedToken))}`
+                      : "请选择代币"}
+                  </Text>
+                </View>
                 <ChevronRightIcon size={18} color="#9CA3AF" />
               </TouchableOpacity>
 
@@ -423,9 +426,11 @@ export default function RechargeScreen() {
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyText}>暂无充值记录</Text>
-          </View>
+          recordsLoading || loading ? null : (
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyText}>暂无充值记录</Text>
+            </View>
+          )
         }
         ListFooterComponent={
           recordsLoading && records.length > 0 ? (
@@ -460,7 +465,7 @@ export default function RechargeScreen() {
                   onPress={() => handleSelectWallet(item)}
                 >
                   <View>
-                    <Text style={styles.pickerItemName}>{item.name}</Text>
+                    <Text style={styles.pickerItemName}>{item.name}({shortAddr(item.id)})</Text>
                   </View>
                 </TouchableOpacity>
               )}

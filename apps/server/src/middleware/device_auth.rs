@@ -9,6 +9,7 @@ use crate::db::query::{query_one, vals};
 use crate::errors::AppError;
 use crate::models::Device;
 use crate::services::rsa_service::RsaKeys;
+use arc_swap::ArcSwap;
 use axum::{extract::State, middleware::Next, response::Response};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use lru::LruCache;
@@ -16,8 +17,99 @@ use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
-use std::sync::RwLock;
 use tokio::sync::Mutex;
+
+// ── 请求日志常量与辅助函数 ──
+
+/// 已知的扫描探测路径前缀（降级为 debug 日志）
+const SCAN_PATHS: &[&str] = &[
+    "/.env",
+    "/.git",
+    "/.DS_Store",
+    "/.vscode",
+    "/.well-known",
+    "/graphql",
+    "/api/graphql",
+    "/api/gql",
+    "/actuator",
+    "/v2/",
+    "/config.json",
+    "/version",
+    "/info.php",
+    "/robots.txt",
+    "/console",
+    "/server-status",
+    "/login.action",
+    "/debug",
+    "/trace.axd",
+    "/@vite",
+    "/dns-query",
+    "/ecp/",
+    "/META-INF",
+    "/s/",
+    "/telescope",
+    "/___proxy",
+];
+
+/// 需要脱敏的字段名（值替换为 ***）
+const SENSITIVE_KEYS: &[&str] = &[
+    "encrypted_password",
+    "encryptedPassword",
+    "password",
+    "secret",
+    "token",
+    "apiKey",
+    "api_key",
+    "authorization",
+];
+
+/// body 参数日志最大长度
+const MAX_BODY_LOG_LEN: usize = 500;
+
+fn is_scan_probe(path: &str) -> bool {
+    if path == "/" {
+        return true;
+    }
+    SCAN_PATHS.iter().any(|p| path.starts_with(p))
+}
+
+fn sanitize_params(input: &str) -> String {
+    let mut result = input.to_string();
+    for key in SENSITIVE_KEYS {
+        // JSON: "key":"value"
+        let json_prefix = format!("\"{}\"", key);
+        if let Some(start) = result.find(&json_prefix) {
+            let after_key = &result[start + json_prefix.len()..];
+            let trimmed = after_key.trim_start_matches(':').trim_start_matches(' ');
+            if let Some(value_content) = trimmed.strip_prefix('"') {
+                if let Some(end_quote) = value_content.find('"') {
+                    let value_start =
+                        start + json_prefix.len() + (after_key.len() - trimmed.len()) + 1;
+                    let value_end = value_start + end_quote;
+                    result.replace_range(value_start..value_end, "***");
+                }
+            }
+        }
+        // URL/query: key=value
+        let url_prefix = format!("{}=", key);
+        if let Some(start) = result.find(&url_prefix) {
+            let value_start = start + url_prefix.len();
+            let value_end = result[value_start..]
+                .find('&')
+                .map_or(result.len(), |pos| value_start + pos);
+            result.replace_range(value_start..value_end, "***");
+        }
+    }
+    result
+}
+
+fn truncate_log(s: &str, max_len: usize) -> &str {
+    if s.len() <= max_len {
+        s
+    } else {
+        &s[..s.floor_char_boundary(max_len)]
+    }
+}
 
 // ── 防重放缓存（内联，仅本中间件使用） ──
 
@@ -47,18 +139,37 @@ impl ReplayCache {
 
 // ── AppState ──
 
-#[derive(Clone)]
 pub struct AppState {
     pub db: Arc<rbatis::RBatis>,
     pub config: Arc<RuntimeConfig>,
     pub rsa_keys: Arc<RsaKeys>,
     replay_cache: ReplayCache,
     /// USD→CNY 汇率缓存（启动时加载，定时刷新）
-    cny_rate: Arc<RwLock<Decimal>>,
+    cny_rate: ArcSwap<Decimal>,
     /// 日志上报限频：device_id → 上次上报时间（每设备每分钟最多1次）
     log_rate_limiter: Arc<Mutex<LruCache<String, i64>>>,
+    /// 请求限频：device_id → (秒级时间戳, 该秒内已请求次数)（每设备每秒最多10次请求）
+    request_rate_limiter: Arc<Mutex<LruCache<String, (i64, u32)>>>,
     /// 设备信息缓存：device_id → platform（减少每次请求查DB）
     device_cache: Arc<Mutex<LruCache<String, String>>>,
+    /// 管理路由前缀（从 config.toml [admin].route_prefix 读取，如 "vault"）
+    admin_route_prefix: String,
+}
+
+impl Clone for AppState {
+    fn clone(&self) -> Self {
+        Self {
+            db: self.db.clone(),
+            config: self.config.clone(),
+            rsa_keys: self.rsa_keys.clone(),
+            replay_cache: self.replay_cache.clone(),
+            cny_rate: ArcSwap::from(self.cny_rate.load_full()),
+            log_rate_limiter: self.log_rate_limiter.clone(),
+            request_rate_limiter: self.request_rate_limiter.clone(),
+            device_cache: self.device_cache.clone(),
+            admin_route_prefix: self.admin_route_prefix.clone(),
+        }
+    }
 }
 
 impl AppState {
@@ -68,15 +179,20 @@ impl AppState {
         rsa_keys: Arc<RsaKeys>,
         replay_cache_capacity: usize,
         cny_rate: Decimal,
+        admin_route_prefix: String,
     ) -> Self {
         Self {
             db,
             config,
             rsa_keys,
             replay_cache: ReplayCache::new(replay_cache_capacity),
-            cny_rate: Arc::new(RwLock::new(cny_rate)),
+            cny_rate: ArcSwap::from(Arc::new(cny_rate)),
             log_rate_limiter: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap()))),
+            request_rate_limiter: Arc::new(Mutex::new(LruCache::new(
+                NonZeroUsize::new(5000).unwrap(),
+            ))),
             device_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(5000).unwrap()))),
+            admin_route_prefix,
         }
     }
 
@@ -105,16 +221,44 @@ impl AppState {
         true
     }
 
-    /// 获取缓存的 USD→CNY 汇率（RwLock 读锁，多读者并发无阻塞）
-    pub fn get_cny_rate(&self) -> Decimal {
-        *self.cny_rate.read().unwrap()
+    /// 请求限频检查：同一 device_id 每秒最多允许 10 次请求
+    pub async fn check_request_rate(&self, device_id: &str) -> bool {
+        const MAX_PER_SEC: u32 = 10;
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
+        let mut cache = self.request_rate_limiter.lock().await;
+        // 先取出旧值（copy），避免 get/put 借用冲突
+        let prev = cache.get(device_id).copied();
+        if let Some((ts, count)) = prev {
+            if now == ts {
+                // 同一秒内，检查是否已达到上限
+                if count >= MAX_PER_SEC {
+                    return false;
+                }
+                // 未达上限，递增计数
+                cache.put(device_id.to_string(), (now, count + 1));
+                return true;
+            }
+        }
+        // 新的一秒，计数从 1 开始
+        cache.put(device_id.to_string(), (now, 1));
+        true
     }
 
-    /// 更新缓存的 USD→CNY 汇率（RwLock 写锁，独占），返回值是否发生变化
+    /// 获取管理路由前缀（如 "vault"）
+    pub fn get_admin_route_prefix(&self) -> &str {
+        &self.admin_route_prefix
+    }
+
+    /// 获取缓存的 USD→CNY 汇率（ArcSwap 无锁读取，永不 panic）
+    pub fn get_cny_rate(&self) -> Decimal {
+        **self.cny_rate.load()
+    }
+
+    /// 更新缓存的 USD→CNY 汇率（原子替换），返回值是否发生变化
     pub fn set_cny_rate(&self, rate: Decimal) -> bool {
-        let mut lock = self.cny_rate.write().unwrap();
-        let changed = *lock != rate;
-        *lock = rate;
+        let old = **self.cny_rate.load();
+        let changed = old != rate;
+        self.cny_rate.store(Arc::new(rate));
         changed
     }
 }
@@ -134,6 +278,7 @@ pub async fn device_auth(
     request: axum::extract::Request<axum::body::Body>,
     next: Next,
 ) -> Result<Response, AppError> {
+    let start = std::time::Instant::now();
     let (parts, body) = request.into_parts();
     let headers = parts.headers.clone();
     let method = parts.method.clone();
@@ -165,6 +310,11 @@ pub async fn device_auth(
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     if (now - ts).abs() > state.config.timestamp_window_secs {
         return Err(AppError::Unauthorized("request expired".into()));
+    }
+
+    // 请求限频：同一设备每秒最多 10 次请求
+    if !state.check_request_rate(device_id).await {
+        return Err(AppError::TooManyRequests("rate limit exceeded".into()));
     }
 
     // 防重放：对所有请求检查（GET 请求虽幂等，但 /config/all 等返回敏感数据，需防重放）
@@ -220,7 +370,7 @@ pub async fn device_auth(
     let platform_from_header = headers
         .get("x-platform")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("android");
+        .unwrap_or("ios");
     let (platform, _should_update) = if let Some(cached_platform) =
         state.get_cached_device_platform(device_id).await
     {
@@ -272,10 +422,79 @@ pub async fn device_auth(
     }
 
     // 重建 request
-    let mut request = axum::extract::Request::from_parts(parts, axum::body::Body::from(body_bytes));
+    let mut request =
+        axum::extract::Request::from_parts(parts, axum::body::Body::from(body_bytes.clone()));
     request.extensions_mut().insert(DevicePayload {
         device_id: device_id.to_string(),
         platform,
     });
-    Ok(next.run(request).await)
+
+    // 调用 handler
+    let response = next.run(request).await;
+
+    // ── 请求日志 ──
+    let elapsed = start.elapsed();
+    let status = response.status();
+    let status_code = status.as_u16();
+    let path = uri.path();
+
+    // 构建参数日志：query + body（脱敏 + 截断）
+    let query_str = uri.query().map(sanitize_params).unwrap_or_default();
+    let body_str = if !body_bytes.is_empty() {
+        let raw = String::from_utf8_lossy(&body_bytes);
+        truncate_log(&sanitize_params(&raw), MAX_BODY_LOG_LEN).to_string()
+    } else {
+        String::new()
+    };
+    let params_log = if !query_str.is_empty() && !body_str.is_empty() {
+        format!(" query: {} body: {}", query_str, body_str)
+    } else if !query_str.is_empty() {
+        format!(" query: {}", query_str)
+    } else if !body_str.is_empty() {
+        format!(" body: {}", body_str)
+    } else {
+        String::new()
+    };
+
+    // 日志分级：5xx→error, 4xx+扫描→debug, 4xx+业务→warn, 2xx/3xx→info
+    if status.is_server_error() {
+        log::error!(
+            "Request failed: {} {}{} → {} ({:.0}ms)",
+            method,
+            path,
+            params_log,
+            status_code,
+            elapsed.as_millis()
+        );
+    } else if status.is_client_error() {
+        if is_scan_probe(path) {
+            log::debug!(
+                "Scan probe: {} {} → {} ({:.0}ms)",
+                method,
+                path,
+                status_code,
+                elapsed.as_millis()
+            );
+        } else {
+            log::warn!(
+                "Request rejected: {} {}{} → {} ({:.0}ms)",
+                method,
+                path,
+                params_log,
+                status_code,
+                elapsed.as_millis()
+            );
+        }
+    } else {
+        log::info!(
+            "Request completed: {} {}{} → {} ({:.0}ms)",
+            method,
+            path,
+            params_log,
+            status_code,
+            elapsed.as_millis()
+        );
+    }
+
+    Ok(response)
 }

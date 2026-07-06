@@ -13,7 +13,6 @@ import { sha256, sha512 } from "@noble/hashes/sha2.js";
 ed25519.hashes.sha512 = sha512;
 
 const DEVICE_PRIV_JWK = "imwallet_device_priv_jwk";
-const DEVICE_PUB_JWK = "imwallet_device_pub_jwk";
 const DEVICE_PUBLIC_KEY = "imwallet_device_public_key";
 const DEVICE_REGISTERED = "imwallet_device_registered";
 
@@ -44,8 +43,10 @@ function toCamelCase(str: string): string {
 
 /** 递归转换对象的所有 key */
 function transformKeys(obj: any, transformer: (key: string) => string): any {
+  if (obj === null || obj === undefined) return obj;
+  if (obj instanceof Date) return obj; // 保留 Date 对象
   if (Array.isArray(obj)) return obj.map((item) => transformKeys(item, transformer));
-  if (obj !== null && typeof obj === "object") {
+  if (typeof obj === "object") {
     const result: Record<string, any> = {};
     for (const [key, value] of Object.entries(obj)) {
       result[transformer(key)] = transformKeys(value, transformer);
@@ -162,8 +163,8 @@ export async function ensureDeviceRegistered(publicKeyHex: string): Promise<void
       platform,
     });
     await SecureStore.setItemAsync(DEVICE_REGISTERED, "true");
-  } catch (err: any) {
-    if (err.response?.status === 409) {
+  } catch (err: unknown) {
+    if ((err as { response?: { status?: number } }).response?.status === 409) {
       await SecureStore.setItemAsync(DEVICE_REGISTERED, "true");
     }
   }

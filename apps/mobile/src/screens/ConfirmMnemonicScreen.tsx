@@ -1,9 +1,10 @@
-import React, { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -11,6 +12,7 @@ import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { useAlert } from "../hooks/useAlert";
 import { useSecureScreen, useScreenshotDetector } from "../hooks/useSecureScreen";
+import { getErrorMessage } from "../utils/format";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "ConfirmMnemonic">;
 type RouteType = RouteProp<RootStackParamList, "ConfirmMnemonic">;
@@ -43,6 +45,7 @@ export default function ConfirmMnemonicScreen() {
 
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [wrongFlags, setWrongFlags] = useState<Set<number>>(new Set());
+  const [verifying, setVerifying] = useState(false);
 
   // Toast
   const [toastVisible, setToastVisible] = useState(false);
@@ -98,7 +101,8 @@ export default function ConfirmMnemonicScreen() {
   };
 
   const handleNext = async () => {
-    if (!canProceed || !walletId) return;
+    if (!canProceed || !walletId || verifying) return;
+    setVerifying(true);
     showToast("助记词正确");
     try {
       await backupWallet(walletId);
@@ -112,8 +116,9 @@ export default function ConfirmMnemonicScreen() {
           { name: "WalletDetail", params: { walletId } },
         ],
       });
-    } catch (err: any) {
-      alert("备份失败", err.message || "请稍后重试");
+    } catch (err: unknown) {
+      setVerifying(false);
+      alert("备份失败", getErrorMessage(err, "请稍后重试"));
     }
   };
 
@@ -171,14 +176,18 @@ export default function ConfirmMnemonicScreen() {
 
       {/* Next button */}
       <TouchableOpacity
-        style={[styles.nextBtn, canProceed ? styles.nextBtnActive : styles.nextBtnDisabled]}
+        style={[styles.nextBtn, (canProceed && !verifying) ? styles.nextBtnActive : styles.nextBtnDisabled]}
         onPress={handleNext}
-        disabled={!canProceed}
+        disabled={!canProceed || verifying}
         activeOpacity={0.7}
       >
-        <Text style={[styles.nextBtnText, canProceed ? styles.nextBtnTextActive : styles.nextBtnTextDisabled]}>
-          下一步
-        </Text>
+        {verifying ? (
+          <ActivityIndicator color="#FFFFFF" size="small" />
+        ) : (
+          <Text style={[styles.nextBtnText, (canProceed && !verifying) ? styles.nextBtnTextActive : styles.nextBtnTextDisabled]}>
+            下一步
+          </Text>
+        )}
       </TouchableOpacity>
 
       {/* Toast */}

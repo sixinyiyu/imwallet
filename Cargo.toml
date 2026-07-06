@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
-members = ["apps/server", "apps/test-device-auth"]
+members = ["apps/server"]
 
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
-debug = 1          # 保留行号信息，让 Backtrace 和错误链在 release 构建中也能显示有用信息
-strip = "none"     # 不 strip，保留 debug 行号（服务端部署二进制稍大几MB，换来可诊断的错误堆栈）
+debug = 0          # 不保留 debug 信息，减小二进制体积
+strip = "symbols"  # strip 符号表，最小化二进制体积

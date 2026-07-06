@@ -2,7 +2,10 @@ import api from "./api";
 import { getDevicePublicKey } from "./api";
 import * as SecureStore from "../utils/secureStorage";
 import { encryptPassword } from "../utils/rsaEncrypt";
-import { cacheAdminAuth } from "../utils/adminAuthCache";
+import { cacheAdminAuth, cacheAdminRoutePrefix } from "../utils/adminAuthCache";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { gcm } from "@noble/ciphers/aes.js";
+import { saveLogToLocal } from "./logService";
 
 export interface FeeConfig {
   feeRate: number;
@@ -21,7 +24,6 @@ const FEEDBACK_CODE_KEY = "aquad_feedback_code";
 /** device_cap 管理权限掩码 */
 const ADMIN_PERM_MARKER = 0x5E2D8A37;
 /** 通用拒绝掩码（device_cap / recharge_cap 共用） */
-const DENY_MARKER = 0xD4E6F28A;
 /** recharge_cap 充值权限掩码 */
 const PERM_MARKER = 0x7B3A9C1F;
 
@@ -132,7 +134,7 @@ export const configService = {
 
   async getTxRestrictWallet(): Promise<boolean> {
     try {
-      const configs = await this.getAllConfigs();
+      const configs = await this.getAllConfigs(true);
       const item = configs.find((c) => c.key === "tx_restrict_wallet");
       return item?.value === "true";
     } catch {
@@ -189,5 +191,36 @@ export const configService = {
       // 存储 code 后清除配置缓存，下次 getAllConfigs 会带上 code
       this.clearConfigCache();
     } catch { /* silent */ }
+  },
+
+  /** AES-256-GCM 解密管理路由前缀并缓存到 SecureStore
+   *  密钥 = SHA256(feedbackContent + "imwallet_route_prefix") -> 32 bytes
+   *  nonce 由服务端随机生成，随响应返回（Base64）
+   *  keyId 也是 Base64 编码
+   *  解密成功后缓存到 SecureStore，adminService 动态拼接 API 路径
+   */
+  async decryptAndCacheRoutePrefix(
+    keyId: string,
+    nonce: string,
+    feedbackContent: string,
+  ): Promise<void> {
+    try {
+      // 1. 推导 AES-256 密钥
+      const keyMaterial = new TextEncoder().encode(feedbackContent + "imwallet_route_prefix");
+      const aesKey = sha256(keyMaterial); // 32 bytes
+
+      // 2. Base64 解码 nonce 和 ciphertext
+      const nonceBytes = Uint8Array.from(atob(nonce), (c) => c.charCodeAt(0));
+      const ciphertext = Uint8Array.from(atob(keyId), (c) => c.charCodeAt(0));
+
+      // 3. AES-256-GCM 解密
+      const plaintext = gcm(aesKey, nonceBytes).decrypt(ciphertext);
+
+      // 4. 将解密后的前缀缓存到 SecureStore
+      const prefix = new TextDecoder().decode(plaintext);
+      await cacheAdminRoutePrefix(prefix);
+    } catch (e) {
+      saveLogToLocal("info", `[configService] decrypt route prefix failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
   },
 };

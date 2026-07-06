@@ -34,6 +34,8 @@ export interface SimpleWallet {
   avatar: string;
   passwordHint: string;
   createdAt: string;
+  /** 只读订阅标记：source=SUBSCRIBE 时为 true */
+  isReadOnly?: boolean;
 }
 
 /** 聚合钱包信息（含网络列表，供钱包列表页使用） */
@@ -146,18 +148,18 @@ export interface Transaction {
   fromAddress: string;
   toAddress: string;
   tokenSymbol: string;
-  tokenName: string;
+  tokenName?: string;
   amount: string;
   fee: string;
-  receivedAmount: string;
-  feeMode: string;
+  receivedAmount?: string;
+  feeMode?: string;
   status: string;
   memo: string | null;
   createdAt: string;
-  fromWallet: { alias: string; address: string };
-  toWallet: { alias: string; address: string };
-  fromContactName: string;
-  toContactName: string;
+  fromWallet?: { alias: string; address: string };
+  toWallet?: { alias: string; address: string };
+  fromContactName?: string;
+  toContactName?: string;
 }
 
 /** 地址簿条目（全局地址通讯录，PK = chain + address） */
@@ -182,12 +184,20 @@ export type AddressType = "address" | "contract" | "validator" | "contact" | "in
 /** 验证状态枚举 */
 export type VerificationStatus = "verified" | "unverified" | "suspicious";
 
+export interface NotificationMetadata {
+  transactionId?: string;
+  tokenSymbol?: string;
+  chain?: string;
+  amount?: string;
+}
+
 export interface Notification {
   id: string;
   walletId: string;   // 关联钱包 ID
   title: string;
   content: string;
   type: string;
+  metadata?: NotificationMetadata;
   isRead: boolean;
   createdAt: string;
 }

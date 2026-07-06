@@ -19,6 +19,15 @@ function rowToAccount(row: Record<string, any>): Account {
 }
 
 export const localAccountService = {
+  /** 获取所有账户（一次性查询，用于批量分组） */
+  async getAllAccounts(): Promise<Account[]> {
+    const db = await getDatabase();
+    const rows = await db.selectAll<Record<string, any>>("accounts", {
+      orderBy: [{ column: "account_index", dir: "ASC" }],
+    });
+    return rows.map(rowToAccount);
+  },
+
   async getWalletAccounts(walletId: string): Promise<Account[]> {
     const db = await getDatabase();
     const rows = await db.selectAll<Record<string, any>>("accounts", {

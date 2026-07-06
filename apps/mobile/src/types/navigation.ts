@@ -18,7 +18,7 @@ export type RootStackParamList = {
   Settings: undefined;
   ServiceConfig: undefined;
   ConfigManage: undefined;
-  DeviceManage: { verified?: boolean };
+  DeviceManage: { verified?: boolean; rechargePermitted?: boolean };
   Recharge: undefined;
   TokenManage: undefined;
   Security: undefined;
@@ -26,7 +26,7 @@ export type RootStackParamList = {
   Feedback: undefined;
   Notifications: undefined;
   BackupConfirm: { walletId: string };
-  BackupGuide: { walletId: string; source?: "create" | "detail" };
+  BackupGuide: { walletId: string; source?: "create" | "detail" | "guard" };
   BackupMnemonic: { walletId: string };
   ConfirmMnemonic: { walletId: string; mnemonic: string };
   ForgotPassword: { walletId: string };

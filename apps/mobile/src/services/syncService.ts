@@ -50,4 +50,20 @@ export const syncService = {
   async deleteWallet(walletId: string): Promise<void> {
     await api.delete(`/wallets/${walletId}`);
   },
+
+  /**
+   * 只读订阅钱包 — 当前设备订阅一个已存在的钱包（不含助记词）。
+   * 返回钱包信息 + 地址列表。
+   */
+  async subscribeWalletReadonly(walletId: string): Promise<{ wallet: { id: string; alias: string; source: string; createdAt: string; updatedAt: string }; addresses: ServerWalletAddress[] }> {
+    const { data } = await api.post(`/wallets/${walletId}/subscribe`);
+    return data;
+  },
+
+  /**
+   * 取消只读订阅 — 删除当前设备对该钱包的订阅记录。
+   */
+  async unsubscribeWalletReadonly(walletId: string): Promise<void> {
+    await api.delete(`/wallets/${walletId}/subscribe`);
+  },
 };
