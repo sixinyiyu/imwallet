@@ -22,7 +22,7 @@ import { TOKEN_ICONS, ChevronRightIcon, CopyIcon } from "../components/icons";
 import { RechargeSkeleton } from "../components/Skeleton";
 import { formatTime as formatDate } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";
-import { getErrorMessage } from "../utils/format";
+import { getErrorMessage, trimAmount } from "../utils/format";
 
 
 export default function RechargeScreen() {
@@ -174,7 +174,7 @@ export default function RechargeScreen() {
   const loadRecords = async (page = 1, append = false, showLoading = true) => {
     if (showLoading) setRecordsLoading(true);
     try {
-      const res = await rechargeService.getMyRechargeRecords(page, 20, selectedWallet?.id);
+      const res = await rechargeService.getAllRechargeRecords(page, 20);
       setRecords((prev) => (append ? [...prev, ...res.recharges] : res.recharges));
       setRecordsTotal(res.total);
       setRecordsPage(page);
@@ -278,7 +278,7 @@ export default function RechargeScreen() {
           )}
           <Text style={styles.recordToken}>{item.tokenSymbol}</Text>
         </View>
-        <Text style={styles.recordAmount}>+{parseFloat(item.amount).toFixed(6)}</Text>
+        <Text style={styles.recordAmount}>+{trimAmount(item.amount)}</Text>
       </View>
       <View style={styles.recordBody}>
         {/* 账户地址行：联系人名称 + 地址 + 复制icon */}

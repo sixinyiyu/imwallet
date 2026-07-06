@@ -67,6 +67,7 @@ function SkeletonCard() {
 
 export default function WalletManageScreen() {
   const navigation = useNavigation<Nav>();
+  const activeWallet = useWalletStore((s) => s.activeWallet);
   const {
     wallets,
     hasFetched,
@@ -193,7 +194,7 @@ export default function WalletManageScreen() {
               >
                 <WalletIcon size={20} color="#9CA3AF" />
                 <Text style={styles.walletAlias} numberOfLines={1}>{item.name}</Text>
-                {index === 0 && (
+                {item.id === activeWallet?.id && (
                   <View style={styles.activeBadge}>
                     <Text style={styles.activeBadgeText}>当前</Text>
                   </View>
