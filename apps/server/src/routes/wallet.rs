@@ -226,12 +226,9 @@ async fn batch_sync_wallets(
     Extension(device): Extension<DevicePayload>,
     Json(body): Json<BatchSyncRequest>,
 ) -> Result<Json<BatchSyncResponse>, AppError> {
-    let results = wallet_service::batch_sync_wallets(
-        state.db.clone(),
-        &device.device_id,
-        body.wallets,
-    )
-    .await?;
+    let results =
+        wallet_service::batch_sync_wallets(state.db.clone(), &device.device_id, body.wallets)
+            .await?;
     Ok(Json(BatchSyncResponse { results }))
 }
 

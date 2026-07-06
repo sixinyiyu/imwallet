@@ -455,7 +455,11 @@ pub async fn batch_sync_wallets(
 
     for w in &wallets {
         // 1. 确保钱包存在（幂等）
-        let src = if w.source == "IMPORT" { "IMPORT" } else { "CREATE" };
+        let src = if w.source == "IMPORT" {
+            "IMPORT"
+        } else {
+            "CREATE"
+        };
         let inserted: Option<Wallet> = crate::db::query::tx_query_one(
             &tx,
             "INSERT INTO wallets (id, alias, source) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING RETURNING *",
@@ -524,7 +528,13 @@ pub async fn batch_sync_wallets(
                             args.push(rbs::value::Value::String(wa.id.clone()));
                             args.push(rbs::value::Value::String(asset.id.clone()));
                             args.push(rbs::value::Value::String(a.chain.clone()));
-                            format!("(${}, ${}, ${}, ${}, 0)", base, base + 1, base + 2, base + 3)
+                            format!(
+                                "(${}, ${}, ${}, ${}, 0)",
+                                base,
+                                base + 1,
+                                base + 2,
+                                base + 3
+                            )
                         })
                         .collect();
                     let sql = format!(
