@@ -88,7 +88,6 @@ export default function RechargeScreen() {
 
   // ── 筛选状态 ──
   const [filterWallet, setFilterWallet] = useState<SimpleWallet | null>(null);
-  const [filterToken, setFilterToken] = useState<string | null>(null);
   const [filterTime, setFilterTime] = useState<TimeFilter | null>(null);
   const [timeExpanded, setTimeExpanded] = useState(false);
 
@@ -106,7 +105,6 @@ export default function RechargeScreen() {
   const [showWalletPicker, setShowWalletPicker] = useState(false);
   const [showTokenPicker, setShowTokenPicker] = useState(false);
   const [showFilterWalletPicker, setShowFilterWalletPicker] = useState(false);
-  const [showFilterTokenPicker, setShowFilterTokenPicker] = useState(false);
 
   // Toast
   const [toastVisible, setToastVisible] = useState(false);
@@ -263,9 +261,8 @@ export default function RechargeScreen() {
   const loadRecords = async (page = 1, append = false, showLoading = true) => {
     if (showLoading) setRecordsLoading(true);
     try {
-      const filters: { walletId?: string; tokenSymbol?: string; startTime?: string; endTime?: string } = {};
+      const filters: { walletId?: string; startTime?: string; endTime?: string } = {};
       if (filterWallet) filters.walletId = filterWallet.id;
-      if (filterToken) filters.tokenSymbol = filterToken;
       if (filterTime) {
         const range = timeFilterToRange(filterTime);
         filters.startTime = range.startTime;
@@ -287,7 +284,7 @@ export default function RechargeScreen() {
     if (!loading) {
       loadRecords(1, false, true);
     }
-  }, [filterWallet, filterToken, filterTime]);
+  }, [filterWallet, filterTime]);
 
   useFocusEffect(
     useCallback(() => {
@@ -351,12 +348,11 @@ export default function RechargeScreen() {
 
   const clearFilters = () => {
     setFilterWallet(null);
-    setFilterToken(null);
     setFilterTime(null);
     setTimeExpanded(false);
   };
 
-  const hasActiveFilter = filterWallet !== null || filterToken !== null || filterTime !== null;
+  const hasActiveFilter = filterWallet !== null || filterTime !== null;
 
   const renderRecord = ({ item }: { item: RechargeRecord }) => {
     const contact = addressMap.get(item.accountAddress);
@@ -473,22 +469,6 @@ export default function RechargeScreen() {
                 </Text>
                 {filterWallet && (
                   <TouchableOpacity onPress={() => setFilterWallet(null)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                    <Text style={styles.filterPillClear}>✕</Text>
-                  </TouchableOpacity>
-                )}
-              </TouchableOpacity>
-
-              {/* 代币筛选 pill */}
-              <TouchableOpacity
-                style={[styles.filterPill, filterToken && styles.filterPillActive]}
-                onPress={() => setShowFilterTokenPicker(true)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.filterPillText, filterToken && styles.filterPillTextActive]} numberOfLines={1}>
-                  {filterToken || "代币"}
-                </Text>
-                {filterToken && (
-                  <TouchableOpacity onPress={() => setFilterToken(null)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                     <Text style={styles.filterPillClear}>✕</Text>
                   </TouchableOpacity>
                 )}
@@ -643,34 +623,6 @@ export default function RechargeScreen() {
               <Text style={styles.pickerCancelText}>取消</Text>
             </TouchableOpacity>
           </Pressable>
-        </Pressable>
-      </Modal>
-
-      {/* ── 筛选：代币选择器 ── */}
-      <Modal visible={showFilterTokenPicker} transparent animationType="fade">
-        <Pressable style={styles.modalOverlay} onPress={() => setShowFilterTokenPicker(false)}>
-          <View style={styles.pickerCard}>
-            <Text style={styles.pickerTitle}>筛选代币</Text>
-            <TouchableOpacity style={[styles.pickerItem, !filterToken && styles.pickerItemActive]} onPress={() => { setFilterToken(null); setShowFilterTokenPicker(false); }}>
-              <Text style={styles.pickerItemName}>全部代币</Text>
-            </TouchableOpacity>
-            <FlatList
-              data={assets}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={[styles.pickerItem, filterToken === item.symbol && styles.pickerItemActive]} onPress={() => { setFilterToken(item.symbol); setShowFilterTokenPicker(false); }}>
-                  <View style={styles.tokenPickerLeft}>
-                    {TOKEN_ICONS[item.symbol] ? React.createElement(TOKEN_ICONS[item.symbol], { size: 20 }) : <Text style={styles.recordTokenEmoji}>🪙</Text>}
-                    <Text style={styles.pickerItemName}>{item.symbol}</Text>
-                  </View>
-                </TouchableOpacity>
-              )}
-              style={{ maxHeight: 300 }}
-            />
-            <TouchableOpacity style={styles.pickerCancelBtn} onPress={() => setShowFilterTokenPicker(false)}>
-              <Text style={styles.pickerCancelText}>取消</Text>
-            </TouchableOpacity>
-          </View>
         </Pressable>
       </Modal>
 

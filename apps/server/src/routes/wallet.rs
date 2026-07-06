@@ -508,7 +508,7 @@ async fn get_my_recharges(
 
 /// GET /recharges — 查询所有充值记录（不做 device_id 过滤）
 /// 仅需 device_auth + 充值白名单，不需要管理密码
-/// 支持 wallet_id / token_symbol / start_time / end_time 筛选
+/// 支持 wallet_id / start_time / end_time 筛选
 #[derive(Debug, Deserialize)]
 struct AllRechargesQuery {
     #[serde(default = "default_page")]
@@ -517,8 +517,6 @@ struct AllRechargesQuery {
     limit: u64,
     #[serde(default)]
     wallet_id: Option<String>,
-    #[serde(default)]
-    token_symbol: Option<String>,
     #[serde(default)]
     start_time: Option<String>,
     #[serde(default)]
@@ -541,7 +539,7 @@ async fn get_all_recharges(
 
     let offset = (query.page - 1) * query.limit;
 
-    // 动态构建 WHERE 条件：不做 device_id 过滤，支持 wallet_id / token_symbol / start_time / end_time
+    // 动态构建 WHERE 条件：不做 device_id 过滤，支持 wallet_id / start_time / end_time
     let mut conditions: Vec<String> = Vec::new();
     let mut args: Vec<rbs::value::Value> = Vec::new();
     #[allow(unused_assignments)]
@@ -550,11 +548,6 @@ async fn get_all_recharges(
     if let Some(ref wid) = query.wallet_id {
         conditions.push(format!("r.wallet_id = ${}" , param_idx));
         args.push(rbs::value!(wid));
-        param_idx += 1;
-    }
-    if let Some(ref sym) = query.token_symbol {
-        conditions.push(format!("r.token_symbol = ${}" , param_idx));
-        args.push(rbs::value!(sym));
         param_idx += 1;
     }
     if let Some(ref st) = query.start_time {
