@@ -1,6 +1,6 @@
 import "react-native-get-random-values";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { pbkdf2 } from "@noble/hashes/pbkdf2";
+import { pbkdf2 } from "@noble/hashes/pbkdf2.js";
 import { getDatabase, nowISO } from "../db/database";
 import type { LocalWallet } from "../types";
 
