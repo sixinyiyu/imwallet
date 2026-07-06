@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Inject release signing config into Expo-generated app/build.gradle."""
 import re
-import sys
 
 with open('app/build.gradle', 'r') as f:
     gradle = f.read()
@@ -14,6 +13,8 @@ keystoreProperties.load(new FileInputStream(rootProject.file("keystore.propertie
 gradle = props_header + gradle
 
 # Replace the entire signingConfigs block with debug + release configs
+# We need to match the full block including nested braces (debug { ... })
+# Strategy: find "signingConfigs {" then count brace depth to find the matching close
 new_signing_configs = """    signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -29,13 +30,33 @@ new_signing_configs = """    signingConfigs {
         }
     }"""
 
-# Match the entire signingConfigs block using DOTALL flag
-gradle = re.sub(
-    r'signingConfigs\s*\{.*?\n\s*\}',
-    new_signing_configs,
-    gradle,
-    flags=re.DOTALL
-)
+# Find the start of signingConfigs block
+start_marker = "signingConfigs {"
+start_idx = gradle.find(start_marker)
+if start_idx == -1:
+    print("❌ Could not find 'signingConfigs {' in build.gradle")
+    exit(1)
+
+# Count braces to find the matching closing brace
+depth = 0
+i = start_idx + len(start_marker)
+while i < len(gradle):
+    if gradle[i] == '{':
+        depth += 1
+    elif gradle[i] == '}':
+        if depth == 0:
+            # This is the closing brace of the signingConfigs block
+            end_idx = i + 1
+            break
+        depth -= 1
+    i += 1
+
+if i >= len(gradle):
+    print("❌ Could not find closing brace for signingConfigs block")
+    exit(1)
+
+# Replace the old block with the new one
+gradle = gradle[:start_idx] + new_signing_configs + gradle[end_idx:]
 print("✅ signingConfigs block replaced with debug + release")
 
 # Change ONLY the release buildType's signingConfig from debug to release
