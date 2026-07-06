@@ -125,6 +125,7 @@ jobs:
           echo "✅ keystore.properties created"
 
           # 3. Inject signing config into app/build.gradle using Python
+          # Strategy: replace the entire signingConfigs block (more robust than regex on individual lines)
           python3 << 'PYEOF'
           import re
 
@@ -138,26 +139,36 @@ jobs:
           """
           gradle = props_header + gradle
 
-          # Add release signing config inside signingConfigs block
-          # Expo prebuild generates a debug signing config, we add release after it
-          release_config = """        release {
+          # Replace the entire signingConfigs block with debug + release configs
+          # This is more robust than trying to insert after a specific line
+          new_signing_configs = """    signingConfigs {
+          debug {
+              storeFile file('debug.keystore')
+              storePassword 'android'
+              keyAlias 'androiddebugkey'
+              keyPassword 'android'
+          }
+          release {
               storeFile file(keystoreProperties['storeFile'])
               storePassword keystoreProperties['storePassword']
               keyAlias keystoreProperties['keyAlias']
               keyPassword keystoreProperties['keyPassword']
-          }"""
+          }
+      }"""
 
-          # Find the debug signing config closing brace and insert release config after it
-          # Pattern: "keyPassword 'android'" followed by whitespace and closing brace
+          # Match the entire signingConfigs block using DOTALL flag
+          # Pattern: "signingConfigs {" ... "}" where ... is any content including nested braces
+          # We use a non-greedy match up to the closing brace that aligns with the opening
           gradle = re.sub(
-              r"(keyPassword\s+'android'\s*\n(\s*)\})",
-              r"\1\n" + release_config,
-              gradle
+              r'signingConfigs\s*\{.*?\n\s*\}',
+              new_signing_configs,
+              gradle,
+              flags=re.DOTALL
           )
+          print("✅ signingConfigs block replaced with debug + release")
 
           # Change ONLY the release buildType's signingConfig from debug to release
           # Must NOT change the debug buildType's signingConfig
-          # Strategy: find the second occurrence (release block) and replace only that one
           target = "signingConfig signingConfigs.debug"
           first_idx = gradle.find(target)
           second_idx = gradle.find(target, first_idx + len(target))
@@ -165,7 +176,7 @@ jobs:
               gradle = gradle[:second_idx] + "signingConfig signingConfigs.release" + gradle[second_idx + len(target):]
               print("✅ release buildType signingConfig updated")
           else:
-              # If only one occurrence exists, it's in the release block (no debug block)
+              # If only one occurrence exists, replace it (it must be in the release block)
               gradle = gradle.replace(target, "signingConfig signingConfigs.release")
               print("✅ single signingConfig occurrence updated")
 
@@ -175,11 +186,11 @@ jobs:
           print("✅ Signing config injected into build.gradle")
           PYEOF
 
-          # 4. Verify the modifications
+          # 4. Verify the modifications (use correct relative path from working-directory)
           echo "📋 Verifying signing config in build.gradle:"
-          grep -A 6 "signingConfigs" android/app/build.gradle || echo "⚠️ No signingConfigs found"
+          grep -A 10 "signingConfigs" app/build.gradle || echo "⚠️ No signingConfigs found"
           echo ""
-          grep "signingConfig signingConfigs" android/app/build.gradle || echo "⚠️ No signingConfig reference found"
+          grep "signingConfig signingConfigs" app/build.gradle || echo "⚠️ No signingConfig reference found"
 
       # ============================================================
       # Gradle 构建: assembleRelease 生成 APK
