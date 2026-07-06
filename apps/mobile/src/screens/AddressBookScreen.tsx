@@ -13,7 +13,7 @@ import { localAddressService } from "../services/localAddressService";
 import { useAlert } from "../hooks/useAlert";
 import { detectNetwork } from "../utils/address";
 import { TronIcon, EthIcon, BtcIcon, ContactIcon, CopyIcon, AddContactIcon } from "../components/icons";
-import { saveLogToLocal } from "../services/logService";
+// saveLogToLocal removed — not a core interface
 import { getErrorMessage } from "../utils/format";
 import { copyToClipboard } from "../utils/clipboard";
 import { AddressBookSkeleton } from "../components/Skeleton";
@@ -95,8 +95,8 @@ export default function AddressBookScreen() {
     try {
       const data = await localAddressService.getAllContacts();
       setContacts(data);
-    } catch (err) {
-      saveLogToLocal("crash", `[AddressBook] loadContacts failed: ${(err as Error)?.message || String(err)}`);
+    } catch {
+      // 地址本加载失败不影响核心功能
     }
     setLoading(false);
   };

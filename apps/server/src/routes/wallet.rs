@@ -551,12 +551,12 @@ async fn get_all_recharges(
         param_idx += 1;
     }
     if let Some(ref st) = query.start_time {
-        conditions.push(format!("r.created_at >= ${}" , param_idx));
+        conditions.push(format!("r.created_at >= ${}::timestamp", param_idx));
         args.push(rbs::value!(st));
         param_idx += 1;
     }
     if let Some(ref et) = query.end_time {
-        conditions.push(format!("r.created_at <= ${}" , param_idx));
+        conditions.push(format!("r.created_at <= ${}::timestamp", param_idx));
         args.push(rbs::value!(et));
         param_idx += 1;
     }

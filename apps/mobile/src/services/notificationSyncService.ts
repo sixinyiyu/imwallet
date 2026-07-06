@@ -1,7 +1,5 @@
 import api from "./api";
 import { localNotificationService } from "./localNotificationService";
-import { saveLogToLocal } from "./logService";
-import { getErrorMessage } from "../utils/format";
 import type { NotificationMetadata } from "../types";
 
 export const notificationSyncService = {
@@ -36,10 +34,9 @@ export const notificationSyncService = {
         }))
       );
 
-      saveLogToLocal("info", `[notificationSync] 同步 ${serverNotifications.length} 条通知`);
       return serverNotifications.length;
-    } catch (err: unknown) {
-      saveLogToLocal("crash", `[notificationSync] 同步失败: ${getErrorMessage(err, "未知错误")}`);
+    } catch {
+      // 同步失败不上报日志，不阻塞调用方
       return 0;
     }
   },

@@ -288,11 +288,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     try {
       mnemonic = await generateMnemonic();
     } catch (err: unknown) {
-      saveLogToLocal("mnemonic", `[createWallet] generateMnemonic threw: ${getErrorMessage(err, "未知错误")}`);
+      saveLogToLocal("crash", `[createWallet] generateMnemonic FAILED: error=${getErrorMessage(err, "未知错误")}`);
       throw new Error("助记词生成失败，请重试");
     }
     if (!mnemonic || mnemonic.trim().split(/\s+/).length !== 12) {
-      saveLogToLocal("mnemonic", `[createWallet] generateMnemonic invalid`);
+      saveLogToLocal("crash", `[createWallet] generateMnemonic invalid: wordCount=${mnemonic?.trim().split(/\s+/).length || 0}`);
       throw new Error("助记词生成失败，请重试");
     }
 
