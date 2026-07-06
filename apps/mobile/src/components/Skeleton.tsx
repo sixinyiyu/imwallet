@@ -1,7 +1,5 @@
-import React, { useEffect, useRef } from "react";
-import { View, Animated, StyleSheet, Dimensions } from "react-native";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+import { useEffect, useRef } from "react";
+import { View, Animated, StyleSheet } from "react-native";
 
 /** Single animated skeleton bar */
 export function SkeletonBar({

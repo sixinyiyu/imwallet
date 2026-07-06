@@ -1,5 +1,5 @@
 import { walletService } from "./walletService";
-import { localWalletService, hashPassword } from "./localWalletService";
+import { localWalletService } from "./localWalletService";
 import { localAccountService } from "./localAccountService";
 import { localAddressService } from "./localAddressService";
 import { syncService } from "./syncService";

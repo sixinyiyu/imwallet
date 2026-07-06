@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import * as SecureStore from "../utils/secureStorage";
 import { generateMnemonic } from "../utils/mnemonic";
-import { uploadLog, saveLogToLocal } from "../services/logService";
+import { saveLogToLocal } from "../services/logService";
 import { CameraIcon, NoScreenshotIcon } from "../components/icons";
 import { useSecureScreen, useScreenshotDetector } from "../hooks/useSecureScreen";
 

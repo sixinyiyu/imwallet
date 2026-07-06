@@ -1,4 +1,3 @@
-import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Modal, Pressable } from "react-native";
 import { WarningIcon } from "./icons";
 import type { GuardType } from "../hooks/useBackupGuard";

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { assetService } from "../services/assetService";
 import type { AssetInfo } from "../types";
-import { TOKEN_ICONS, renderTokenIcon } from "../components/icons";
+import { TOKEN_ICONS } from "../components/icons";
 import { GreenToggle } from "../components/GreenToggle";
 import { TokenManageSkeleton } from "../components/Skeleton";
 import { getErrorMessage } from "../utils/format";

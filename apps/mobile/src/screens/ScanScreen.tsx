@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -51,7 +51,6 @@ export default function ScanScreen() {
         const url = new URL(data);
         const address = url.searchParams.get("address");
         const token = url.searchParams.get("token") || undefined;
-        const network = url.searchParams.get("network") || undefined;
         if (address) {
           navigation.replace("Transfer", { toAddress: address, tokenSymbol: token });
           return;

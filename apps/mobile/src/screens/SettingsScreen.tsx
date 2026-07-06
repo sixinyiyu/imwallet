@@ -14,7 +14,6 @@ import {
   flushPendingLogs,
   getPendingLogCount,
   getLogUploadEnabled,
-  setLogUploadEnabled,
 } from "../services/logService";
 import { configService } from "../services/configService";
 import { GreenToggle } from "../components/GreenToggle";

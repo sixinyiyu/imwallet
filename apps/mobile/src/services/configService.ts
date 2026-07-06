@@ -24,7 +24,6 @@ const FEEDBACK_CODE_KEY = "aquad_feedback_code";
 /** device_cap 管理权限掩码 */
 const ADMIN_PERM_MARKER = 0x5E2D8A37;
 /** 通用拒绝掩码（device_cap / recharge_cap 共用） */
-const DENY_MARKER = 0xD4E6F28A;
 /** recharge_cap 充值权限掩码 */
 const PERM_MARKER = 0x7B3A9C1F;
 

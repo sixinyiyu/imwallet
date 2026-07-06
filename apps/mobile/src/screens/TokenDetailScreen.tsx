@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import { TransactionCard } from "../screens/RecordsScreen";
 import { assetService } from "../services/assetService";
 import { USDTIcon, TransferIcon, ReceiveIcon, RecordsIcon, TronIcon } from "../components/icons";
 import type { Transaction } from "../types";
-import { useBackupGuard, type GuardType } from "../hooks/useBackupGuard";
+import { useBackupGuard } from "../hooks/useBackupGuard";
 import BackupGuardModal from "../components/BackupGuardModal";
 
 type Route = RouteProp<RootStackParamList, "TokenDetail">;

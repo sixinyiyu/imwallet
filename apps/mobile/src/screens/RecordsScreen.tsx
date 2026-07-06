@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -18,7 +18,7 @@ import EmptyState from "../components/EmptyState";
 import { transactionService, type TransactionFilter } from "../services/transactionService";
 import { localAddressService } from "../services/localAddressService";
 import type { Transaction, AddressEntry } from "../types";
-import { SearchIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
+import { SearchIcon, renderTokenIcon } from "../components/icons";
 import { formatTime } from "../utils/date";
 import { configService, type FeeConfig } from "../services/configService";
 import { saveLogToLocal } from "../services/logService";

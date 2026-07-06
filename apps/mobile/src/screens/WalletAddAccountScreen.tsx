@@ -17,7 +17,7 @@ import { useWalletStore } from "../stores/walletStore";
 import { accountService } from "../services/accountService";
 import { localAccountService } from "../services/localAccountService";
 import { LinearGradient } from "expo-linear-gradient";
-import { TOKEN_ICONS, renderTokenIcon, TronIcon, EthIcon, BtcIcon } from "../components/icons";
+import { TOKEN_ICONS, TronIcon, EthIcon, BtcIcon } from "../components/icons";
 import type { ChainInfo } from "../types";
 import { useAlert } from "../hooks/useAlert";
 import { configService } from "../services/configService";
@@ -52,8 +52,6 @@ export default function WalletAddAccountScreen() {
   const [chainsLoaded, setChainsLoaded] = useState(false);
   /** 已有账户的链集合（该链下所有代币账户都已存在） */
   const [existingChains, setExistingChains] = useState<Set<string>>(new Set());
-  /** 已有部分账户的链集合（该链下部分代币账户已存在） */
-  const [partialChains, setPartialChains] = useState<Set<string>>(new Set());
   /** 同链多账户开关（本地配置，默认关闭） */
   const [multiAccountEnabled, setMultiAccountEnabled] = useState(false);
 
@@ -82,14 +80,12 @@ export default function WalletAddAccountScreen() {
 
       // 判断每条链的状态：全部已有 / 部分已有
       const fullSet = new Set<string>();
-      const partialSet = new Set<string>();
       for (const chain of chainsResult.chains) {
         if (accountsByChain.has(chain.name)) {
           fullSet.add(chain.name);
         }
       }
       setExistingChains(fullSet);
-      setPartialChains(partialSet);
     } catch {
       // API 失败，使用预置链
       setChains([
@@ -219,7 +215,7 @@ export default function WalletAddAccountScreen() {
             {chains.map((chain) => {
               const isSelected = selectedChains.has(chain.name);
               const isLocked = !multiAccountEnabled && existingChains.has(chain.name);
-              const isPartial = !multiAccountEnabled && partialChains.has(chain.name);
+              
               const IconComp = CHAIN_ICONS[chain.name];
 
               return (

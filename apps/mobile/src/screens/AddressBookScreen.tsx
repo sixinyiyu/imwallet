@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -57,7 +57,7 @@ export default function AddressBookScreen() {
   // 表单状态
   const [formVisible, setFormVisible] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>("add");
-  const [editingEntry, setEditingEntry] = useState<AddressEntry | null>(null);
+  const [, setEditingEntry] = useState<AddressEntry | null>(null);
   const [formName, setFormName] = useState("");
   const [formAddress, setFormAddress] = useState("");
   const [formMemo, setFormMemo] = useState("");

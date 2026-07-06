@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
+import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -7,8 +7,7 @@ import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import { useWalletStore } from "../stores/walletStore";
 import { ReceiveSkeleton } from "../components/Skeleton";
-import { saveLogToLocal } from "../services/logService";
-import { CopyIcon, ShareIcon, TronIcon, EthIcon, BtcIcon, USDTIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
+import { CopyIcon, ShareIcon, TronIcon, EthIcon, BtcIcon, renderTokenIcon } from "../components/icons";
 import { copyToClipboard } from "../utils/clipboard";
 import { useBackupGuard } from "../hooks/useBackupGuard";
 import BackupGuardModal from "../components/BackupGuardModal";

@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -18,7 +17,7 @@ import { adminService, type WalletAdminInfo, type WalletTransaction, type Wallet
 import { walletService } from "../services/walletService";
 import type { SimpleWallet } from "../types";
 import { configService, type FeeConfig } from "../services/configService";
-import { ChevronRightIcon, AndroidIcon, IosIcon, WalletIcon, PlusCircleIcon, TOKEN_ICONS, renderTokenIcon, SubscribeIcon } from "../components/icons";
+import { ChevronRightIcon, AndroidIcon, IosIcon, WalletIcon, TOKEN_ICONS, renderTokenIcon, SubscribeIcon } from "../components/icons";
 import { WalletListSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import { formatTime } from "../utils/date";
@@ -65,7 +64,7 @@ export default function DeviceManageScreen() {
   // 订阅钱包相关状态
   const [showSubscribeModal, setShowSubscribeModal] = useState(false);
   const [subscribeWallets, setSubscribeWallets] = useState<SimpleWallet[]>([]);
-  const [subscribeLoading, setSubscribeLoading] = useState(false);
+  const [, setSubscribeLoading] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const [subscribeError, setSubscribeError] = useState<string | null>(null);
 

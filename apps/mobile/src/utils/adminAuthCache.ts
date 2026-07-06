@@ -13,8 +13,7 @@
  * - 后端更换前缀后，前端下次反馈匹配自动获取新前缀，无需重新打包 App
  */
 
-import { encryptPassword, clearRsaKeyCache } from "./rsaEncrypt";
-import * as SecureStore from "./secureStorage";
+import { encryptPassword } from "./rsaEncrypt";import * as SecureStore from "./secureStorage";
 
 /** 缓存 TTL：10 分钟 */
 const ADMIN_AUTH_CACHE_TTL = 10 * 60 * 1000;

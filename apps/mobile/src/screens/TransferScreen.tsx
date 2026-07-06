@@ -22,7 +22,7 @@ import { transactionService } from "../services/transactionService";
 import { localAddressService } from "../services/localAddressService";
 import { configService } from "../services/configService";
 import type { FeeConfig } from "../services/configService";
-import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
+import { ContactIcon, ScanIcon, SuccessIcon, FailureIcon, ShareIcon, renderTokenIcon } from "../components/icons";
 
 import type { AddressEntry, AssetBalance } from "../types";
 import { detectNetwork, isValidAddressFormat } from "../utils/address";

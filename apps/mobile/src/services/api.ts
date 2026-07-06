@@ -13,7 +13,6 @@ import { sha256, sha512 } from "@noble/hashes/sha2.js";
 ed25519.hashes.sha512 = sha512;
 
 const DEVICE_PRIV_JWK = "imwallet_device_priv_jwk";
-const DEVICE_PUB_JWK = "imwallet_device_pub_jwk";
 const DEVICE_PUBLIC_KEY = "imwallet_device_public_key";
 const DEVICE_REGISTERED = "imwallet_device_registered";
 

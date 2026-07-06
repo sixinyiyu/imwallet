@@ -19,7 +19,6 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useWalletStore } from "../stores/walletStore";
 import { WalletDetailSkeleton } from "../components/Skeleton";
-import { saveLogToLocal } from "../services/logService";
 import { useAlert } from "../hooks/useAlert";
 import { walletService } from "../services/walletService";
 import { localWalletService } from "../services/localWalletService";
@@ -58,7 +57,7 @@ export default function WalletDetailScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const walletId = route.params?.walletId;
-  const { wallets, accounts, fetchAccounts, deleteWallet, fetchWallets, verifyPassword, assets } = useWalletStore();
+  const { wallets, accounts, fetchAccounts, deleteWallet, fetchWallets, verifyPassword } = useWalletStore();
 
   const [detail, setDetail] = useState<SimpleWallet | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,7 +93,6 @@ export default function WalletDetailScreen() {
 
   const walletFromStore = wallets.find((w) => w.id === walletId);
   const wallet = detail || walletFromStore;
-  const isWalletBackedUp = useWalletStore((s) => s.isWalletBackedUp);
   const backedUpWallets = useWalletStore((s) => s.backedUpWallets);
   const walletIsBackedUp = walletId ? backedUpWallets.has(walletId) : false;
 

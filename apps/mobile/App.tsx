@@ -4,7 +4,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationContainer } from "@react-navigation/native";
 import { View, Text, StyleSheet, ScrollView, Platform } from "react-native";
 import { RootStack } from "./src/navigation/RootStack";
-import { uploadLog, saveLogToLocal, flushPendingLogs } from "./src/services/logService";
+import { saveLogToLocal, flushPendingLogs } from "./src/services/logService";
 import { AppAlertProvider } from "./src/components/AppAlert";
 
 // ─── Global error handlers: capture uncaught JS errors before they crash the app ───

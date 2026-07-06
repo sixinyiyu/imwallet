@@ -1,4 +1,3 @@
-import React from "react";
 import {
   View,
   Text,
@@ -9,7 +8,7 @@ import {
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
-import Svg, { Path, Circle } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "ForgotPassword">;
 type RouteType = RouteProp<RootStackParamList, "ForgotPassword">;

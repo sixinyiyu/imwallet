@@ -1,10 +1,9 @@
-import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
-  ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
@@ -15,7 +14,7 @@ import type { Transaction } from "../types";
 import { transactionService } from "../services/transactionService";
 import { localAddressService } from "../services/localAddressService";
 import { useWalletStore } from "../stores/walletStore";
-import { ShareIcon, CopyIcon, TOKEN_ICONS, renderTokenIcon } from "../components/icons";
+import { ShareIcon, CopyIcon, renderTokenIcon } from "../components/icons";
 import { TradeDetailSkeleton } from "../components/Skeleton";
 import { useAlert } from "../hooks/useAlert";
 import SuccessIcon from "../components/icons/SuccessIcon";

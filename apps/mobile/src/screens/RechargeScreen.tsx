@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -18,7 +18,7 @@ import { localWalletService } from "../services/localWalletService";
 import { walletService } from "../services/walletService";
 import { rechargeService, type RechargeRecord } from "../services/rechargeService";
 import type { SimpleWallet, AssetInfo, AddressEntry, ServerWalletAddress } from "../types";
-import { TOKEN_ICONS, renderTokenIcon, ChevronRightIcon, CopyIcon } from "../components/icons";
+import { TOKEN_ICONS, ChevronRightIcon, CopyIcon } from "../components/icons";
 import { RechargeSkeleton } from "../components/Skeleton";
 import { formatTime as formatDate } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";

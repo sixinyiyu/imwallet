@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,6 @@ import {
 } from "react-native";
 import { localNotificationService } from "../services/localNotificationService";
 import { notificationSyncService } from "../services/notificationSyncService";
-import { useAlert } from "../hooks/useAlert";
 import { useWalletStore } from "../stores/walletStore";
 import { renderTokenIcon } from "../components/icons";
 import { NotificationSkeleton } from "../components/Skeleton";
@@ -40,7 +39,6 @@ function SwipeableRow({
   isCurrentlyOpen,
   onRowOpen,
   onRowClose,
-  onMarkRead,
   onPress,
   onDelete,
 }: {
@@ -49,7 +47,6 @@ function SwipeableRow({
   isCurrentlyOpen: boolean;
   onRowOpen: (id: string) => void;
   onRowClose: () => void;
-  onMarkRead: (id: string) => void;
   onPress: (item: Notification) => void;
   onDelete: (id: string) => void;
 }) {
@@ -170,7 +167,6 @@ function SwipeableRow({
 }
 
 export default function NotificationScreen() {
-  const alert = useAlert();
   const wallets = useWalletStore((s) => s.wallets);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -280,7 +276,6 @@ export default function NotificationScreen() {
       isCurrentlyOpen={openRowId === item.id}
       onRowOpen={handleRowOpen}
       onRowClose={handleRowClose}
-      onMarkRead={handleMarkRead}
       onPress={handleNotificationPress}
       onDelete={handleDeleteNotification}
     />

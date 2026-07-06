@@ -12,13 +12,12 @@ import { generateMnemonic, cleanMnemonic, generateIdentifier } from "../utils/mn
 import { deriveAddressFromMnemonic, getDerivationPath } from "../utils/derivation";
 import { ensureDeviceKeys, ensureDeviceRegistered } from "../services/api";
 import { useAuthStore } from "./authStore";
-import { uploadLog, saveLogToLocal } from "../services/logService";
+import { saveLogToLocal } from "../services/logService";
 import { getErrorMessage } from "../utils/format";
 import type { SimpleWallet, Account, AssetBalance, LocalWallet } from "../types";
 
 const MNEMONIC_KEY_PREFIX = "aquad_mnemonic_";
 const BACKED_UP_KEY_PREFIX = "aquad_backed_up_";
-const ACTIVE_WALLET_KEY = "aquad_active_wallet";
 
 /** Build per-wallet SecureStore key for mnemonic */
 /** In-flight dedup for fetchBalance: prevents duplicate concurrent requests */
