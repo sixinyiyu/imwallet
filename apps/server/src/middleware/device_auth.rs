@@ -410,20 +410,21 @@ pub async fn device_auth(
         (plat, should_upd)
     };
     // 仅在距上次更新超过 5 分钟时才写入 last_active_at，避免每个请求都写 DB
+    // fire-and-forget：此操作不影响任何业务逻辑，写入失败也无害，不应阻塞请求
     if should_update {
-        if let Err(e) = crate::db::query::exec(
-            &state.db,
-            "UPDATE devices SET last_active_at = NOW() WHERE id = $1",
-            vals![device_id],
-        )
-        .await
-        {
-            log::warn!(
-                "Failed to update last_active_at for device {}: {}",
-                device_id,
-                e
-            );
-        }
+        let db = state.db.clone();
+        let did = device_id.to_string();
+        tokio::spawn(async move {
+            if let Err(e) = crate::db::query::exec(
+                &db,
+                "UPDATE devices SET last_active_at = NOW() WHERE id = $1",
+                vals![&did],
+            )
+            .await
+            {
+                log::warn!("Failed to update last_active_at for device {}: {}", did, e);
+            }
+        });
     }
 
     // 重建 request
