@@ -35,6 +35,7 @@ pub fn router() -> Router<AppState> {
             post(subscribe_wallet_readonly).delete(unsubscribe_wallet_readonly),
         )
         .route("/recharges/my", get(get_my_recharges))
+        .route("/recharges", get(get_all_recharges))
 }
 
 // ── Response DTOs ──
@@ -490,6 +491,106 @@ async fn get_my_recharges(
         &format!(
             "SELECT r.* FROM recharges r WHERE {} ORDER BY r.created_at DESC LIMIT {} OFFSET {}",
             base_where, limit_ph, offset_ph
+        ),
+        args,
+    )
+    .await?;
+
+    Ok(Json(MyRechargesResponse {
+        recharges: rows,
+        total,
+        page: query.page,
+        limit: query.limit,
+    }))
+}
+
+// ── 全量充值记录查询（白名单设备，无需管理密码，不做 device 过滤） ──
+
+/// GET /recharges — 查询所有充值记录（不做 device_id 过滤）
+/// 仅需 device_auth + 充值白名单，不需要管理密码
+/// 支持 wallet_id / token_symbol / start_time / end_time 筛选
+#[derive(Debug, Deserialize)]
+struct AllRechargesQuery {
+    #[serde(default = "default_page")]
+    page: u64,
+    #[serde(default = "default_limit")]
+    limit: u64,
+    #[serde(default)]
+    wallet_id: Option<String>,
+    #[serde(default)]
+    token_symbol: Option<String>,
+    #[serde(default)]
+    start_time: Option<String>,
+    #[serde(default)]
+    end_time: Option<String>,
+}
+
+#[allow(unused_assignments)]
+async fn get_all_recharges(
+    State(state): State<AppState>,
+    Extension(device): Extension<DevicePayload>,
+    Query(query): Query<AllRechargesQuery>,
+) -> Result<Json<MyRechargesResponse>, AppError> {
+    // 校验充值白名单（与 /recharges/my 一致）
+    let permitted =
+        crate::services::config_service::is_recharge_permitted(state.db.clone(), &device.device_id)
+            .await?;
+    if !permitted {
+        return Err(AppError::Forbidden("无权查看充值记录".into()));
+    }
+
+    let offset = (query.page - 1) * query.limit;
+
+    // 动态构建 WHERE 条件：不做 device_id 过滤，支持 wallet_id / token_symbol / start_time / end_time
+    let mut conditions: Vec<String> = Vec::new();
+    let mut args: Vec<rbs::value::Value> = Vec::new();
+    #[allow(unused_assignments)]
+    let mut param_idx = 1u32;
+
+    if let Some(ref wid) = query.wallet_id {
+        conditions.push(format!("r.wallet_id = ${}" , param_idx));
+        args.push(rbs::value!(wid));
+        param_idx += 1;
+    }
+    if let Some(ref sym) = query.token_symbol {
+        conditions.push(format!("r.token_symbol = ${}" , param_idx));
+        args.push(rbs::value!(sym));
+        param_idx += 1;
+    }
+    if let Some(ref st) = query.start_time {
+        conditions.push(format!("r.created_at >= ${}" , param_idx));
+        args.push(rbs::value!(st));
+        param_idx += 1;
+    }
+    if let Some(ref et) = query.end_time {
+        conditions.push(format!("r.created_at <= ${}" , param_idx));
+        args.push(rbs::value!(et));
+        param_idx += 1;
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", conditions.join(" AND "))
+    };
+
+    let total: u64 = crate::db::query::query_count(
+        &state.db,
+        &format!("SELECT COUNT(*) as cnt FROM recharges r{}", where_clause),
+        args.clone(),
+    )
+    .await?;
+
+    args.push(rbs::value!(query.limit as i64));
+    args.push(rbs::value!(offset as i64));
+    let limit_ph = format!("${}", args.len() - 1);
+    let offset_ph = format!("${}", args.len());
+
+    let rows: Vec<crate::models::Recharge> = crate::db::query::query(
+        &state.db,
+        &format!(
+            "SELECT r.* FROM recharges r{} ORDER BY r.created_at DESC LIMIT {} OFFSET {}",
+            where_clause, limit_ph, offset_ph
         ),
         args,
     )

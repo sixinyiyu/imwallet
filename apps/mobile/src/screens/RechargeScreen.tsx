@@ -24,6 +24,42 @@ import { formatTime as formatDate } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";
 import { getErrorMessage, trimAmount } from "../utils/format";
 
+// ── 筛选类型定义 ──
+type TimeFilter = "today" | "7d" | "30d" | "90d";
+
+const TIME_OPTIONS: { label: string; value: TimeFilter }[] = [
+  { label: "今日", value: "today" },
+  { label: "近7天", value: "7d" },
+  { label: "近30天", value: "30d" },
+  { label: "近90天", value: "90d" },
+];
+
+/** 将 TimeFilter 转换为 ISO 8601 时间字符串 */
+function timeFilterToRange(tf: TimeFilter): { startTime: string; endTime: string } {
+  const now = new Date();
+  // endTime: 当前时刻的明天0点（确保包含今天全天）
+  const end = new Date(now);
+  end.setDate(end.getDate() + 1);
+  end.setHours(0, 0, 0, 0);
+  const endTime = end.toISOString();
+
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  switch (tf) {
+    case "today":
+      break;
+    case "7d":
+      start.setDate(start.getDate() - 6);
+      break;
+    case "30d":
+      start.setDate(start.getDate() - 29);
+      break;
+    case "90d":
+      start.setDate(start.getDate() - 89);
+      break;
+  }
+  return { startTime: start.toISOString(), endTime };
+}
 
 export default function RechargeScreen() {
   const [assets, setAssets] = useState<AssetInfo[]>([]);
@@ -34,13 +70,12 @@ export default function RechargeScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // 服务端钱包列表（搜索+分页）
+  // 服务端钱包列表（搜索+分页）— 充值表单用
   const [serverWallets, setServerWallets] = useState<SimpleWallet[]>([]);
   const [serverWalletsTotal, setServerWalletsTotal] = useState(0);
   const [serverWalletsPage, setServerWalletsPage] = useState(1);
   const [serverWalletsLoading, setServerWalletsLoading] = useState(false);
   const [walletSearch, setWalletSearch] = useState("");
-  // 选中钱包的链上地址（从服务端获取）
   const [serverAddresses, setServerAddresses] = useState<ServerWalletAddress[]>([]);
 
   // 充值记录
@@ -51,12 +86,27 @@ export default function RechargeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [formCollapsed, setFormCollapsed] = useState(true);
 
-  // 地址本缓存（用于充值记录中匹配联系人名称）
+  // ── 筛选状态 ──
+  const [filterWallet, setFilterWallet] = useState<SimpleWallet | null>(null);
+  const [filterToken, setFilterToken] = useState<string | null>(null);
+  const [filterTime, setFilterTime] = useState<TimeFilter | null>(null);
+  const [timeExpanded, setTimeExpanded] = useState(false);
+
+  // 筛选用的钱包列表（独立于充值表单）
+  const [filterWallets, setFilterWallets] = useState<SimpleWallet[]>([]);
+  const [filterWalletsTotal, setFilterWalletsTotal] = useState(0);
+  const [filterWalletsPage, setFilterWalletsPage] = useState(1);
+  const [filterWalletsLoading, setFilterWalletsLoading] = useState(false);
+  const [filterWalletSearch, setFilterWalletSearch] = useState("");
+
+  // 地址本缓存
   const [addressMap, setAddressMap] = useState<Map<string, AddressEntry>>(new Map());
 
   // 选择器弹窗
   const [showWalletPicker, setShowWalletPicker] = useState(false);
   const [showTokenPicker, setShowTokenPicker] = useState(false);
+  const [showFilterWalletPicker, setShowFilterWalletPicker] = useState(false);
+  const [showFilterTokenPicker, setShowFilterTokenPicker] = useState(false);
 
   // Toast
   const [toastVisible, setToastVisible] = useState(false);
@@ -74,7 +124,6 @@ export default function RechargeScreen() {
         localAddressService.getAllContacts(),
       ]);
       setAssets(assetsRes.assets);
-      // 构建 address → AddressEntry 映射（用于充值记录匹配联系人名称）
       const map = new Map<string, AddressEntry>();
       for (const c of contacts) {
         map.set(c.address, c);
@@ -85,27 +134,23 @@ export default function RechargeScreen() {
     }
   };
 
-  /** 根据代币网络获取钱包在该网络上的链地址 */
   const getAssetAddress = (asset: AssetInfo): string => {
     if (!selectedWallet) return "";
     const addr = serverAddresses.find((a) => a.chain === asset.chain);
     return addr?.address || "";
   };
 
-  /** 地址截断显示 */
   const shortAddr = (addr: string): string => {
     if (!addr) return "";
     return `${addr.slice(0, 8)}...${addr.slice(-4)}`;
   };
 
-  /** 选择钱包后从服务端获取该钱包的链上地址列表 */
   const handleSelectWallet = async (wallet: SimpleWallet) => {
     setSelectedWallet(wallet);
     setShowWalletPicker(false);
     try {
       const { addresses } = await walletService.getWalletAddresses(wallet.id);
       setServerAddresses(addresses);
-      // 清空已选代币（如果新钱包没有对应链的地址）
       if (selectedToken && !addresses.some((a) => a.chain === selectedToken.chain)) {
         setSelectedToken(null);
       }
@@ -116,11 +161,9 @@ export default function RechargeScreen() {
     }
   };
 
-  // ── 服务端钱包列表（搜索+分页） ──────────────────────────────────────────
+  // ── 充值表单：钱包列表 ──
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /** 从服务端加载钱包列表（支持搜索+分页）
-   *  如果钱包 ID 在本地存在，优先使用本地名称（本地名称可能是用户修改后的最新名称） */
   const loadServerWallets = async (page = 1, search = "", append = false) => {
     if (serverWalletsLoading) return;
     setServerWalletsLoading(true);
@@ -130,7 +173,6 @@ export default function RechargeScreen() {
         page,
         limit: 20,
       });
-      // 用本地钱包名称覆盖服务端名称（本地名称优先，可能是用户修改后的最新名称）
       const localWallets = await localWalletService.getAllWallets();
       const localNameMap = new Map(localWallets.map((w) => [w.id, w.name]));
       const mergedWallets = res.wallets.map((w) => {
@@ -146,7 +188,6 @@ export default function RechargeScreen() {
     setServerWalletsLoading(false);
   };
 
-  /** 打开钱包选择器：重置搜索并加载第一页 */
   const openWalletPicker = () => {
     setShowWalletPicker(true);
     setWalletSearch("");
@@ -155,7 +196,6 @@ export default function RechargeScreen() {
     loadServerWallets(1, "");
   };
 
-  /** 搜索输入（防抖 300ms） */
   const handleWalletSearch = (text: string) => {
     setWalletSearch(text);
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -164,17 +204,75 @@ export default function RechargeScreen() {
     }, 300);
   };
 
-  /** 钱包列表加载更多 */
   const handleWalletLoadMore = () => {
     if (serverWallets.length < serverWalletsTotal && !serverWalletsLoading) {
       loadServerWallets(serverWalletsPage + 1, walletSearch, true);
     }
   };
 
+  // ── 筛选钱包列表 ──
+  const filterSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadFilterWallets = async (page = 1, search = "", append = false) => {
+    if (filterWalletsLoading) return;
+    setFilterWalletsLoading(true);
+    try {
+      const res = await walletService.getAllWallets({
+        search: search || undefined,
+        page,
+        limit: 20,
+      });
+      const localWallets = await localWalletService.getAllWallets();
+      const localNameMap = new Map(localWallets.map((w) => [w.id, w.name]));
+      const mergedWallets = res.wallets.map((w) => {
+        const localName = localNameMap.get(w.id);
+        return localName ? { ...w, name: localName } : w;
+      });
+      setFilterWallets((prev) => (append ? [...prev, ...mergedWallets] : mergedWallets));
+      setFilterWalletsTotal(res.total);
+      setFilterWalletsPage(page);
+    } catch {
+      if (!append) setFilterWallets([]);
+    }
+    setFilterWalletsLoading(false);
+  };
+
+  const openFilterWalletPicker = () => {
+    setShowFilterWalletPicker(true);
+    setFilterWalletSearch("");
+    setFilterWallets([]);
+    setFilterWalletsPage(1);
+    loadFilterWallets(1, "");
+  };
+
+  const handleFilterWalletSearch = (text: string) => {
+    setFilterWalletSearch(text);
+    if (filterSearchTimerRef.current) clearTimeout(filterSearchTimerRef.current);
+    filterSearchTimerRef.current = setTimeout(() => {
+      loadFilterWallets(1, text);
+    }, 300);
+  };
+
+  const handleFilterWalletLoadMore = () => {
+    if (filterWallets.length < filterWalletsTotal && !filterWalletsLoading) {
+      loadFilterWallets(filterWalletsPage + 1, filterWalletSearch, true);
+    }
+  };
+
+  // ── 加载充值记录 ──
   const loadRecords = async (page = 1, append = false, showLoading = true) => {
     if (showLoading) setRecordsLoading(true);
     try {
-      const res = await rechargeService.getAllRechargeRecords(page, 20);
+      const filters: { walletId?: string; tokenSymbol?: string; startTime?: string; endTime?: string } = {};
+      if (filterWallet) filters.walletId = filterWallet.id;
+      if (filterToken) filters.tokenSymbol = filterToken;
+      if (filterTime) {
+        const range = timeFilterToRange(filterTime);
+        filters.startTime = range.startTime;
+        filters.endTime = range.endTime;
+      }
+
+      const res = await rechargeService.getAllRechargeRecords(page, 20, filters);
       setRecords((prev) => (append ? [...prev, ...res.recharges] : res.recharges));
       setRecordsTotal(res.total);
       setRecordsPage(page);
@@ -183,6 +281,13 @@ export default function RechargeScreen() {
     }
     if (showLoading) setRecordsLoading(false);
   };
+
+  // 筛选条件变化时重新加载第1页
+  React.useEffect(() => {
+    if (!loading) {
+      loadRecords(1, false, true);
+    }
+  }, [filterWallet, filterToken, filterTime]);
 
   useFocusEffect(
     useCallback(() => {
@@ -208,33 +313,16 @@ export default function RechargeScreen() {
   };
 
   const handleRecharge = async () => {
-    if (!selectedWallet) {
-      showToast("请选择钱包");
-      return;
-    }
-    if (!selectedToken) {
-      showToast("请选择代币");
-      return;
-    }
+    if (!selectedWallet) { showToast("请选择钱包"); return; }
+    if (!selectedToken) { showToast("请选择代币"); return; }
     const trimmed = amount.trim();
-    if (!trimmed) {
-      showToast("请输入充值金额");
-      return;
-    }
+    if (!trimmed) { showToast("请输入充值金额"); return; }
     const numVal = parseFloat(trimmed);
-    if (isNaN(numVal) || numVal <= 0) {
-      showToast("充值金额必须大于 0");
-      return;
-    }
+    if (isNaN(numVal) || numVal <= 0) { showToast("充值金额必须大于 0"); return; }
     setSubmitting(true);
     try {
       const accountAddress = getAssetAddress(selectedToken);
-      if (!accountAddress) {
-        showToast("该钱包在此网络下无地址");
-        setSubmitting(false);
-        return;
-      }
-      // 充值不需要管理密码，仅需 device_auth + 白名单
+      if (!accountAddress) { showToast("该钱包在此网络下无地址"); setSubmitting(false); return; }
       await rechargeService.recharge({
         walletId: selectedWallet.id,
         walletAlias: selectedWallet.name,
@@ -256,60 +344,53 @@ export default function RechargeScreen() {
 
   const canSubmit = !!selectedWallet && !!selectedToken && !!amount.trim() && !submitting;
 
-  /** 复制地址到剪贴板 */
   const handleCopyAddress = useCallback(async (address: string) => {
     const ok = await copyToClipboard(address);
     showToast(ok ? "地址已复制" : "复制失败");
   }, [showToast]);
 
+  const clearFilters = () => {
+    setFilterWallet(null);
+    setFilterToken(null);
+    setFilterTime(null);
+    setTimeExpanded(false);
+  };
+
+  const hasActiveFilter = filterWallet !== null || filterToken !== null || filterTime !== null;
+
   const renderRecord = ({ item }: { item: RechargeRecord }) => {
-    // 匹配地址本：优先显示备注，没有备注用名称
     const contact = addressMap.get(item.accountAddress);
     const contactLabel = contact ? (contact.memo || contact.name) : null;
 
     return (
-    <View style={styles.recordCard}>
-      <View style={styles.recordHeader}>
-        <View style={styles.recordTokenWrap}>
-          {TOKEN_ICONS[item.tokenSymbol] ? (
-            React.createElement(TOKEN_ICONS[item.tokenSymbol], { size: 20 })
-          ) : (
-            <Text style={styles.recordTokenEmoji}>🪙</Text>
-          )}
-          <Text style={styles.recordToken}>{item.tokenSymbol}</Text>
+      <View style={styles.recordCard}>
+        <View style={styles.recordHeader}>
+          <View style={styles.recordTokenWrap}>
+            {TOKEN_ICONS[item.tokenSymbol] ? (
+              React.createElement(TOKEN_ICONS[item.tokenSymbol], { size: 20 })
+            ) : (
+              <Text style={styles.recordTokenEmoji}>🪙</Text>
+            )}
+            <Text style={styles.recordToken}>{item.tokenSymbol}</Text>
+          </View>
+          <Text style={styles.recordAmount}>+{trimAmount(item.amount)}</Text>
         </View>
-        <Text style={styles.recordAmount}>+{trimAmount(item.amount)}</Text>
-      </View>
-      <View style={styles.recordBody}>
-        {/* 账户地址行：联系人名称 + 地址 + 复制icon */}
-        <View style={styles.recordAddressRow}>
-          {contactLabel ? (
-            <Text style={styles.recordContactName} numberOfLines={1}>
-              {contactLabel}
-            </Text>
-          ) : null}
-          <Text style={styles.recordAddress} numberOfLines={1} ellipsizeMode="middle">
-            {item.accountAddress}
-          </Text>
-          <TouchableOpacity
-            style={styles.copyBtn}
-            onPress={() => handleCopyAddress(item.accountAddress)}
-            activeOpacity={0.6}
-          >
-            <CopyIcon size={14} color="#9CA3AF" />
-          </TouchableOpacity>
-        </View>
-        {/* 备注行：左侧备注 + 右侧充值时间 */}
-        <View style={styles.recordFooterRow}>
-          <Text style={styles.recordMemo} numberOfLines={1}>
-            {item.memo ? `备注: ${item.memo}` : ""}
-          </Text>
-          <Text style={styles.recordMeta}>
-            {formatDate(item.createdAt)}
-          </Text>
+        <View style={styles.recordBody}>
+          <View style={styles.recordAddressRow}>
+            {contactLabel ? (
+              <Text style={styles.recordContactName} numberOfLines={1}>{contactLabel}</Text>
+            ) : null}
+            <Text style={styles.recordAddress} numberOfLines={1} ellipsizeMode="middle">{item.accountAddress}</Text>
+            <TouchableOpacity style={styles.copyBtn} onPress={() => handleCopyAddress(item.accountAddress)} activeOpacity={0.6}>
+              <CopyIcon size={14} color="#9CA3AF" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.recordFooterRow}>
+            <Text style={styles.recordMemo} numberOfLines={1}>{item.memo ? `备注: ${item.memo}` : ""}</Text>
+            <Text style={styles.recordMeta}>{formatDate(item.createdAt)}</Text>
+          </View>
         </View>
       </View>
-    </View>
     );
   };
 
@@ -334,83 +415,40 @@ export default function RechargeScreen() {
           <View>
             {/* 充值表单 */}
             <View style={styles.formCard}>
-              <TouchableOpacity
-                style={styles.formHeader}
-                onPress={() => setFormCollapsed((v) => !v)}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.formHeader} onPress={() => setFormCollapsed((v) => !v)} activeOpacity={0.7}>
                 <Text style={styles.formTitle}>代币充值</Text>
                 <Text style={styles.collapseIcon}>{formCollapsed ? "▶" : "▼"}</Text>
               </TouchableOpacity>
 
               {!formCollapsed && (
               <>
-              {/* 选择钱包 */}
               <Text style={styles.fieldLabel}>选择钱包</Text>
-              <TouchableOpacity
-                style={styles.pickerBtn}
-                onPress={openWalletPicker}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.pickerBtn} onPress={openWalletPicker} activeOpacity={0.7}>
                 <Text style={selectedWallet ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
                   {selectedWallet ? `${selectedWallet.name}(${shortAddr(selectedWallet.id)})` : "请选择钱包"}
                 </Text>
                 <ChevronRightIcon size={18} color="#9CA3AF" />
               </TouchableOpacity>
 
-              {/* 选择代币 */}
               <Text style={styles.fieldLabel}>选择代币</Text>
-              <TouchableOpacity
-                style={styles.pickerBtn}
-                onPress={() => setShowTokenPicker(true)}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowTokenPicker(true)} activeOpacity={0.7}>
                 <View style={styles.tokenPickerLeft}>
-                  {selectedToken && TOKEN_ICONS[selectedToken.symbol]
-                    ? React.createElement(TOKEN_ICONS[selectedToken.symbol], { size: 18 })
-                    : null}
+                  {selectedToken && TOKEN_ICONS[selectedToken.symbol] ? React.createElement(TOKEN_ICONS[selectedToken.symbol], { size: 18 }) : null}
                   <Text style={selectedToken ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
-                    {selectedToken
-                      ? `${selectedToken.symbol} · ${shortAddr(getAssetAddress(selectedToken))}`
-                      : "请选择代币"}
+                    {selectedToken ? `${selectedToken.symbol} · ${shortAddr(getAssetAddress(selectedToken))}` : "请选择代币"}
                   </Text>
                 </View>
                 <ChevronRightIcon size={18} color="#9CA3AF" />
               </TouchableOpacity>
 
-              {/* 充值金额 */}
               <Text style={styles.fieldLabel}>充值金额</Text>
-              <TextInput
-                style={styles.input}
-                value={amount}
-                onChangeText={setAmount}
-                placeholder="请输入充值金额"
-                placeholderTextColor="#C8C9CC"
-                keyboardType="decimal-pad"
-              />
+              <TextInput style={styles.input} value={amount} onChangeText={setAmount} placeholder="请输入充值金额" placeholderTextColor="#C8C9CC" keyboardType="decimal-pad" />
 
-              {/* 备注 */}
               <Text style={styles.fieldLabel}>备注（可选）</Text>
-              <TextInput
-                style={styles.input}
-                value={memo}
-                onChangeText={setMemo}
-                placeholder="添加备注"
-                placeholderTextColor="#C8C9CC"
-              />
+              <TextInput style={styles.input} value={memo} onChangeText={setMemo} placeholder="添加备注" placeholderTextColor="#C8C9CC" />
 
-              {/* 充值按钮 */}
-              <TouchableOpacity
-                style={[styles.rechargeBtn, !canSubmit && styles.rechargeBtnDisabled]}
-                onPress={handleRecharge}
-                disabled={!canSubmit}
-                activeOpacity={0.7}
-              >
-                {submitting ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.rechargeBtnText}>充值</Text>
-                )}
+              <TouchableOpacity style={[styles.rechargeBtn, !canSubmit && styles.rechargeBtnDisabled]} onPress={handleRecharge} disabled={!canSubmit} activeOpacity={0.7}>
+                {submitting ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.rechargeBtnText}>充值</Text>}
               </TouchableOpacity>
               </>
               )}
@@ -419,10 +457,91 @@ export default function RechargeScreen() {
             {/* 充值记录标题 */}
             <View style={styles.recordsHeader}>
               <Text style={styles.recordsTitle}>充值记录</Text>
-              {recordsTotal > 0 && (
-                <Text style={styles.recordsCount}>共 {recordsTotal} 条</Text>
+              {recordsTotal > 0 && <Text style={styles.recordsCount}>共 {recordsTotal} 条</Text>}
+            </View>
+
+            {/* ── 筛选条 ── */}
+            <View style={styles.filterBar}>
+              {/* 钱包筛选 pill */}
+              <TouchableOpacity
+                style={[styles.filterPill, filterWallet && styles.filterPillActive]}
+                onPress={openFilterWalletPicker}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.filterPillText, filterWallet && styles.filterPillTextActive]} numberOfLines={1}>
+                  {filterWallet ? filterWallet.name : "钱包"}
+                </Text>
+                {filterWallet && (
+                  <TouchableOpacity onPress={() => setFilterWallet(null)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Text style={styles.filterPillClear}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
+
+              {/* 代币筛选 pill */}
+              <TouchableOpacity
+                style={[styles.filterPill, filterToken && styles.filterPillActive]}
+                onPress={() => setShowFilterTokenPicker(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.filterPillText, filterToken && styles.filterPillTextActive]} numberOfLines={1}>
+                  {filterToken || "代币"}
+                </Text>
+                {filterToken && (
+                  <TouchableOpacity onPress={() => setFilterToken(null)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Text style={styles.filterPillClear}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
+
+              {/* 时间筛选 pill */}
+              <TouchableOpacity
+                style={[styles.filterPill, filterTime && styles.filterPillActive]}
+                onPress={() => {
+                  if (filterTime === null) {
+                    setFilterTime("today");
+                    setTimeExpanded(true);
+                  } else {
+                    setTimeExpanded((v) => !v);
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.filterPillText, filterTime && styles.filterPillTextActive]} numberOfLines={1}>
+                  {filterTime ? TIME_OPTIONS.find((o) => o.value === filterTime)?.label || "时间" : "时间"}
+                </Text>
+                {filterTime && (
+                  <TouchableOpacity onPress={() => { setFilterTime(null); setTimeExpanded(false); }} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Text style={styles.filterPillClear}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
+
+              {/* 清除筛选 */}
+              {hasActiveFilter && (
+                <TouchableOpacity style={styles.filterClearAll} onPress={clearFilters} activeOpacity={0.7}>
+                  <Text style={styles.filterClearAllText}>清除</Text>
+                </TouchableOpacity>
               )}
             </View>
+
+            {/* ── 时间快捷选项 ── */}
+            {timeExpanded && filterTime !== null && (
+              <View style={styles.timeChipRow}>
+                {TIME_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.timeChip, filterTime === opt.value && styles.timeChipActive]}
+                    onPress={() => setFilterTime(opt.value)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.timeChipText, filterTime === opt.value && styles.timeChipTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
         }
         ListEmptyComponent={
@@ -442,49 +561,24 @@ export default function RechargeScreen() {
         contentContainerStyle={styles.listContent}
       />
 
-      {/* 钱包选择器 */}
-      {/* 钱包选择器（服务端搜索+分页） */}
+      {/* ── 充值表单：钱包选择器 ── */}
       <Modal visible={showWalletPicker} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowWalletPicker(false)}>
           <Pressable style={styles.pickerCard} onPress={() => {}}>
             <Text style={styles.pickerTitle}>选择钱包</Text>
-            {/* 搜索框 */}
-            <TextInput
-              style={styles.walletSearchInput}
-              value={walletSearch}
-              onChangeText={handleWalletSearch}
-              placeholder="搜索钱包名称"
-              placeholderTextColor="#C8C9CC"
-            />
+            <TextInput style={styles.walletSearchInput} value={walletSearch} onChangeText={handleWalletSearch} placeholder="搜索钱包名称" placeholderTextColor="#C8C9CC" />
             <FlatList
               data={serverWallets}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.pickerItem, selectedWallet?.id === item.id && styles.pickerItemActive]}
-                  onPress={() => handleSelectWallet(item)}
-                >
-                  <View>
-                    <Text style={styles.pickerItemName}>{item.name}({shortAddr(item.id)})</Text>
-                  </View>
+                <TouchableOpacity style={[styles.pickerItem, selectedWallet?.id === item.id && styles.pickerItemActive]} onPress={() => handleSelectWallet(item)}>
+                  <Text style={styles.pickerItemName}>{item.name}({shortAddr(item.id)})</Text>
                 </TouchableOpacity>
               )}
               onEndReached={handleWalletLoadMore}
               onEndReachedThreshold={0.3}
-              ListEmptyComponent={
-                serverWalletsLoading ? null : (
-                  <View style={styles.pickerEmpty}>
-                    <Text style={styles.pickerEmptyText}>无匹配钱包</Text>
-                  </View>
-                )
-              }
-              ListFooterComponent={
-                serverWalletsLoading ? (
-                  <View style={styles.pickerLoading}>
-                    <ActivityIndicator size="small" color="#9CA3AF" />
-                  </View>
-                ) : null
-              }
+              ListEmptyComponent={serverWalletsLoading ? null : <View style={styles.pickerEmpty}><Text style={styles.pickerEmptyText}>无匹配钱包</Text></View>}
+              ListFooterComponent={serverWalletsLoading ? <View style={styles.pickerLoading}><ActivityIndicator size="small" color="#9CA3AF" /></View> : null}
               style={{ maxHeight: 350 }}
             />
             <TouchableOpacity style={styles.pickerCancelBtn} onPress={() => setShowWalletPicker(false)}>
@@ -494,7 +588,7 @@ export default function RechargeScreen() {
         </Pressable>
       </Modal>
 
-      {/* 代币选择器 */}
+      {/* ── 充值表单：代币选择器 ── */}
       <Modal visible={showTokenPicker} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowTokenPicker(false)}>
           <View style={styles.pickerCard}>
@@ -503,24 +597,12 @@ export default function RechargeScreen() {
               data={assets.filter((a) => serverAddresses.some((addr) => addr.chain === a.chain))}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.pickerItem, selectedToken?.id === item.id && styles.pickerItemActive]}
-                  onPress={() => {
-                    setSelectedToken(item);
-                    setShowTokenPicker(false);
-                  }}
-                >
+                <TouchableOpacity style={[styles.pickerItem, selectedToken?.id === item.id && styles.pickerItemActive]} onPress={() => { setSelectedToken(item); setShowTokenPicker(false); }}>
                   <View style={styles.tokenPickerLeft}>
-                    {TOKEN_ICONS[item.symbol]
-                      ? React.createElement(TOKEN_ICONS[item.symbol], { size: 20 })
-                      : <Text style={styles.recordTokenEmoji}>🪙</Text>}
+                    {TOKEN_ICONS[item.symbol] ? React.createElement(TOKEN_ICONS[item.symbol], { size: 20 }) : <Text style={styles.recordTokenEmoji}>🪙</Text>}
                     <View>
                       <Text style={styles.pickerItemName}>{item.symbol}</Text>
-                      <Text style={styles.pickerItemAddr}>
-                        {selectedWallet
-                          ? shortAddr(getAssetAddress(item))
-                          : `${item.name} · ${item.chain}`}
-                      </Text>
+                      <Text style={styles.pickerItemAddr}>{selectedWallet ? shortAddr(getAssetAddress(item)) : `${item.name} · ${item.chain}`}</Text>
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -528,6 +610,64 @@ export default function RechargeScreen() {
               style={{ maxHeight: 350 }}
             />
             <TouchableOpacity style={styles.pickerCancelBtn} onPress={() => setShowTokenPicker(false)}>
+              <Text style={styles.pickerCancelText}>取消</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── 筛选：钱包选择器 ── */}
+      <Modal visible={showFilterWalletPicker} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowFilterWalletPicker(false)}>
+          <Pressable style={styles.pickerCard} onPress={() => {}}>
+            <Text style={styles.pickerTitle}>筛选钱包</Text>
+            <TouchableOpacity style={[styles.pickerItem, !filterWallet && styles.pickerItemActive]} onPress={() => { setFilterWallet(null); setShowFilterWalletPicker(false); }}>
+              <Text style={styles.pickerItemName}>全部钱包</Text>
+            </TouchableOpacity>
+            <TextInput style={styles.walletSearchInput} value={filterWalletSearch} onChangeText={handleFilterWalletSearch} placeholder="搜索钱包名称" placeholderTextColor="#C8C9CC" />
+            <FlatList
+              data={filterWallets}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={[styles.pickerItem, filterWallet?.id === item.id && styles.pickerItemActive]} onPress={() => { setFilterWallet(item); setShowFilterWalletPicker(false); }}>
+                  <Text style={styles.pickerItemName}>{item.name}({shortAddr(item.id)})</Text>
+                </TouchableOpacity>
+              )}
+              onEndReached={handleFilterWalletLoadMore}
+              onEndReachedThreshold={0.3}
+              ListEmptyComponent={filterWalletsLoading ? null : <View style={styles.pickerEmpty}><Text style={styles.pickerEmptyText}>无匹配钱包</Text></View>}
+              ListFooterComponent={filterWalletsLoading ? <View style={styles.pickerLoading}><ActivityIndicator size="small" color="#9CA3AF" /></View> : null}
+              style={{ maxHeight: 300 }}
+            />
+            <TouchableOpacity style={styles.pickerCancelBtn} onPress={() => setShowFilterWalletPicker(false)}>
+              <Text style={styles.pickerCancelText}>取消</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── 筛选：代币选择器 ── */}
+      <Modal visible={showFilterTokenPicker} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowFilterTokenPicker(false)}>
+          <View style={styles.pickerCard}>
+            <Text style={styles.pickerTitle}>筛选代币</Text>
+            <TouchableOpacity style={[styles.pickerItem, !filterToken && styles.pickerItemActive]} onPress={() => { setFilterToken(null); setShowFilterTokenPicker(false); }}>
+              <Text style={styles.pickerItemName}>全部代币</Text>
+            </TouchableOpacity>
+            <FlatList
+              data={assets}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={[styles.pickerItem, filterToken === item.symbol && styles.pickerItemActive]} onPress={() => { setFilterToken(item.symbol); setShowFilterTokenPicker(false); }}>
+                  <View style={styles.tokenPickerLeft}>
+                    {TOKEN_ICONS[item.symbol] ? React.createElement(TOKEN_ICONS[item.symbol], { size: 20 }) : <Text style={styles.recordTokenEmoji}>🪙</Text>}
+                    <Text style={styles.pickerItemName}>{item.symbol}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+              style={{ maxHeight: 300 }}
+            />
+            <TouchableOpacity style={styles.pickerCancelBtn} onPress={() => setShowFilterTokenPicker(false)}>
               <Text style={styles.pickerCancelText}>取消</Text>
             </TouchableOpacity>
           </View>
@@ -547,7 +687,6 @@ export default function RechargeScreen() {
 }
 
 
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F8" },
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F5F6F8" },
@@ -564,11 +703,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  formHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  formHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   formTitle: { fontSize: 16, fontWeight: "700", color: "#1F2937" },
   collapseIcon: { fontSize: 14, color: "#9CA3AF" },
   fieldLabel: { fontSize: 13, color: "#6B7280", marginBottom: 6, marginTop: 10 },
@@ -596,24 +731,36 @@ const styles = StyleSheet.create({
     color: "#1F2937",
     backgroundColor: "#F9FAFB",
   },
-  rechargeBtn: {
-    backgroundColor: "#287220",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 20,
-  },
+  rechargeBtn: { backgroundColor: "#287220", borderRadius: 10, paddingVertical: 14, alignItems: "center", marginTop: 20 },
   rechargeBtnDisabled: { backgroundColor: "#A5D6A7" },
   rechargeBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
   // Records header
-  recordsHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
+  recordsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   recordsTitle: { fontSize: 15, fontWeight: "600", color: "#374151" },
   recordsCount: { fontSize: 13, color: "#9CA3AF" },
+  // ── 筛选条 ──
+  filterBar: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  filterPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
+    maxWidth: 120,
+  },
+  filterPillActive: { backgroundColor: "#DBEAFE" },
+  filterPillText: { fontSize: 13, color: "#6B7280", fontWeight: "500", flexShrink: 1 },
+  filterPillTextActive: { color: "#3B82F6" },
+  filterPillClear: { fontSize: 13, color: "#3B82F6", marginLeft: 4, fontWeight: "600" },
+  filterClearAll: { paddingHorizontal: 8, paddingVertical: 6 },
+  filterClearAllText: { fontSize: 12, color: "#9CA3AF", fontWeight: "500" },
+  // ── 时间快捷选项 ──
+  timeChipRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
+  timeChip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, backgroundColor: "#F3F4F6" },
+  timeChipActive: { backgroundColor: "#3B82F6" },
+  timeChipText: { fontSize: 12, color: "#6B7280", fontWeight: "500" },
+  timeChipTextActive: { color: "#FFFFFF" },
   // Record card
   recordCard: {
     backgroundColor: "#FFFFFF",
@@ -626,36 +773,17 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  recordHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
+  recordHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   recordTokenWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
   recordToken: { fontSize: 15, fontWeight: "600", color: "#1F2937" },
   recordTokenEmoji: { fontSize: 16 },
   recordAmount: { fontSize: 16, fontWeight: "700", color: "#287220" },
   recordBody: { gap: 4 },
-  // 账户地址行
-  recordAddressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  recordContactName: {
-    fontSize: 13,
-    color: "#3B82F6",
-    fontWeight: "500",
-    marginRight: 8,
-  },
+  recordAddressRow: { flexDirection: "row", alignItems: "center" },
+  recordContactName: { fontSize: 13, color: "#3B82F6", fontWeight: "500", marginRight: 8 },
   recordAddress: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", flex: 1 },
   copyBtn: { padding: 4, flexShrink: 0, marginLeft: 4 },
-  // 备注行
-  recordFooterRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
+  recordFooterRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   recordMemo: { fontSize: 12, color: "#9CA3AF", flex: 1 },
   recordMeta: { fontSize: 11, color: "#9CA3AF", flexShrink: 0, marginLeft: 8 },
   // Empty
@@ -664,20 +792,10 @@ const styles = StyleSheet.create({
   // Footer loading
   footerLoading: { paddingVertical: 16, alignItems: "center" },
   // Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    padding: 24,
-  },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24 },
   pickerCard: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20 },
   pickerTitle: { fontSize: 17, fontWeight: "700", color: "#1F2937", textAlign: "center", marginBottom: 16 },
-  pickerItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
-  },
+  pickerItem: { paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
   pickerItemActive: { backgroundColor: "#E8F5E9", borderRadius: 8 },
   pickerItemName: { fontSize: 15, fontWeight: "500", color: "#1F2937" },
   pickerItemAddr: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
@@ -695,13 +813,7 @@ const styles = StyleSheet.create({
   pickerLoading: { paddingVertical: 12, alignItems: "center" },
   pickerEmpty: { paddingVertical: 24, alignItems: "center" },
   pickerEmptyText: { fontSize: 14, color: "#9CA3AF" },
-  pickerCancelBtn: {
-    padding: 14,
-    marginTop: 12,
-    backgroundColor: "#F3F4F6",
-    borderRadius: 10,
-    alignItems: "center",
-  },
+  pickerCancelBtn: { padding: 14, marginTop: 12, backgroundColor: "#F3F4F6", borderRadius: 10, alignItems: "center" },
   pickerCancelText: { color: "#6B7280", fontWeight: "600" },
   // Toast
   toastWrap: { position: "absolute", bottom: 80, left: 0, right: 0, alignItems: "center" },

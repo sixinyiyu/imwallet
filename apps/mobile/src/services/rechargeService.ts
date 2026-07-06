@@ -62,6 +62,27 @@ export const rechargeService = {
     };
   },
 
+  /** 查询全部充值记录 — GET /recharges（仅需 device_auth + 白名单，不做设备过滤）
+   *  支持按 wallet_id / token_symbol / start_time / end_time 筛选 */
+  async getAllRechargeRecords(
+    page: number = 1,
+    limit: number = 20,
+    filters?: { walletId?: string; tokenSymbol?: string; startTime?: string; endTime?: string },
+  ): Promise<{ recharges: RechargeRecord[]; total: number; page: number; limit: number }> {
+    const params: Record<string, unknown> = { page, limit };
+    if (filters?.walletId) params.wallet_id = filters.walletId;
+    if (filters?.tokenSymbol) params.token_symbol = filters.tokenSymbol;
+    if (filters?.startTime) params.start_time = filters.startTime;
+    if (filters?.endTime) params.end_time = filters.endTime;
+    const { data } = await api.get("/recharges", { params });
+    return {
+      recharges: (data.recharges || []).map(mapRechargeItem),
+      total: data.total || 0,
+      page: data.page || page,
+      limit: data.limit || limit,
+    };
+  },
+
   /** 查询充值记录 — POST /{prefix}/recharges（需 RSA 加密管理密码，分页） */
   async getRechargeRecords(password: string, page: number = 1, limit: number = 10, walletId?: string): Promise<{ recharges: RechargeRecord[]; total: number; page: number; limit: number }> {
     const prefix = await getAdminRoutePrefix();
