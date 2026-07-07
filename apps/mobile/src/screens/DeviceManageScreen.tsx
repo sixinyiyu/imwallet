@@ -292,7 +292,7 @@ export default function DeviceManageScreen() {
                 <View style={styles.walletInfo}>
                   <View style={styles.walletNameRow}>
                     <View style={styles.walletNameLeft}>
-                      <Text style={styles.walletAlias}>{w.alias}</Text>
+                      <Text style={styles.walletAlias} numberOfLines={1} ellipsizeMode="tail">{w.alias}</Text>
                       <Text style={styles.walletBalanceValue} numberOfLines={1}>¥{formatCny(w.totalBalanceCny)}</Text>
                     </View>
                     {/* 未订阅 → 右侧显示订阅按钮 */}
@@ -428,7 +428,7 @@ export default function DeviceManageScreen() {
                                     <Text style={styles.txTime}>{formatTime(t.createdAt)}</Text>
                                   </View>
                                   {isSend && feeNum > 0 && (
-                                    <Text style={styles.txFee}>手续费 {trimAmount(feeNum)} · 实到 {trimAmount(receivedNum)}</Text>
+                                    <Text style={styles.txFee} numberOfLines={1} ellipsizeMode="tail">手续费 {trimAmount(feeNum)} · 实到 {trimAmount(receivedNum)}</Text>
                                   )}
                                 </View>
                               </View>
@@ -608,10 +608,10 @@ const styles = StyleSheet.create({
   chevronExpanded: {
     transform: [{ rotate: "90deg" }],
   },
-  walletAlias: { fontSize: 16, fontWeight: "600", color: "#1F2937", flexShrink: 1 },
+  walletAlias: { fontSize: 16, fontWeight: "600", color: "#1F2937" },
   walletNameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  walletNameLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
-  walletBalanceValue: { fontSize: 14, fontWeight: "700", color: "#1F2937", flexShrink: 0 },
+  walletNameLeft: { flexDirection: "column", flex: 1, minWidth: 0 },
+  walletBalanceValue: { fontSize: 14, fontWeight: "700", color: "#1F2937", marginTop: 2 },
   walletIdentifier: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
   walletMetaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   walletMeta: { fontSize: 13, color: "#9CA3AF" },
@@ -743,13 +743,13 @@ const styles = StyleSheet.create({
   txSymbol: { fontSize: 15, fontWeight: "600", color: "#1F2937" },
   txAmount: { fontSize: 15, fontWeight: "700", color: "#1F2937" },
   txDirection: { fontSize: 13, fontWeight: "500", marginLeft: 6 },
-  txFee: { fontSize: 12, color: "#9CA3AF" },
+  txFee: { fontSize: 12, color: "#9CA3AF", flex: 1, textAlign: "right" },
   txAddrRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   txAddr: { fontSize: 13, color: "#6B7280", fontFamily: "monospace", flex: 1 },
   txAddrLabel: { fontSize: 13, fontWeight: "500", color: "#374151", marginRight: 6 },
   txArrow: { fontSize: 13, color: "#9CA3AF", fontWeight: "500" },
-  txBottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 },
-  txBottomLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
+  txBottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8, gap: 8 },
+  txBottomLeft: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
   txTime: { fontSize: 12, color: "#9CA3AF" },
 
   // ── 加载更多 ──

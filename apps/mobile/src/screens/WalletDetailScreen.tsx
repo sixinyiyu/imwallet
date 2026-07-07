@@ -264,10 +264,10 @@ export default function WalletDetailScreen() {
                 showToast(ok ? "标识符已复制" : "复制失败");
               }}
               activeOpacity={0.6}
-              style={{ flex: 1 }}
+              style={styles.identifierValueWrap}
             >
               <View style={styles.identifierRow}>
-                <Text style={styles.identifierValue} numberOfLines={1} ellipsizeMode="middle" selectable>{wallet.id}</Text>
+                <Text style={styles.identifierValue} numberOfLines={2} ellipsizeMode="middle" selectable>{wallet.id}</Text>
                 <CopyIcon size={16} color="#9CA3AF" />
               </View>
             </TouchableOpacity>
@@ -785,7 +785,6 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    justifyContent: "space-between",
     paddingVertical: 10,
   },
   infoLeft: {
@@ -797,12 +796,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6B7280",
     lineHeight: 20,
+    width: "30%",
   },
   infoValue: {
     fontSize: 14,
     color: "#1F2937",
     fontWeight: "500",
     lineHeight: 20,
+    flex: 1,
   },
   infoRightWithIcon: {
     flexDirection: "row",
@@ -816,10 +817,14 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#F3F4F6",
   },
-  // 标识符行（标签与值在同一行，值过长时换行）
+  // 标识符行（标签占30%，值区域占70%，值+copyIcon一行显示不下时换行）
+  identifierValueWrap: {
+    flex: 1,
+  },
   identifierRow: {
     flexDirection: "row",
     alignItems: "flex-start",
+    flexWrap: "wrap",
     marginTop: 2,
   },
   identifierValue: {
@@ -827,7 +832,7 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     fontFamily: "monospace",
     lineHeight: 18,
-    flex: 1,
+    flexShrink: 1,
   },
   hintRight: {
     flexDirection: "row",
