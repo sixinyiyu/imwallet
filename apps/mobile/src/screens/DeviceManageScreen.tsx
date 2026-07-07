@@ -297,7 +297,8 @@ export default function DeviceManageScreen() {
                         onPress={() => handleQuickSubscribe(w.id)}
                         activeOpacity={0.7}
                       >
-                        <SubscribeIcon size={16} color="#287220" />
+                        <SubscribeIcon size={14} color="#287220" />
+                        <Text style={styles.cardSubscribeText}>订阅</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -658,12 +659,17 @@ const styles = StyleSheet.create({
 
   // ── 卡片上的订阅按钮 ──
   cardSubscribeBtn: {
-    padding: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 6,
     backgroundColor: "#F0F7FF",
     borderWidth: 1,
     borderColor: "#DBEAFE",
   },
+  cardSubscribeText: { fontSize: 12, fontWeight: "500", color: "#287220" },
 
   // ── 关联设备 ──
   deviceSection: {
