@@ -266,14 +266,9 @@ export default function WalletDetailScreen() {
               activeOpacity={0.6}
               style={styles.identifierValueWrap}
             >
-              <View style={styles.identifierRow}>
-                <Text style={styles.identifierValue} numberOfLines={2} ellipsizeMode="middle" selectable>
-                  {wallet.id}
-                </Text>
-                <View style={styles.identifierCopyIcon}>
-                  <CopyIcon size={16} color="#9CA3AF" />
-                </View>
-              </View>
+              <Text style={styles.identifierValue} numberOfLines={2} ellipsizeMode="middle" selectable>
+                {wallet.id}
+              </Text>
             </TouchableOpacity>
           </View>
           <View style={styles.infoDivider} />
@@ -827,23 +822,12 @@ const styles = StyleSheet.create({
   identifierValueWrap: {
     flex: 1,
   },
-  identifierRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    marginTop: 2,
-  },
   identifierValue: {
     fontSize: 13,
     color: "#6B7280",
     fontFamily: "monospace",
     lineHeight: 18,
-    flexShrink: 1,
     textAlign: "right",
-  },
-  identifierCopyIcon: {
-    flexShrink: 0,
-    marginLeft: 6,
   },
   hintRight: {
     flexDirection: "row",
