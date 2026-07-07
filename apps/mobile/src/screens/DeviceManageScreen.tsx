@@ -272,6 +272,10 @@ export default function DeviceManageScreen() {
               {walletTag === "subscribed" && (
                 <View style={styles.tagSubscribed}><Text style={styles.tagText}>已订阅</Text></View>
               )}
+              {/* 卡片右上角余额 */}
+              {w.totalBalanceCny && parseFloat(w.totalBalanceCny) > 0 && (
+                <View style={styles.balanceTag}><Text style={styles.balanceTagText}>¥{formatCny(w.totalBalanceCny)}</Text></View>
+              )}
               {/* 钱包头部（点击展开/折叠） */}
               <TouchableOpacity
                 style={styles.walletHeader}
@@ -297,7 +301,6 @@ export default function DeviceManageScreen() {
                       </TouchableOpacity>
                     )}
                   </View>
-                  <Text style={styles.walletBalanceValue} numberOfLines={1}>¥{formatCny(w.totalBalanceCny)}</Text>
                   <Text style={styles.walletIdentifier} numberOfLines={1} ellipsizeMode="middle" selectable>{w.id}</Text>
                   <View style={styles.walletMetaRow}>
                     <Text style={styles.walletMeta}>
@@ -610,7 +613,6 @@ const styles = StyleSheet.create({
   },
   walletAlias: { fontSize: 15, fontWeight: "600", color: "#1F2937", flex: 1, minWidth: 0 },
   walletNameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 6 },
-  walletBalanceValue: { fontSize: 13, fontWeight: "700", color: "#6B7280", marginTop: 2 },
   walletIdentifier: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
   walletMetaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   walletMeta: { fontSize: 13, color: "#9CA3AF" },
@@ -639,6 +641,20 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   tagText: { fontSize: 10, fontWeight: "600", color: "#374151" },
+
+  // ── 卡片右上角余额 ──
+  balanceTag: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderBottomLeftRadius: 8,
+    borderTopRightRadius: 16,
+    backgroundColor: "#F0FDF4",
+    zIndex: 10,
+  },
+  balanceTagText: { fontSize: 12, fontWeight: "700", color: "#287220" },
 
   // ── 卡片上的订阅按钮 ──
   cardSubscribeBtn: {
