@@ -299,28 +299,29 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // 1. 基于助记词确定性生成 walletId
     const walletId = generateIdentifier(mnemonic);
 
-    // 2. 在服务端注册钱包（传 source + walletId + alias）
-    await syncService.registerWallet("CREATE", walletId, alias);
+    // 2. 网络注册 + PBKDF2 hash 并行（无依赖关系）
+    const [, passwordHash, mnemonicHash] = await Promise.all([
+      syncService.registerWallet("CREATE", walletId, alias),
+      Promise.resolve(hashPassword(password)),
+      Promise.resolve(hashMnemonic(mnemonic)),
+    ]);
 
-    // 3. 生成密码 hash 和助记词 hash
-    const passwordHash = hashPassword(password);
-    const mnemonicHash = hashMnemonic(mnemonic);
-
-    // 4. 在本地 SQLite 创建钱包记录
-    await localWalletService.createWallet({
-      id: walletId,
-      name: alias,
-      source: "CREATE",
-      password_hash: passwordHash,
-      password_hint: passwordHint || "",
-      mnemonic_hash: mnemonicHash,
-    });
-
-    // 5. 安全存储助记词
-    await SecureStore.setItemAsync(mnemonicKey(walletId), mnemonic);
+    // 3. SQLite 写入 + SecureStore 存助记词并行
+    await Promise.all([
+      localWalletService.createWallet({
+        id: walletId,
+        name: alias,
+        source: "CREATE",
+        password_hash: passwordHash,
+        password_hint: passwordHint || "",
+        mnemonic_hash: mnemonicHash,
+      }),
+      SecureStore.setItemAsync(mnemonicKey(walletId), mnemonic),
+    ]);
 
     set({ mnemonic, hasWallets: true });
-    await get().fetchWallets();
+    // fetchWallets 后台执行，不阻塞导航
+    get().fetchWallets();
     return walletId;
   },
 
@@ -331,31 +332,32 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // 1. 基于助记词确定性生成 walletId
     const walletId = generateIdentifier(cleaned);
 
-    // 2. 在服务端注册钱包（传 source + walletId + alias）
-    await syncService.registerWallet("IMPORT", walletId, alias);
+    // 2. 网络注册 + PBKDF2 hash 并行（无依赖关系）
+    const [, passwordHash, mnemonicHash] = await Promise.all([
+      syncService.registerWallet("IMPORT", walletId, alias),
+      Promise.resolve(hashPassword(password)),
+      Promise.resolve(hashMnemonic(cleaned)),
+    ]);
 
-    // 3. 生成密码 hash 和助记词 hash
-    const passwordHash = hashPassword(password);
-    const mnemonicHash = hashMnemonic(cleaned);
+    // 3. SQLite 写入 + SecureStore 存助记词并行
+    await Promise.all([
+      localWalletService.createWallet({
+        id: walletId,
+        name: alias,
+        source: "IMPORT",
+        password_hash: passwordHash,
+        password_hint: passwordHint || "",
+        mnemonic_hash: mnemonicHash,
+      }),
+      SecureStore.setItemAsync(mnemonicKey(walletId), cleaned),
+    ]);
 
-    // 4. 在本地 SQLite 创建钱包记录
-    await localWalletService.createWallet({
-      id: walletId,
-      name: alias,
-      source: "IMPORT",
-      password_hash: passwordHash,
-      password_hint: passwordHint || "",
-      mnemonic_hash: mnemonicHash,
-    });
-
-    // 5. 安全存储助记词
-    await SecureStore.setItemAsync(mnemonicKey(walletId), cleaned);
-
-    // 6. 导入钱包 = 用户已持有助记词，直接标记为已备份
+    // 4. 导入钱包 = 用户已持有助记词，直接标记为已备份
     await get().backupWallet(walletId);
 
     set({ mnemonic: mnemonicInput, hasWallets: true });
-    await get().fetchWallets();
+    // fetchWallets 后台执行，不阻塞导航
+    get().fetchWallets();
     return walletId;
   },
 
@@ -382,25 +384,23 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   /** Delete wallet — delete local + server */
   deleteWallet: async (walletId: string) => {
     try {
-      // 删除本地 SQLite 数据
-      await localWalletService.deleteWallet(walletId);
-
-      // 删除本地助记词和备份标记
-      await SecureStore.deleteItemAsync(mnemonicKey(walletId));
-      await SecureStore.deleteItemAsync(backedUpKey(walletId));
-
       // 从内存 Set 中移除备份标记
       const backedUpSet = new Set(get().backedUpWallets);
       backedUpSet.delete(walletId);
       set({ backedUpWallets: backedUpSet });
 
-      // 删除服务端钱包（取消订阅）
-      await syncService.deleteWallet(walletId);
+      // 本地 SQLite 删除 + SecureStore 删除 + 服务端删除并行
+      await Promise.all([
+        localWalletService.deleteWallet(walletId),
+        SecureStore.deleteItemAsync(mnemonicKey(walletId)),
+        SecureStore.deleteItemAsync(backedUpKey(walletId)),
+        syncService.deleteWallet(walletId),
+      ]);
 
-      // 删除钱包关联的本地通知
-      await localNotificationService.deleteWalletNotifications(walletId);
-
-      await get().fetchWallets();
+      // 通知清理后台执行，不阻塞
+      localNotificationService.deleteWalletNotifications(walletId);
+      // 刷新钱包列表后台执行
+      get().fetchWallets();
     } catch {
       // silent
     }
