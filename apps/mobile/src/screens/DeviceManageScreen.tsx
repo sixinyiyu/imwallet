@@ -422,7 +422,10 @@ export default function DeviceManageScreen() {
                                     <Text style={styles.txTime}>{formatTime(t.createdAt)}</Text>
                                   </View>
                                   {isSend && feeNum > 0 && (
-                                    <Text style={styles.txFee} numberOfLines={1} ellipsizeMode="tail">手续费 {trimAmount(feeNum)} · 实到 {trimAmount(receivedNum)}</Text>
+                                    <View style={styles.txFeeRow}>
+                                      <Text style={styles.txFeeItem}>手续费 {trimAmount(feeNum)}</Text>
+                                      <Text style={styles.txFeeItem}>实到 {trimAmount(receivedNum)}</Text>
+                                    </View>
                                   )}
                                 </View>
                                 </View>
@@ -577,8 +580,8 @@ const styles = StyleSheet.create({
   walletCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
+    padding: 14,
+    marginBottom: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
@@ -609,9 +612,9 @@ const styles = StyleSheet.create({
   chevronExpanded: {
     transform: [{ rotate: "90deg" }],
   },
-  walletAlias: { fontSize: 16, fontWeight: "600", color: "#1F2937", flex: 1, minWidth: 0 },
-  walletNameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
-  walletBalanceValue: { fontSize: 15, fontWeight: "700", color: "#1F2937", flexShrink: 0 },
+  walletAlias: { fontSize: 15, fontWeight: "600", color: "#1F2937", flex: 1, minWidth: 0 },
+  walletNameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 6 },
+  walletBalanceValue: { fontSize: 13, fontWeight: "700", color: "#1F2937", flexShrink: 0 },
   walletIdentifier: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
   walletMetaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   walletMeta: { fontSize: 13, color: "#9CA3AF" },
@@ -645,15 +648,15 @@ const styles = StyleSheet.create({
   cardSubscribeBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
     backgroundColor: "#F0F7FF",
     borderWidth: 1,
     borderColor: "#DBEAFE",
   },
-  cardSubscribeText: { fontSize: 13, fontWeight: "500", color: "#287220" },
+  cardSubscribeText: { fontSize: 12, fontWeight: "500", color: "#287220" },
 
   // ── 关联设备 ──
   deviceSection: {
@@ -742,14 +745,16 @@ const styles = StyleSheet.create({
   txSymbol: { fontSize: 15, fontWeight: "600", color: "#1F2937" },
   txAmount: { fontSize: 15, fontWeight: "700", color: "#1F2937" },
   txDirection: { fontSize: 13, fontWeight: "500", marginLeft: 6 },
-  txFee: { fontSize: 12, color: "#9CA3AF", flex: 1, textAlign: "right" },
+  txFee: { fontSize: 12, color: "#9CA3AF" },
   txAddrRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   txAddr: { fontSize: 13, color: "#6B7280", fontFamily: "monospace", flex: 1 },
   txAddrLabel: { fontSize: 13, fontWeight: "500", color: "#374151", marginRight: 6 },
   txArrow: { fontSize: 13, color: "#9CA3AF", fontWeight: "500" },
-  txBottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8, gap: 8 },
-  txBottomLeft: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
+  txBottomRow: { flexDirection: "column", marginTop: 8, gap: 4 },
+  txBottomLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
   txTime: { fontSize: 12, color: "#9CA3AF" },
+  txFeeRow: { flexDirection: "row", justifyContent: "flex-end", gap: 12 },
+  txFeeItem: { fontSize: 12, color: "#9CA3AF" },
 
   // ── 加载更多 ──
   loadMoreBtn: { paddingVertical: 10, alignItems: "center" },

@@ -829,7 +829,7 @@ const styles = StyleSheet.create({
   },
   identifierRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "flex-end",
     marginTop: 2,
   },
@@ -844,7 +844,6 @@ const styles = StyleSheet.create({
   identifierCopyIcon: {
     flexShrink: 0,
     marginLeft: 6,
-    marginTop: 1,
   },
   hintRight: {
     flexDirection: "row",
