@@ -270,7 +270,9 @@ export default function WalletDetailScreen() {
                 <Text style={styles.identifierValue} numberOfLines={2} ellipsizeMode="middle" selectable>
                   {wallet.id}
                 </Text>
-                <CopyIcon size={16} color="#9CA3AF" />
+                <View style={styles.identifierCopyIcon}>
+                  <CopyIcon size={16} color="#9CA3AF" />
+                </View>
               </View>
             </TouchableOpacity>
           </View>
@@ -838,6 +840,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     flexShrink: 1,
     textAlign: "right",
+  },
+  identifierCopyIcon: {
+    flexShrink: 0,
+    marginLeft: 6,
+    marginTop: 1,
   },
   hintRight: {
     flexDirection: "row",
