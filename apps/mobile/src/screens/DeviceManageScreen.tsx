@@ -570,7 +570,7 @@ export default function DeviceManageScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F8" },
-  listContent: { padding: 20, paddingBottom: 24 },
+  listContent: { padding: 12, paddingBottom: 20 },
   endHint: { textAlign: "center", paddingVertical: 20, fontSize: 13, color: "#D1D5DB" },
 
   // ── 钱包卡片 ──
