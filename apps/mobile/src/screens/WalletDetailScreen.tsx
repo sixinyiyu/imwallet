@@ -257,7 +257,7 @@ export default function WalletDetailScreen() {
 
           {/* 标识符 */}
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>标识符</Text>
+            <Text style={[styles.infoLabel, styles.identifierLabel]}>标识符</Text>
             <TouchableOpacity
               onPress={async () => {
                 const ok = await copyToClipboard(wallet.id);
@@ -784,6 +784,7 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: "row",
     alignItems: "flex-start",
+    justifyContent: "space-between",
     paddingVertical: 10,
   },
   infoLeft: {
@@ -795,14 +796,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6B7280",
     lineHeight: 20,
-    width: "30%",
   },
   infoValue: {
     fontSize: 14,
     color: "#1F2937",
     fontWeight: "500",
     lineHeight: 20,
-    flex: 1,
   },
   infoRightWithIcon: {
     flexDirection: "row",
@@ -817,6 +816,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
   },
   // 标识符行（标签占30%，值区域占70%，CopyIcon内联跟在文本后面，文本右对齐换行）
+  identifierLabel: {
+    marginRight: "30%",
+  },
   identifierValueWrap: {
     flex: 1,
   },
