@@ -26,7 +26,7 @@ struct ChainsResponse {
 async fn get_available_chains(
     State(state): State<AppState>,
 ) -> Result<Json<ChainsResponse>, AppError> {
-    let chains = account_service::get_available_chains(state.db.clone()).await?;
+    let chains = account_service::get_available_chains_cached(state.db.clone()).await?;
     Ok(Json(ChainsResponse { chains }))
 }
 

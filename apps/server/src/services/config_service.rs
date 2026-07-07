@@ -59,6 +59,21 @@ fn invalidate_cache(key: &str) {
         let mut guard = cache.lock().unwrap();
         guard.remove(key);
     }
+    invalidate_all_configs();
+}
+
+/// 全量配置缓存
+#[allow(clippy::type_complexity)]
+static ALL_CONFIGS_CACHE: tokio::sync::OnceCell<
+    std::sync::Mutex<Option<(Vec<AppConfigEntity>, Instant)>>,
+> = tokio::sync::OnceCell::const_new();
+
+/// 清除全量配置缓存
+fn invalidate_all_configs() {
+    if let Some(cache) = ALL_CONFIGS_CACHE.get() {
+        let mut guard = cache.lock().unwrap();
+        *guard = None;
+    }
 }
 
 /// 清除所有缓存
@@ -70,10 +85,28 @@ fn invalidate_all() {
     }
 }
 
+/// 获取全部配置（带 30s TTL 缓存）
 pub async fn get_all_configs(rb: Arc<RBatis>) -> Result<Vec<AppConfigEntity>, AppError> {
-    query(&rb, "SELECT * FROM app_configs ORDER BY key", vals![])
-        .await
-        .map_err(AppError::from)
+    let cache = ALL_CONFIGS_CACHE
+        .get_or_init(|| async { std::sync::Mutex::new(None) })
+        .await;
+    {
+        let guard = cache.lock().unwrap();
+        if let Some((configs, fetched_at)) = guard.as_ref() {
+            if fetched_at.elapsed() < CONFIG_CACHE_TTL {
+                return Ok(configs.clone());
+            }
+        }
+    }
+    let configs: Vec<AppConfigEntity> =
+        query(&rb, "SELECT * FROM app_configs ORDER BY key", vals![])
+            .await
+            .map_err(AppError::from)?;
+    {
+        let mut guard = cache.lock().unwrap();
+        *guard = Some((configs.clone(), Instant::now()));
+    }
+    Ok(configs)
 }
 
 pub async fn update_config(

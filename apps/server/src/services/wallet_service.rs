@@ -66,19 +66,22 @@ pub async fn get_wallet(rb: Arc<RBatis>, wallet_id: &str) -> Result<Option<Walle
         .map_err(AppError::from)
 }
 
-/// 获取钱包详情 + 余额聚合（单次查询合并钱包信息和余额，减少 DB 往返）
+/// 获取钱包详情 + 余额聚合（并行查询，减少总耗时）
 pub async fn get_wallet_with_balance(
     rb: Arc<RBatis>,
     wallet_id: &str,
     cny_rate: Decimal,
 ) -> Result<Option<(Wallet, WalletBalance)>, AppError> {
-    let wallet = get_wallet(rb.clone(), wallet_id).await?;
-    let wallet = match wallet {
-        Some(w) => w,
-        None => return Ok(None),
-    };
-    let balance = get_wallet_balance(rb, wallet_id, cny_rate).await?;
-    Ok(Some((wallet, balance)))
+    let (wallet, balance) = tokio::join!(
+        get_wallet(rb.clone(), wallet_id),
+        get_wallet_balance(rb, wallet_id, cny_rate),
+    );
+    let wallet = wallet?;
+    let balance = balance?;
+    match wallet {
+        Some(w) => Ok(Some((w, balance))),
+        None => Ok(None),
+    }
 }
 
 /// 删除钱包（事务内同时删除订阅和钱包，保证原子性）
