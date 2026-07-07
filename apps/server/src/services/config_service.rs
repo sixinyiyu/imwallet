@@ -7,6 +7,68 @@ use crate::models::AppConfigEntity;
 use rbatis::RBatis;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+/// 配置缓存项
+struct CachedConfig {
+    value: String,
+    fetched_at: Instant,
+}
+
+/// 配置缓存：key → CachedConfig
+/// TTL 30 秒，平衡实时性与性能
+static CONFIG_CACHE: tokio::sync::OnceCell<
+    std::sync::Mutex<std::collections::HashMap<String, CachedConfig>>,
+> = tokio::sync::OnceCell::const_new();
+
+const CONFIG_CACHE_TTL: Duration = Duration::from_secs(30);
+
+/// 从缓存获取配置，未命中或过期则查 DB 并缓存
+async fn get_config_cached(rb: Arc<RBatis>, key: &str) -> Result<String, AppError> {
+    let cache = CONFIG_CACHE
+        .get_or_init(|| async { std::sync::Mutex::new(std::collections::HashMap::new()) })
+        .await;
+    {
+        let guard = cache.lock().unwrap();
+        if let Some(c) = guard.get(key) {
+            if c.fetched_at.elapsed() < CONFIG_CACHE_TTL {
+                return Ok(c.value.clone());
+            }
+        }
+    }
+    // 缓存未命中或过期，查 DB
+    let row: Option<AppConfigEntity> =
+        query_one(&rb, "SELECT * FROM app_configs WHERE key = $1", vals![key]).await?;
+    let value = row.map(|r| r.value).unwrap_or_default();
+    {
+        let mut guard = cache.lock().unwrap();
+        guard.insert(
+            key.to_string(),
+            CachedConfig {
+                value: value.clone(),
+                fetched_at: Instant::now(),
+            },
+        );
+    }
+    Ok(value)
+}
+
+/// 清除指定 key 的缓存（配置更新时调用）
+fn invalidate_cache(key: &str) {
+    if let Some(cache) = CONFIG_CACHE.get() {
+        let mut guard = cache.lock().unwrap();
+        guard.remove(key);
+    }
+}
+
+/// 清除所有缓存
+#[allow(dead_code)]
+fn invalidate_all() {
+    if let Some(cache) = CONFIG_CACHE.get() {
+        let mut guard = cache.lock().unwrap();
+        guard.clear();
+    }
+}
 
 pub async fn get_all_configs(rb: Arc<RBatis>) -> Result<Vec<AppConfigEntity>, AppError> {
     query(&rb, "SELECT * FROM app_configs ORDER BY key", vals![])
@@ -19,39 +81,27 @@ pub async fn update_config(
     key: &str,
     value: &str,
 ) -> Result<AppConfigEntity, AppError> {
-    query_one(
+    let result: AppConfigEntity = query_one(
         &rb,
         "INSERT INTO app_configs (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW() RETURNING *",
         vals![key, value],
     )
     .await?
-    .ok_or_else(|| AppError::NotFound("config item not found".into()))
+    .ok_or_else(|| AppError::NotFound("config item not found".into()))?;
+    invalidate_cache(key);
+    Ok(result)
 }
 
 pub async fn is_recharge_permitted(rb: Arc<RBatis>, device_id: &str) -> Result<bool, AppError> {
-    let row: Option<AppConfigEntity> = query_one(
-        &rb,
-        "SELECT * FROM app_configs WHERE key = $1",
-        vals!["recharge_allowed_devices"],
-    )
-    .await?;
-    let allowed: Vec<String> = row
-        .and_then(|c| serde_json::from_str::<Vec<String>>(&c.value).ok())
+    let value = get_config_cached(rb, "recharge_allowed_devices").await?;
+    let allowed: Vec<String> = serde_json::from_str::<Vec<String>>(&value)
+        .ok()
         .unwrap_or_default();
     Ok(!allowed.is_empty() && allowed.iter().any(|d| d == device_id))
 }
 
 pub async fn verify_service_password(rb: Arc<RBatis>, password: &str) -> Result<bool, AppError> {
-    // 直接查 DB，不做内存缓存
-    // 管理密码验证频率很低，DB 主键查询毫秒级，缓存收益微乎其微
-    // 不缓存的好处：运维直接改数据库密码后立即生效，无需等待缓存过期
-    let row: Option<AppConfigEntity> = query_one(
-        &rb,
-        "SELECT * FROM app_configs WHERE key = $1",
-        vals!["server_pwd"],
-    )
-    .await?;
-    let stored_pwd = row.map(|r| r.value).unwrap_or_default();
+    let stored_pwd = get_config_cached(rb, "server_pwd").await?;
     if stored_pwd.is_empty() {
         return Ok(false);
     }
@@ -59,13 +109,7 @@ pub async fn verify_service_password(rb: Arc<RBatis>, password: &str) -> Result<
 }
 
 pub async fn get_activation_key(rb: Arc<RBatis>) -> Result<String, AppError> {
-    let row: Option<AppConfigEntity> = query_one(
-        &rb,
-        "SELECT * FROM app_configs WHERE key = $1",
-        vals!["admin_activation_key"],
-    )
-    .await?;
-    Ok(row.map(|r| r.value).unwrap_or_default())
+    get_config_cached(rb, "admin_activation_key").await
 }
 
 /// 验证前端传来的 feedback code 是否与当前 admin_activation_key 匹配

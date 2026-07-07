@@ -281,11 +281,10 @@ async fn get_wallet(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<WalletDetailResponse>, AppError> {
-    let wallet = wallet_service::get_wallet(state.db.clone(), &id)
-        .await?
-        .ok_or_else(|| AppError::NotFound("钱包不存在".into()))?;
     let cny_rate = crate::services::fiat_service::get_cached_cny_rate(&state);
-    let balance = wallet_service::get_wallet_balance(state.db.clone(), &id, cny_rate).await?;
+    // 合并为单次查询：钱包详情 + 余额聚合
+    let result = wallet_service::get_wallet_with_balance(state.db.clone(), &id, cny_rate).await?;
+    let (wallet, balance) = result.ok_or_else(|| AppError::NotFound("钱包不存在".into()))?;
     Ok(Json(WalletDetailResponse {
         id: wallet.id,
         alias: wallet.alias,
