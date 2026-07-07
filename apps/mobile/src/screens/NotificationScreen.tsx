@@ -17,7 +17,7 @@ import { NotificationSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import type { Notification } from "../types";
 import { formatTime } from "../utils/date";
-import { saveLogToLocal } from "../services/logService";
+// saveLogToLocal removed — not a core interface
 import { getErrorMessage } from "../utils/format";
 
 function getTypeIcon(type: string) {
@@ -185,8 +185,8 @@ export default function NotificationScreen() {
     try {
       const data = await localNotificationService.getAllNotifications();
       setNotifications(data);
-    } catch (err: unknown) {
-      saveLogToLocal("info", `[NotificationScreen] loadLocal failed: ${getErrorMessage(err, "加载失败")}`);
+    } catch {
+      // 通知加载失败不影响核心功能
     }
   };
 
@@ -195,8 +195,8 @@ export default function NotificationScreen() {
     try {
       await notificationSyncService.syncNotifications();
       await loadLocal();
-    } catch (err: unknown) {
-      saveLogToLocal("info", `[NotificationScreen] onRefresh failed: ${getErrorMessage(err, "刷新失败")}`);
+    } catch {
+      // 通知刷新失败不影响核心功能
     }
     setLoading(false);
   };

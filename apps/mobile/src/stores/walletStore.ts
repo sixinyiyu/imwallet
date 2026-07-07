@@ -232,11 +232,18 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         };
       });
 
+      // 保持用户已选择的钱包，如果该钱包仍在列表中；否则取第一个
+      const currentActive = get().activeWallet;
+      const active = currentActive && wallets.some((w) => w.id === currentActive.id)
+        ? wallets.find((w) => w.id === currentActive.id)!
+        : wallets[0] || null;
+
       // 复用内存中的备份标记（不再重复读取 SecureStore）
       const backedUpSet = new Set(get().backedUpWallets);
 
       set({
         wallets,
+        activeWallet: active,
         hasWallets: wallets.length > 0,
         hasFetched: true,
         backedUpWallets: backedUpSet,
@@ -281,11 +288,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     try {
       mnemonic = await generateMnemonic();
     } catch (err: unknown) {
-      saveLogToLocal("mnemonic", `[createWallet] generateMnemonic threw: ${getErrorMessage(err, "未知错误")}`);
+      saveLogToLocal("crash", `[createWallet] generateMnemonic FAILED: error=${getErrorMessage(err, "未知错误")}`);
       throw new Error("助记词生成失败，请重试");
     }
     if (!mnemonic || mnemonic.trim().split(/\s+/).length !== 12) {
-      saveLogToLocal("mnemonic", `[createWallet] generateMnemonic invalid`);
+      saveLogToLocal("crash", `[createWallet] generateMnemonic invalid: wordCount=${mnemonic?.trim().split(/\s+/).length || 0}`);
       throw new Error("助记词生成失败，请重试");
     }
 

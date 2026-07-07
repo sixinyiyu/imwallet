@@ -61,7 +61,7 @@ export default function PasswordDrawer({
     >
       <KeyboardAvoidingView
         style={styles.drawerOverlay}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <Pressable style={styles.drawerBackdrop} onPress={handleClose} />
         <View style={styles.drawerContent}>

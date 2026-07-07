@@ -13,7 +13,7 @@ import { localAddressService } from "../services/localAddressService";
 import { useAlert } from "../hooks/useAlert";
 import { detectNetwork } from "../utils/address";
 import { TronIcon, EthIcon, BtcIcon, ContactIcon, CopyIcon, AddContactIcon } from "../components/icons";
-import { saveLogToLocal } from "../services/logService";
+// saveLogToLocal removed — not a core interface
 import { getErrorMessage } from "../utils/format";
 import { copyToClipboard } from "../utils/clipboard";
 import { AddressBookSkeleton } from "../components/Skeleton";
@@ -95,8 +95,8 @@ export default function AddressBookScreen() {
     try {
       const data = await localAddressService.getAllContacts();
       setContacts(data);
-    } catch (err) {
-      saveLogToLocal("crash", `[AddressBook] loadContacts failed: ${(err as Error)?.message || String(err)}`);
+    } catch {
+      // 地址本加载失败不影响核心功能
     }
     setLoading(false);
   };
@@ -240,6 +240,11 @@ export default function AddressBookScreen() {
         }
         contentContainerStyle={
           contacts.length === 0 ? styles.emptyList : undefined
+        }
+        ListFooterComponent={
+          contacts.length > 0 ? (
+            <Text style={styles.endHint}>— 已加载全部 —</Text>
+          ) : null
         }
       />
 
@@ -487,6 +492,7 @@ const styles = StyleSheet.create({
   toast: { backgroundColor: "rgba(0,0,0,0.75)", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
   toastText: { color: "#FFFFFF", fontSize: 14 },
   emptyList: { flexGrow: 1 },
+  endHint: { textAlign: "center", paddingVertical: 20, fontSize: 13, color: "#D1D5DB" },
 });
 
 const modalStyles = StyleSheet.create({

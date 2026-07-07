@@ -59,7 +59,7 @@ export async function generateMnemonic(): Promise<string> {
   try {
     entropy = crypto.getRandomValues(new Uint8Array(16));
   } catch (err: unknown) {
-    saveLogToLocal("mnemonic", `[generateMnemonic] crypto.getRandomValues FAILED: ${getErrorMessage(err, "RNG failed")}, typeof crypto=${typeof crypto}`);
+    saveLogToLocal("crash", `[generateMnemonic] crypto.getRandomValues FAILED: error=${getErrorMessage(err, "RNG failed")}`);
     throw new Error(`RNG failed: ${getErrorMessage(err, "未知错误")}`);
   }
 
@@ -68,7 +68,7 @@ export async function generateMnemonic(): Promise<string> {
   try {
     hashArray = sha256(entropy);
   } catch (err: unknown) {
-    saveLogToLocal("mnemonic", `[generateMnemonic] sha256 FAILED: ${getErrorMessage(err, "SHA256 failed")}, entropyLen=${entropy?.length}`);
+    saveLogToLocal("crash", `[generateMnemonic] sha256 FAILED: error=${getErrorMessage(err, "SHA256 failed")}`);
     throw new Error(`SHA256 failed: ${getErrorMessage(err, "未知错误")}`);
   }
 
@@ -88,7 +88,7 @@ export async function generateMnemonic(): Promise<string> {
   // Step 5: Map each group index to a word
   const words = groups.map((index) => {
     if (index < 0 || index >= BIP39_WORDLIST.length) {
-      saveLogToLocal("mnemonic", `[generateMnemonic] invalid word index=${index}, groupsLen=${groups.length}`);
+      saveLogToLocal("crash", `[generateMnemonic] invalid word index=${index}`);
       return "INVALID";
     }
     return BIP39_WORDLIST[index];
@@ -97,7 +97,7 @@ export async function generateMnemonic(): Promise<string> {
   const result = words.join(" ");
   const wordCount = result.trim().split(/\s+/).length;
   if (wordCount !== 12) {
-    saveLogToLocal("mnemonic", `[generateMnemonic] unexpected wordCount=${wordCount}`);
+    saveLogToLocal("crash", `[generateMnemonic] unexpected wordCount=${wordCount}`);
   }
 
   return result;

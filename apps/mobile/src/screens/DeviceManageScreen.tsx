@@ -23,8 +23,8 @@ import EmptyState from "../components/EmptyState";
 import { formatTime } from "../utils/date";
 import { getPlaintextPassword, clearAdminAuthCache } from "../utils/adminAuthCache";
 import { useWalletStore } from "../stores/walletStore";
-import { formatCny, getErrorMessage } from "../utils/format";
-import { saveLogToLocal } from "../services/logService";
+import { formatCny, getErrorMessage, trimAmount } from "../utils/format";
+// saveLogToLocal removed — not a core interface
 import type { RouteProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../types/navigation";
 
@@ -154,12 +154,10 @@ export default function DeviceManageScreen() {
     setDataLoading(true);
     try {
       const txPromise = adminService.getWalletTransactions(walletId, adminPwd, 1, 20);
-      const addrPromise = walletService.getWalletAddresses(walletId).catch((err: unknown) => {
-        saveLogToLocal("info", `[DeviceManage] getWalletAddresses failed: ${getErrorMessage(err, "未知错误")}`);
+      const addrPromise = walletService.getWalletAddresses(walletId).catch(() => {
         return { addresses: [] };
       });
-      const feePromise = configService.getFeeConfig().catch((err: unknown) => {
-        saveLogToLocal("info", `[DeviceManage] getFeeConfig failed: ${getErrorMessage(err, "未知错误")}`);
+      const feePromise = configService.getFeeConfig().catch(() => {
         return null;
       });
       const rechargePromise = rechargePermitted
@@ -295,7 +293,7 @@ export default function DeviceManageScreen() {
                   <View style={styles.walletNameRow}>
                     <View style={styles.walletNameLeft}>
                       <Text style={styles.walletAlias}>{w.alias}</Text>
-                      <Text style={styles.walletBalanceValue}>¥{formatCny(w.totalBalanceCny)}</Text>
+                      <Text style={styles.walletBalanceValue} numberOfLines={1}>¥{formatCny(w.totalBalanceCny)}</Text>
                     </View>
                     {/* 未订阅 → 右侧显示订阅按钮 */}
                     {walletTag === "none" && (
@@ -412,7 +410,7 @@ export default function DeviceManageScreen() {
                                     <Text style={[styles.txDirection, { color: directionColor }]}>{directionLabel}</Text>
                                   </View>
                                   <Text style={[styles.txAmount, { color: directionColor }]}>
-                                    {prefix}{displayAmount.toFixed(6)}
+                                    {prefix}{trimAmount(displayAmount)}
                                   </Text>
                                 </View>
                                 <View style={styles.txAddrRow}>
@@ -430,7 +428,7 @@ export default function DeviceManageScreen() {
                                     <Text style={styles.txTime}>{formatTime(t.createdAt)}</Text>
                                   </View>
                                   {isSend && feeNum > 0 && (
-                                    <Text style={styles.txFee}>手续费 {feeNum.toFixed(6)} · 实到 {receivedNum.toFixed(6)}</Text>
+                                    <Text style={styles.txFee}>手续费 {trimAmount(feeNum)} · 实到 {trimAmount(receivedNum)}</Text>
                                   )}
                                 </View>
                               </View>
@@ -610,10 +608,10 @@ const styles = StyleSheet.create({
   chevronExpanded: {
     transform: [{ rotate: "90deg" }],
   },
-  walletAlias: { fontSize: 16, fontWeight: "600", color: "#1F2937" },
+  walletAlias: { fontSize: 16, fontWeight: "600", color: "#1F2937", flexShrink: 1 },
   walletNameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  walletNameLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
-  walletBalanceValue: { fontSize: 14, fontWeight: "700", color: "#1F2937" },
+  walletNameLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
+  walletBalanceValue: { fontSize: 14, fontWeight: "700", color: "#1F2937", flexShrink: 0 },
   walletIdentifier: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
   walletMetaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   walletMeta: { fontSize: 13, color: "#9CA3AF" },

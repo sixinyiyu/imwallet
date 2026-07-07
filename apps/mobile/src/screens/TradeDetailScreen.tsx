@@ -25,8 +25,8 @@ import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import { formatFullTime } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";
-import { getErrorMessage } from "../utils/format";
-import { saveLogToLocal } from "../services/logService";
+import { getErrorMessage, trimAmount } from "../utils/format";
+// saveLogToLocal removed — not a core interface
 
 type Route = RouteProp<RootStackParamList, "TradeDetail">;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -58,8 +58,8 @@ export default function TradeDetailScreen() {
         map.set(c.address, c);
       }
       setContactMap(map);
-    }).catch((err: unknown) => {
-      saveLogToLocal("info", `[TradeDetail] getAllContacts failed: ${getErrorMessage(err, "未知错误")}`);
+    }).catch(() => {
+      // 联系人加载失败不影响核心功能
     });
   }, []);
 
@@ -234,7 +234,7 @@ export default function TradeDetailScreen() {
           address={tx.toAddress}
           alias={toName}
           token={tx.tokenSymbol}
-          amount={`+${receivedAmount.toFixed(6)}`}
+          amount={`+${trimAmount(receivedAmount)}`}
           isOut={false}
           isCurrentUser={isReceiver}
         />
@@ -251,13 +251,13 @@ export default function TradeDetailScreen() {
         {isFeeDeducted ? (
           <>
             <View style={styles.divider} />
-            <InfoRow label="实际到账" value={`${receivedAmount.toFixed(6)} ${tx.tokenSymbol}`} />
+            <InfoRow label="实际到账" value={`${trimAmount(receivedAmount)} ${tx.tokenSymbol}`} />
           </>
         ) : null}
         <View style={styles.cardDivider} />
         <InfoRow
           label={isFeeDeducted ? "发送方支付" : "总计（含手续费）"}
-          value={`${senderTotal.toFixed(6)} ${tx.tokenSymbol}`}
+          value={`${trimAmount(senderTotal)} ${tx.tokenSymbol}`}
           bold
         />
         {tx.memo ? (
@@ -339,7 +339,7 @@ function InfoRow({
       <View style={ir.valueWrap}>
         <Text
           style={[ir.value, bold && ir.bold]}
-          numberOfLines={2}
+          numberOfLines={1}
         >
           {value}
         </Text>
@@ -422,6 +422,6 @@ const ir = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 },
   label: { fontSize: 14, color: "#6B7280", marginRight: 12 },
   valueWrap: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end" },
-  value: { fontSize: 14, color: "#1F2937", fontWeight: "500", textAlign: "right" },
+  value: { fontSize: 14, color: "#1F2937", fontWeight: "500", textAlign: "right", flexShrink: 1 },
   bold: { fontSize: 16, fontWeight: "700" },
 });

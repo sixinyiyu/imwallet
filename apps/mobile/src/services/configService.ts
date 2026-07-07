@@ -5,7 +5,7 @@ import { encryptPassword } from "../utils/rsaEncrypt";
 import { cacheAdminAuth, cacheAdminRoutePrefix } from "../utils/adminAuthCache";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { gcm } from "@noble/ciphers/aes.js";
-import { saveLogToLocal } from "./logService";
+// saveLogToLocal removed — not a core interface
 
 export interface FeeConfig {
   feeRate: number;
@@ -219,8 +219,8 @@ export const configService = {
       // 4. 将解密后的前缀缓存到 SecureStore
       const prefix = new TextDecoder().decode(plaintext);
       await cacheAdminRoutePrefix(prefix);
-    } catch (e) {
-      saveLogToLocal("info", `[configService] decrypt route prefix failed: ${e instanceof Error ? e.message : String(e)}`);
+    } catch {
+      // 路由前缀解密失败不影响核心功能，静默处理
     }
   },
 };

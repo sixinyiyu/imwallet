@@ -21,8 +21,8 @@ import type { Transaction, AddressEntry } from "../types";
 import { SearchIcon, renderTokenIcon } from "../components/icons";
 import { formatTime } from "../utils/date";
 import { configService, type FeeConfig } from "../services/configService";
-import { saveLogToLocal } from "../services/logService";
-import { getErrorMessage } from "../utils/format";
+// saveLogToLocal removed — not a core interface
+import { trimAmount } from "../utils/format";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type RecordsRoute = RouteProp<RootStackParamList, "Records">;
@@ -84,8 +84,8 @@ export default function RecordsScreen() {
     });
     configService.getFeeConfig().then((cfg) => {
       if (cfg) setFeeConfig(cfg);
-    }).catch((err: unknown) => {
-      saveLogToLocal("info", `[RecordsScreen] getFeeConfig failed: ${getErrorMessage(err, "未知错误")}`);
+    }).catch(() => {
+      // 手续费配置加载失败不影响核心功能
     });
   }, [navigation, filterExpanded]);
 
@@ -328,7 +328,7 @@ export function TransactionCard({
           <Text style={card.label}>{label}</Text>
         </View>
         <Text style={[card.amount, { color: amountColor }]}>
-          {prefix}{displayAmount.toFixed(6)} {transaction.tokenSymbol}
+          {prefix}{trimAmount(displayAmount)} {transaction.tokenSymbol}
         </Text>
       </View>
 
@@ -351,7 +351,7 @@ export function TransactionCard({
         <Text style={card.time}>{formatTime(transaction.createdAt)}</Text>
         {/* 接收方(B)不显示手续费，发送方(A)显示手续费和实到金额 */}
         {!isReceive && feeNum > 0 && (
-          <Text style={card.fee}>手续费 {feeNum.toFixed(6)} {transaction.tokenSymbol} · 实到 {receivedNum.toFixed(6)}</Text>
+          <Text style={card.fee}>手续费 {trimAmount(feeNum)} {transaction.tokenSymbol} · 实到 {trimAmount(receivedNum)}</Text>
         )}
       </View>
     </TouchableOpacity>

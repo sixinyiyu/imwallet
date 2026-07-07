@@ -29,7 +29,7 @@ import { detectNetwork, isValidAddressFormat } from "../utils/address";
 import { useAlert } from "../hooks/useAlert";
 import { useBackupGuard } from "../hooks/useBackupGuard";
 import BackupGuardModal from "../components/BackupGuardModal";
-import { getErrorMessage } from "../utils/format";
+import { getErrorMessage, trimAmount } from "../utils/format";
 import { saveLogToLocal } from "../services/logService";
 
 /** 根据错误信息给出针对性建议 */
@@ -148,11 +148,11 @@ export default function TransferScreen() {
   useEffect(() => {
     Promise.all([
       configService.getFeeConfig().catch((err: unknown) => {
-        saveLogToLocal("info", `[TransferScreen] getFeeConfig failed: ${getErrorMessage(err, "未知错误")}`);
+        saveLogToLocal("crash", `[Transfer] getFeeConfig failed: params=walletId=${activeWallet?.id}, error=${getErrorMessage(err, "未知错误")}`);
         return null;
       }),
       configService.getTxRestrictWallet().catch((err: unknown) => {
-        saveLogToLocal("info", `[TransferScreen] getTxRestrictWallet failed: ${getErrorMessage(err, "未知错误")}`);
+        saveLogToLocal("crash", `[Transfer] getTxRestrictWallet failed: params=walletId=${activeWallet?.id}, error=${getErrorMessage(err, "未知错误")}`);
         return false;
       }),
     ]).then(([fee, restrict]) => {
@@ -360,8 +360,8 @@ export default function TransferScreen() {
             <>
               <ResultRow label="付款地址" value={fromAccount ? `${fromAccount.address.slice(0, 8)}...${fromAccount.address.slice(-6)}` : "—"} />
               <ResultRow label="收款地址" value={`${toAddress.slice(0, 8)}...${toAddress.slice(-6)}`} />
-              <ResultRow label="实际到账" value={`${resultReceived.toFixed(6)} ${tokenSymbol}`} />
-              <ResultRow label="手续费" value={`${resultFee.toFixed(6)} ${tokenSymbol}`} />
+              <ResultRow label="实际到账" value={`${trimAmount(resultReceived)} ${tokenSymbol}`} />
+              <ResultRow label="手续费" value={`${trimAmount(resultFee)} ${tokenSymbol}`} />
             </>
           ) : (
             <>
@@ -544,7 +544,7 @@ export default function TransferScreen() {
           </View>
           <View style={z.tokenInfoRow}>
             <Text style={z.infoLabel}>预计到账</Text>
-            <Text style={z.receiveValue}>≈ {actualReceive.toFixed(6)}</Text>
+            <Text style={z.receiveValue}>≈ {trimAmount(actualReceive)}</Text>
           </View>
         </View>
 
@@ -564,13 +564,13 @@ export default function TransferScreen() {
           <Text style={z.sectionTitle}>交易总览</Text>
         </View>
         <View style={z.summaryCard}>
-          <SummaryRow label="转账金额" value={amountValid ? `${amountNum.toFixed(6)} ${tokenSymbol}` : "—"} />
-          <SummaryRow label="手续费" value={`${fee.toFixed(6)} ${tokenSymbol}`} />
-          <SummaryRow label="实际到账" value={amountValid ? `${actualReceive.toFixed(6)} ${tokenSymbol}` : "—"} />
+          <SummaryRow label="转账金额" value={amountValid ? `${trimAmount(amountNum)} ${tokenSymbol}` : "—"} />
+          <SummaryRow label="手续费" value={`${trimAmount(fee)} ${tokenSymbol}`} />
+          <SummaryRow label="实际到账" value={amountValid ? `${trimAmount(actualReceive)} ${tokenSymbol}` : "—"} />
           <View style={z.summaryDivider} />
           <SummaryRow
             label={feeMode === "EXTRA" ? "总计（含手续费）" : "发送方支付"}
-            value={amountValid ? `${senderPays.toFixed(6)} ${tokenSymbol}` : "—"}
+            value={amountValid ? `${trimAmount(senderPays)} ${tokenSymbol}` : "—"}
             bold
           />
           {insufficientBalance && <Text style={z.errorNote}>⚠ 余额不足</Text>}
@@ -652,13 +652,13 @@ export default function TransferScreen() {
                 : toAddress}
             </Text>
             <View style={z.modalRows}>
-              <SummaryRow label="转账金额" value={`${amountNum.toFixed(6)} ${tokenSymbol}`} />
-              <SummaryRow label="手续费" value={`${fee.toFixed(6)} ${tokenSymbol}`} />
-              <SummaryRow label="实际到账" value={`${actualReceive.toFixed(6)} ${tokenSymbol}`} />
+              <SummaryRow label="转账金额" value={`${trimAmount(amountNum)} ${tokenSymbol}`} />
+              <SummaryRow label="手续费" value={`${trimAmount(fee)} ${tokenSymbol}`} />
+              <SummaryRow label="实际到账" value={`${trimAmount(actualReceive)} ${tokenSymbol}`} />
               <View style={z.summaryDivider} />
               <SummaryRow
                 label={feeMode === "EXTRA" ? "总计（含手续费）" : "发送方支付"}
-                value={`${senderPays.toFixed(6)} ${tokenSymbol}`}
+                value={`${trimAmount(senderPays)} ${tokenSymbol}`}
                 bold
               />
             </View>
