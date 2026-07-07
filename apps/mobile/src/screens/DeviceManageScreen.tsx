@@ -299,7 +299,7 @@ export default function DeviceManageScreen() {
                       </TouchableOpacity>
                     )}
                   </View>
-                  <Text style={styles.walletIdentifier} selectable>{w.id.slice(0, 8)}...{w.id.slice(-6)}</Text>
+                  <Text style={styles.walletIdentifier} numberOfLines={1} ellipsizeMode="middle" selectable>{w.id}</Text>
                   <View style={styles.walletMetaRow}>
                     <Text style={styles.walletMeta}>
                       {w.chains.length > 0 ? w.chains.join(" · ") : "无链"} · {w.deviceCount} 个设备关联
@@ -317,7 +317,7 @@ export default function DeviceManageScreen() {
                   <Text style={styles.sectionLabel}>关联设备</Text>
                   {w.devices.map((d) => (
                     <View key={d.id} style={styles.deviceRow}>
-                      <Text style={styles.deviceId}>{d.id.slice(0, 8)}...{d.id.slice(-6)}</Text>
+                      <Text style={styles.deviceId} numberOfLines={1} ellipsizeMode="middle">{d.id}</Text>
                       <View style={styles.deviceRight}>
                         <PlatformIcon platform={d.platform} size={16} />
                         <View style={[styles.onlineDot, d.online ? styles.onlineDotOn : styles.onlineDotOff]} />
