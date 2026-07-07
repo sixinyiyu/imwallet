@@ -433,23 +433,25 @@ async fn get_wallet_transactions(
 ) -> Result<Json<TransactionListResponse>, AppError> {
     decrypt_and_verify_admin(&state, &auth.encrypted_password).await?;
 
-    let total: u64 = crate::db::query::query_count(
-        &state.db,
-        "WITH wallet_addr AS (SELECT DISTINCT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.address_id != '') SELECT COUNT(*) as cnt FROM transactions t WHERE t.from_address IN (SELECT address FROM wallet_addr) OR t.to_address IN (SELECT address FROM wallet_addr)",
-        vals![&wallet_id],
-    )
-    .await?;
-
     let offset = (auth.page - 1) * auth.limit;
-    let rows: Vec<crate::models::Transaction> = query(
+
+    #[derive(serde::Deserialize)]
+    struct TxWithCount {
+        #[serde(flatten)]
+        tx: crate::models::Transaction,
+        total_count: Option<i64>,
+    }
+    let rows: Vec<TxWithCount> = query(
         &state.db,
-        "WITH wallet_addr AS (SELECT DISTINCT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.address_id != '') SELECT t.* FROM transactions t WHERE t.from_address IN (SELECT address FROM wallet_addr) OR t.to_address IN (SELECT address FROM wallet_addr) ORDER BY t.created_at DESC LIMIT $2 OFFSET $3",
+        "WITH wallet_addr AS (SELECT DISTINCT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.address_id != '') SELECT t.*, COUNT(*) OVER() as total_count FROM transactions t WHERE t.from_address IN (SELECT address FROM wallet_addr) OR t.to_address IN (SELECT address FROM wallet_addr) ORDER BY t.created_at DESC LIMIT $2 OFFSET $3",
         vals![&wallet_id, auth.limit as i64, offset as i64],
     )
     .await?;
+    let total = rows.first().and_then(|r| r.total_count).unwrap_or(0) as u64;
+    let transactions: Vec<crate::models::Transaction> = rows.into_iter().map(|r| r.tx).collect();
 
     Ok(Json(TransactionListResponse {
-        transactions: rows,
+        transactions,
         total,
         page: auth.page,
         limit: auth.limit,
@@ -483,35 +485,41 @@ async fn get_all_recharges(
         }
     });
     let (total, rows) = if let Some(ref wid) = filter_wallet_id {
-        let total: u64 = crate::db::query::query_count(
-            &state.db,
-            "SELECT COUNT(*) as cnt FROM recharges WHERE wallet_id = $1",
-            vals![wid],
-        )
-        .await?;
+        #[derive(serde::Deserialize)]
+        struct RechargeWithCount {
+            #[serde(flatten)]
+            recharge: crate::models::Recharge,
+            total_count: Option<i64>,
+        }
         let offset = (auth.page - 1) * auth.limit;
-        let rows: Vec<crate::models::Recharge> = query(
+        let rows: Vec<RechargeWithCount> = query(
             &state.db,
-            "SELECT * FROM recharges WHERE wallet_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+            "SELECT r.*, COUNT(*) OVER() as total_count FROM recharges r WHERE r.wallet_id = $1 ORDER BY r.created_at DESC LIMIT $2 OFFSET $3",
             vals![wid, auth.limit as i64, offset as i64],
         )
         .await?;
-        (total, rows)
+        let total = rows.first().and_then(|r| r.total_count).unwrap_or(0) as u64;
+        let recharges: Vec<crate::models::Recharge> =
+            rows.into_iter().map(|r| r.recharge).collect();
+        (total, recharges)
     } else {
-        let total: u64 = crate::db::query::query_count(
-            &state.db,
-            "SELECT COUNT(*) as cnt FROM recharges",
-            vals![],
-        )
-        .await?;
+        #[derive(serde::Deserialize)]
+        struct RechargeWithCount {
+            #[serde(flatten)]
+            recharge: crate::models::Recharge,
+            total_count: Option<i64>,
+        }
         let offset = (auth.page - 1) * auth.limit;
-        let rows: Vec<crate::models::Recharge> = query(
+        let rows: Vec<RechargeWithCount> = query(
             &state.db,
-            "SELECT * FROM recharges ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+            "SELECT r.*, COUNT(*) OVER() as total_count FROM recharges r ORDER BY r.created_at DESC LIMIT $1 OFFSET $2",
             vals![auth.limit as i64, offset as i64],
         )
         .await?;
-        (total, rows)
+        let total = rows.first().and_then(|r| r.total_count).unwrap_or(0) as u64;
+        let recharges: Vec<crate::models::Recharge> =
+            rows.into_iter().map(|r| r.recharge).collect();
+        (total, recharges)
     };
 
     Ok(Json(RechargeListResponse {

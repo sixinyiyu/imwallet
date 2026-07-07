@@ -241,7 +241,7 @@ pub async fn get_transactions(
 ) -> Result<(Vec<crate::models::Transaction>, u64), AppError> {
     let o = ((page - 1) * limit) as i64;
     let l = limit as i64;
-    use crate::db::query::{query, query_count};
+    use crate::db::query::query;
 
     // 子查询：当前钱包关联的所有链上地址（去重）
     // 空地址集时 IN 自然匹配不到，无需额外空检查
@@ -251,33 +251,45 @@ pub async fn get_transactions(
 
     let (rows, total) = if let Some(sym) = token_symbol {
         let where_sql = where_clause.replace("{sub}", addr_subquery);
-        let rows: Vec<crate::models::Transaction> = query(
+        #[derive(serde::Deserialize)]
+        struct TxWithCount {
+            #[serde(flatten)]
+            tx: crate::models::Transaction,
+            total_count: Option<i64>,
+        }
+        let rows_with_count: Vec<TxWithCount> = query(
             &rb,
-            &format!("SELECT t.* FROM transactions t WHERE {where_sql} AND t.token_symbol = $2 ORDER BY t.created_at DESC LIMIT $3 OFFSET $4"),
+            &format!("SELECT t.*, COUNT(*) OVER() as total_count FROM transactions t WHERE {where_sql} AND t.token_symbol = $2 ORDER BY t.created_at DESC LIMIT $3 OFFSET $4"),
             vals![wallet_id, sym, l, o],
         )
         .await?;
-        let total = query_count(
-            &rb,
-            &format!("SELECT COUNT(*) as cnt FROM transactions t WHERE {where_sql} AND t.token_symbol = $2"),
-            vals![wallet_id, sym],
-        )
-        .await?;
+        let total = rows_with_count
+            .first()
+            .and_then(|r| r.total_count)
+            .unwrap_or(0) as u64;
+        let rows: Vec<crate::models::Transaction> =
+            rows_with_count.into_iter().map(|r| r.tx).collect();
         (rows, total)
     } else {
         let where_sql = where_clause.replace("{sub}", addr_subquery);
-        let rows: Vec<crate::models::Transaction> = query(
+        #[derive(serde::Deserialize)]
+        struct TxWithCount {
+            #[serde(flatten)]
+            tx: crate::models::Transaction,
+            total_count: Option<i64>,
+        }
+        let rows_with_count: Vec<TxWithCount> = query(
             &rb,
-            &format!("SELECT t.* FROM transactions t WHERE {where_sql} ORDER BY t.created_at DESC LIMIT $2 OFFSET $3"),
+            &format!("SELECT t.*, COUNT(*) OVER() as total_count FROM transactions t WHERE {where_sql} ORDER BY t.created_at DESC LIMIT $2 OFFSET $3"),
             vals![wallet_id, l, o],
         )
         .await?;
-        let total = query_count(
-            &rb,
-            &format!("SELECT COUNT(*) as cnt FROM transactions t WHERE {where_sql}"),
-            vals![wallet_id],
-        )
-        .await?;
+        let total = rows_with_count
+            .first()
+            .and_then(|r| r.total_count)
+            .unwrap_or(0) as u64;
+        let rows: Vec<crate::models::Transaction> =
+            rows_with_count.into_iter().map(|r| r.tx).collect();
         (rows, total)
     };
 
