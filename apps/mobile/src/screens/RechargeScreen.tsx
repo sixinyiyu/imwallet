@@ -10,6 +10,7 @@ import {
   Modal,
   Pressable,
   RefreshControl,
+  LayoutAnimation,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { assetService } from "../services/assetService";
@@ -248,9 +249,10 @@ export default function RechargeScreen() {
     if (showLoading) setRecordsLoading(false);
   };
 
-  // 筛选条件变化时重新加载第1页
+  // 筛选条件变化时重新加载第1页（带布局动画过渡）
   React.useEffect(() => {
     if (!loading) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       loadRecords(1, false, true);
     }
   }, [filterWallet, filterTime]);
