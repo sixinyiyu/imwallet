@@ -265,6 +265,13 @@ export default function DeviceManageScreen() {
 
           return (
             <View style={styles.walletCard}>
+              {/* 卡片左上角标签 */}
+              {walletTag === "local" && (
+                <View style={styles.tagLocal}><Text style={styles.tagText}>本地</Text></View>
+              )}
+              {walletTag === "subscribed" && (
+                <View style={styles.tagSubscribed}><Text style={styles.tagText}>已订阅</Text></View>
+              )}
               {/* 钱包头部（点击展开/折叠） */}
               <TouchableOpacity
                 style={styles.walletHeader}
@@ -275,12 +282,6 @@ export default function DeviceManageScreen() {
                   <View style={styles.walletIconContainer}>
                     <WalletIcon size={24} color="#287220" />
                   </View>
-                  {walletTag === "local" && (
-                    <View style={styles.tagLocal}><Text style={styles.tagText}>本地</Text></View>
-                  )}
-                  {walletTag === "subscribed" && (
-                    <View style={styles.tagSubscribed}><Text style={styles.tagText}>已订阅</Text></View>
-                  )}
                 </View>
                 <View style={styles.walletInfo}>
                   <View style={styles.walletNameRow}>
@@ -587,6 +588,7 @@ const styles = StyleSheet.create({
   },
   walletHeader: {
     flexDirection: "row", alignItems: "center",
+    marginTop: 6,
   },
   walletIconWrap: {
     marginRight: 12,
@@ -614,28 +616,28 @@ const styles = StyleSheet.create({
   walletMetaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   walletMeta: { fontSize: 13, color: "#9CA3AF" },
 
-  // ── 钱包标签（icon右上角悬浮） ──
+  // ── 钱包标签（卡片左上角） ──
   tagLocal: {
     position: "absolute",
-    top: -4,
-    right: -10,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
+    top: 0,
+    left: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderBottomRightRadius: 8,
+    borderTopLeftRadius: 16,
     backgroundColor: "#DCFCE7",
-    borderWidth: 1,
-    borderColor: "#BBF7D0",
+    zIndex: 10,
   },
   tagSubscribed: {
     position: "absolute",
-    top: -4,
-    right: -10,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
+    top: 0,
+    left: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderBottomRightRadius: 8,
+    borderTopLeftRadius: 16,
     backgroundColor: "#DBEAFE",
-    borderWidth: 1,
-    borderColor: "#BFDBFE",
+    zIndex: 10,
   },
   tagText: { fontSize: 10, fontWeight: "600", color: "#374151" },
 
