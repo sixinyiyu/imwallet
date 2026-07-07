@@ -337,8 +337,8 @@ export default function DeviceManageScreen() {
               {selectedWallet === w.id && w.assets.length > 0 && (
                 <View style={styles.assetSection}>
                   <Text style={styles.sectionLabel}>代币余额</Text>
-                  {w.assets.map((a) => (
-                    <View key={a.assetId} style={styles.assetRow}>
+                  {w.assets.map((a, idx) => (
+                    <View key={a.assetId} style={[styles.assetRow, idx < w.assets.length - 1 && styles.assetRowBorder]}>
                       <View style={styles.assetIconWrap}>
                         {renderTokenIcon(a.symbol, 20)}
                       </View>
@@ -695,8 +695,6 @@ const styles = StyleSheet.create({
   // ── 展开面板 ──
   expandPanel: {
     marginTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
     paddingTop: 16,
   },
 
@@ -708,6 +706,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 8,
+  },
+  assetRowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
   },
