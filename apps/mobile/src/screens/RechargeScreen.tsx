@@ -20,7 +20,7 @@ import { walletService } from "../services/walletService";
 import { rechargeService, type RechargeRecord } from "../services/rechargeService";
 import type { SimpleWallet, AssetInfo, AddressEntry, ServerWalletAddress } from "../types";
 import { TOKEN_ICONS, ChevronRightIcon, CopyIcon } from "../components/icons";
-import { RechargeSkeleton } from "../components/Skeleton";
+import { RechargeSkeleton, RechargeRecordSkeleton } from "../components/Skeleton";
 import { formatTime as formatDate } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";
 import { getErrorMessage, trimAmount } from "../utils/format";
@@ -496,7 +496,9 @@ export default function RechargeScreen() {
           </View>
         }
         ListEmptyComponent={
-          recordsLoading || loading ? null : (
+          recordsLoading ? (
+            <RechargeRecordSkeleton count={3} />
+          ) : (
             <View style={styles.emptyWrap}>
               <Text style={styles.emptyText}>暂无充值记录</Text>
             </View>

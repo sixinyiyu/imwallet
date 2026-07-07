@@ -214,7 +214,26 @@ export function NotificationSkeleton({ count = 4 }: { count?: number }) {
   );
 }
 
-/** Config manage screen skeleton */
+/** Recharge record cards skeleton (for filter switching loading state) */
+export function RechargeRecordSkeleton({ count = 3 }: { count?: number }) {
+  return (
+    <View>
+      {Array.from({ length: count }).map((_, i) => (
+        <View key={i} style={s.rechargeRecordCard}>
+          <View style={s.rechargeRecordTop}>
+            <View style={s.rechargeRecordLeft}>
+              <SkeletonCircle size={20} />
+              <SkeletonBar width={40} height={14} style={{ marginLeft: 6 }} />
+            </View>
+            <SkeletonBar width="20%" height={16} />
+          </View>
+          <SkeletonBar width="60%" height={12} style={{ marginTop: 8 }} />
+          <SkeletonBar width="40%" height={11} style={{ marginTop: 4 }} />
+        </View>
+      ))}
+    </View>
+  );
+}
 export function ConfigManageSkeleton() {
   return (
     <View style={s.page}>
