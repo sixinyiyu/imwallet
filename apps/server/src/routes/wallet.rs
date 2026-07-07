@@ -336,9 +336,8 @@ async fn subscribe_chain(
         device.device_id
     );
 
+    // 事务包裹：地址创建/获取 + 设备订阅，保证一致性
     let wa = wallet_service::subscribe_chain(state.db.clone(), &body.chain, &body.address).await?;
-
-    // 创建订阅记录
     device_service::subscribe_wallet(
         state.db.clone(),
         &wallet_id,

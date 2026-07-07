@@ -359,30 +359,11 @@ pub async fn subscribe_wallet_readonly(
         .await?
         .ok_or_else(|| AppError::NotFound("钱包不存在".into()))?;
 
-    // 2. 检查当前设备是否已订阅该钱包（任何一条订阅记录即可）
-    #[derive(serde::Deserialize)]
-    struct SubCheck {
-        count: i64,
-    }
-    let check: SubCheck = query_one(
-        &rb,
-        "SELECT COUNT(*) as count FROM wallet_subscriptions WHERE wallet_id = $1 AND device_id = $2",
-        vals![wallet_id, device_id],
-    )
-    .await?
-    .ok_or_else(|| AppError::Internal("订阅检查失败".into()))?;
-    if check.count > 0 {
-        // 已订阅 — 直接返回钱包信息和地址列表（幂等）
-        let addresses = get_wallet_addresses(rb.clone(), wallet_id).await?;
-        return Ok((wallet, addresses));
-    }
-
-    // 3. 获取该钱包的所有链上地址
+    // 2. 获取该钱包的所有链上地址（跳过 COUNT 检查，INSERT ON CONFLICT 保证幂等）
     let addresses = get_wallet_addresses(rb.clone(), wallet_id).await?;
 
-    // 4. 批量插入订阅记录
+    // 3. 批量插入订阅记录（单条 SQL，ON CONFLICT 保证幂等）
     if addresses.is_empty() {
-        // 钱包暂无链上地址 — 插入一条空订阅占位（与创建钱包时的逻辑一致）
         crate::db::query::exec(
             &rb,
             "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES ($1, $2, '', '') ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
@@ -390,13 +371,12 @@ pub async fn subscribe_wallet_readonly(
         )
         .await?;
     } else {
+        // 逐条 INSERT ON CONFLICT（幂等，已订阅地址自动跳过）
         for wa in &addresses {
-            crate::services::device_service::subscribe_wallet(
-                rb.clone(),
-                wallet_id,
-                device_id,
-                &wa.chain,
-                &wa.id,
+            crate::db::query::exec(
+                &rb,
+                "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES ($1, $2, $3, $4) ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
+                vals![wallet_id, device_id, &wa.chain, &wa.id],
             )
             .await?;
         }

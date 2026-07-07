@@ -177,16 +177,6 @@ async fn get_device_detail(
         created_at: Option<DateTime>,
     }
 
-    let device: DeviceRow = query(
-        &state.db,
-        "SELECT id, platform, last_active_at, created_at FROM devices WHERE id = $1",
-        vals![&device_id],
-    )
-    .await?
-    .into_iter()
-    .next()
-    .ok_or_else(|| AppError::NotFound("设备不存在".into()))?;
-
     #[derive(serde::Deserialize)]
     struct WalletRow {
         wallet_id: String,
@@ -196,12 +186,24 @@ async fn get_device_detail(
         address: String,
     }
 
-    let wallets: Vec<WalletRow> = query(
-        &state.db,
-        "SELECT ws.wallet_id, w.alias, w.source, wa.chain, wa.address FROM wallet_subscriptions ws JOIN wallets w ON w.id = ws.wallet_id JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.device_id = $1 AND ws.address_id != '' ORDER BY ws.wallet_id, wa.chain",
-        vals![&device_id],
-    )
-    .await?;
+    // 并行查询设备信息 + 钱包订阅列表
+    let (device_res, wallets_res) = tokio::join!(
+        query::<DeviceRow>(
+            &state.db,
+            "SELECT id, platform, last_active_at, created_at FROM devices WHERE id = $1",
+            vals![&device_id],
+        ),
+        query::<WalletRow>(
+            &state.db,
+            "SELECT ws.wallet_id, w.alias, w.source, wa.chain, wa.address FROM wallet_subscriptions ws JOIN wallets w ON w.id = ws.wallet_id JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.device_id = $1 AND ws.address_id != '' ORDER BY ws.wallet_id, wa.chain",
+            vals![&device_id],
+        ),
+    );
+    let device = device_res?
+        .into_iter()
+        .next()
+        .ok_or_else(|| AppError::NotFound("设备不存在".into()))?;
+    let wallets = wallets_res?;
 
     let now_ts = time::OffsetDateTime::now_utc().unix_timestamp();
     let online = device
@@ -281,7 +283,7 @@ async fn list_wallets(
         crate::db::query::query_count(&state.db, "SELECT COUNT(*) as cnt FROM wallets", vals![])
             .await?;
 
-    // 单条 SQL：钱包 + 链 + 设备，一次性拉取（分页）
+    // 单条 SQL：钱包 + 链 + 设备 + 余额，一次性拉取（分页）
     let offset = (auth.page - 1) * auth.limit;
     #[derive(serde::Deserialize)]
     struct Row {
@@ -293,19 +295,36 @@ async fn list_wallets(
         device_id: Option<String>,
         device_platform: Option<String>,
         device_last_active_at: Option<DateTime>,
+        asset_id: Option<String>,
+        symbol: Option<String>,
+        asset_name: Option<String>,
+        asset_chain: Option<String>,
+        icon_url: Option<String>,
+        total_balance: Option<rust_decimal::Decimal>,
     }
 
     let rows: Vec<Row> = query(
         &state.db,
-        "SELECT w.id as wallet_id, w.alias, w.source, w.created_at as wallet_created_at, wa.chain, d.id as device_id, d.platform as device_platform, d.last_active_at as device_last_active_at FROM wallets w LEFT JOIN wallet_subscriptions ws ON ws.wallet_id = w.id AND ws.address_id != '' LEFT JOIN wallets_addresses wa ON wa.id = ws.address_id LEFT JOIN devices d ON d.id = ws.device_id WHERE w.id IN (SELECT id FROM wallets ORDER BY created_at DESC LIMIT $1 OFFSET $2) ORDER BY w.created_at DESC, wa.chain, d.last_active_at DESC NULLS LAST",
+        "SELECT w.id as wallet_id, w.alias, w.source, w.created_at as wallet_created_at, wa.chain, d.id as device_id, d.platform as device_platform, d.last_active_at as device_last_active_at, aa.asset_id, a.symbol, a.name as asset_name, aa.chain as asset_chain, a.icon_url, aa.balance as total_balance FROM wallets w LEFT JOIN wallet_subscriptions ws ON ws.wallet_id = w.id AND ws.address_id != '' LEFT JOIN wallets_addresses wa ON wa.id = ws.address_id LEFT JOIN devices d ON d.id = ws.device_id LEFT JOIN assets_addresses aa ON aa.address_id = ws.address_id LEFT JOIN assets a ON a.id = aa.asset_id WHERE w.id IN (SELECT id FROM wallets ORDER BY created_at DESC LIMIT $1 OFFSET $2) ORDER BY w.created_at DESC, wa.chain, d.last_active_at DESC NULLS LAST",
         vals![auth.limit as i64, offset as i64],
     )
     .await?;
 
     let now_ts = time::OffsetDateTime::now_utc().unix_timestamp();
+    let cny_rate = state.get_cny_rate();
 
     // HashMap 分组组装
     let mut wallet_map: std::collections::HashMap<String, WalletAdminItem> =
+        std::collections::HashMap::new();
+    type BalTuple = (
+        String,
+        String,
+        String,
+        String,
+        String,
+        rust_decimal::Decimal,
+    );
+    let mut balance_map: std::collections::HashMap<String, Vec<BalTuple>> =
         std::collections::HashMap::new();
 
     for r in &rows {
@@ -340,6 +359,23 @@ async fn list_wallets(
                 });
             }
         }
+        if let (Some(aid), Some(sym), Some(name), Some(ac), Some(url), Some(bal)) = (
+            &r.asset_id,
+            &r.symbol,
+            &r.asset_name,
+            &r.asset_chain,
+            &r.icon_url,
+            r.total_balance,
+        ) {
+            balance_map.entry(r.wallet_id.clone()).or_default().push((
+                aid.clone(),
+                sym.clone(),
+                name.clone(),
+                ac.clone(),
+                url.clone(),
+                bal,
+            ));
+        }
     }
 
     // Sort by created_at DESC, update device_count
@@ -349,55 +385,26 @@ async fn list_wallets(
         item.device_count = item.devices.len() as i64;
     }
 
-    // 批量查询每个钱包的代币余额（单条 SQL，避免 N+1）
-    let cny_rate = state.get_cny_rate();
-    if !items.is_empty() {
-        #[derive(serde::Deserialize)]
-        struct BalanceRow {
-            wallet_id: String,
-            asset_id: String,
-            symbol: String,
-            name: String,
-            chain: String,
-            icon_url: String,
-            total_balance: rust_decimal::Decimal,
-        }
-        let sql = "SELECT ws.wallet_id, aa.asset_id, a.symbol, a.name, aa.chain, a.icon_url, SUM(aa.balance) as total_balance FROM assets_addresses aa JOIN assets a ON a.id = aa.asset_id JOIN wallet_subscriptions ws ON ws.address_id = aa.address_id WHERE ws.wallet_id IN (SELECT id FROM wallets ORDER BY created_at DESC LIMIT $1 OFFSET $2) AND ws.address_id != '' GROUP BY ws.wallet_id, aa.asset_id, a.symbol, a.name, aa.chain, a.icon_url";
-        let balance_rows: Vec<BalanceRow> =
-            query(&state.db, sql, vals![auth.limit as i64, offset as i64]).await?;
-
-        // 按钱包分组
-        let mut balance_map: std::collections::HashMap<String, Vec<AssetBalanceBrief>> =
-            std::collections::HashMap::new();
-        for r in &balance_rows {
-            balance_map
-                .entry(r.wallet_id.clone())
-                .or_default()
-                .push(AssetBalanceBrief {
-                    asset_id: r.asset_id.clone(),
-                    symbol: r.symbol.clone(),
-                    name: r.name.clone(),
-                    chain: r.chain.clone(),
-                    icon_url: r.icon_url.clone(),
-                    balance: r.total_balance.to_string(),
-                    cny_value: (r.total_balance * cny_rate).to_string(),
-                });
-        }
-
-        // 合并余额数据到钱包列表
-        for item in &mut items {
-            let assets = balance_map.remove(&item.id).unwrap_or_default();
-            let total_cny: rust_decimal::Decimal = assets
-                .iter()
-                .map(|a| {
-                    a.cny_value
-                        .parse::<rust_decimal::Decimal>()
-                        .unwrap_or_default()
-                })
-                .sum();
-            item.total_balance_cny = total_cny.to_string();
-            item.assets = assets;
-        }
+    // 合并余额数据到钱包列表（保持 Decimal，避免 String 往返）
+    for item in &mut items {
+        let balances = balance_map.remove(&item.id).unwrap_or_default();
+        let total_cny: rust_decimal::Decimal = balances
+            .iter()
+            .map(|(_, _, _, _, _, bal)| bal * cny_rate)
+            .sum();
+        item.total_balance_cny = total_cny.to_string();
+        item.assets = balances
+            .into_iter()
+            .map(|(aid, sym, name, chain, url, bal)| AssetBalanceBrief {
+                asset_id: aid,
+                symbol: sym,
+                name,
+                chain,
+                icon_url: url,
+                balance: bal.to_string(),
+                cny_value: (bal * cny_rate).to_string(),
+            })
+            .collect();
     }
 
     Ok(Json(WalletListResponse {

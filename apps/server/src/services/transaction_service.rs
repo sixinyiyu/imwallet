@@ -57,16 +57,25 @@ pub async fn execute_transfer(
 
     let tx = rb.acquire_begin().await?;
 
-    let cnt = tx_query_count(
+    // 合并 ownership 检查 + from_addr 查询为单次查询
+    #[derive(serde::Deserialize)]
+    struct Addr {
+        id: String,
+        address: String,
+    }
+    let from_addr: Vec<Addr> = tx_query(
         &tx,
-        "SELECT COUNT(*) as cnt FROM wallet_subscriptions WHERE wallet_id = $1 AND device_id = $2",
-        vals![&input.from_wallet_id, device_id],
+        "SELECT wa.id, wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.device_id = $2 AND wa.chain = $3 AND ws.address_id != '' LIMIT 1",
+        vals![&input.from_wallet_id, device_id, &input.network],
     )
     .await?;
-    if cnt == 0 {
-        return Err(AppError::Forbidden("该钱包不属于当前设备".into()));
-    }
+    let from_addr = from_addr
+        .into_iter()
+        .next()
+        .ok_or_else(|| AppError::Forbidden("该钱包不属于当前设备或未找到发送方地址".into()))?;
 
+    // asset 查询与 from_addr 无依赖，但事务内无法并行（共享同一连接）
+    // 保持串行但减少了一次查询
     let assets: Vec<crate::models::Asset> = tx_query(
         &tx,
         "SELECT * FROM assets WHERE symbol = $1 AND chain = $2 LIMIT 1",
@@ -77,17 +86,6 @@ pub async fn execute_transfer(
         .into_iter()
         .next()
         .ok_or_else(|| AppError::NotFound("代币类型不存在".into()))?;
-
-    #[derive(serde::Deserialize)]
-    struct Addr {
-        id: String,
-        address: String,
-    }
-    let from_addr: Vec<Addr> = tx_query(&tx, "SELECT wa.id, wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND wa.chain = $2 AND ws.address_id != '' LIMIT 1", vals![&input.from_wallet_id, &input.network]).await?;
-    let from_addr = from_addr
-        .into_iter()
-        .next()
-        .ok_or_else(|| AppError::BadRequest("未找到发送方地址".into()))?;
 
     let bals: Vec<crate::models::AssetAddress> = tx_query(
         &tx,
