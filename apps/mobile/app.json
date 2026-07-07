@@ -42,7 +42,8 @@
       ],
       "./plugins/withAbiFilter",
       "./plugins/withSecureScreen",
-      "expo-sqlite"
+      "expo-sqlite",
+      "react-native-quick-crypto"
     ],
     "extra": {
       "apiBaseUrl": "https://imwallet.dpdns.org/api/v1",

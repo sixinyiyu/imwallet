@@ -1,6 +1,6 @@
 import "react-native-get-random-values";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { pbkdf2 } from "@noble/hashes/pbkdf2.js";
+import QuickCrypto from "react-native-quick-crypto";
 import { getDatabase, nowISO } from "../db/database";
 import type { LocalWallet } from "../types";
 
@@ -15,19 +15,19 @@ function bytesToHex(bytes: Uint8Array): string {
 // v1: SHA-256（旧版，兼容已创建钱包的密码和助记词哈希）
 // v2: PBKDF2-SHA256（新版，更安全）
 const PBKDF2_ITERATIONS = 100000;
-const PBKDF2_SALT_PASSWORD = new TextEncoder().encode("imwallet_password_salt_v2");
-const PBKDF2_SALT_MNEMONIC = new TextEncoder().encode("imwallet_mnemonic_salt_v2");
+const PBKDF2_SALT_PASSWORD = "imwallet_password_salt_v2";
+const PBKDF2_SALT_MNEMONIC = "imwallet_mnemonic_salt_v2";
 
 /** 计算密码的 PBKDF2-SHA256 hex 哈希（v2） */
 export function hashPassword(password: string): string {
-  const derived = pbkdf2(sha256, password, PBKDF2_SALT_PASSWORD, { c: PBKDF2_ITERATIONS, dkLen: 32 });
-  return bytesToHex(derived);
+  const derived = QuickCrypto.pbkdf2Sync(password, PBKDF2_SALT_PASSWORD, PBKDF2_ITERATIONS, 32, "sha256");
+  return derived.toString("hex");
 }
 
 /** 计算助记词的 PBKDF2-SHA256 hex 哈希（v2） */
 export function hashMnemonic(mnemonic: string): string {
-  const derived = pbkdf2(sha256, mnemonic, PBKDF2_SALT_MNEMONIC, { c: PBKDF2_ITERATIONS, dkLen: 32 });
-  return bytesToHex(derived);
+  const derived = QuickCrypto.pbkdf2Sync(mnemonic, PBKDF2_SALT_MNEMONIC, PBKDF2_ITERATIONS, 32, "sha256");
+  return derived.toString("hex");
 }
 
 /** 计算的 SHA-256 hex 哈希（v1 旧版，用于兼容验证） */
