@@ -273,9 +273,7 @@ export default function DeviceManageScreen() {
                 <View style={styles.tagSubscribed}><Text style={styles.tagText}>已订阅</Text></View>
               )}
               {/* 卡片右上角余额 */}
-              {w.totalBalanceCny && parseFloat(w.totalBalanceCny) > 0 && (
-                <View style={styles.balanceTag}><Text style={styles.balanceTagText}>¥{formatCny(w.totalBalanceCny)}</Text></View>
-              )}
+              <View style={styles.balanceTag}><Text style={styles.balanceTagText}>¥{formatCny(w.totalBalanceCny)}</Text></View>
               {/* 钱包头部（点击展开/折叠） */}
               <TouchableOpacity
                 style={styles.walletHeader}
