@@ -10,7 +10,9 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  Animated,
 } from "react-native";
+import { useKeyboardHeight } from "../hooks/useKeyboardHeight";
 
 interface PasswordDrawerProps {
   visible: boolean;
@@ -25,6 +27,9 @@ interface PasswordDrawerProps {
 /**
  * 通用密码输入抽屉组件
  * 用于 SettingsScreen、ConfigManageScreen 等需要密码验证的场景
+ *
+ * Android: 手动监听键盘高度，Animated 上移抽屉内容
+ * iOS: 使用 KeyboardAvoidingView behavior="padding"
  */
 export default function PasswordDrawer({
   visible,
@@ -36,6 +41,7 @@ export default function PasswordDrawer({
   onClose,
 }: PasswordDrawerProps) {
   const [pwdInput, setPwdInput] = React.useState("");
+  const { animatedY } = useKeyboardHeight(visible);
 
   const handleConfirm = () => {
     if (!pwdInput.trim()) return;
@@ -52,6 +58,48 @@ export default function PasswordDrawer({
     if (visible) setPwdInput("");
   }, [visible]);
 
+  const content = (
+    <View style={styles.drawerContent}>
+      <View style={styles.drawerHandle} />
+      <Text style={styles.drawerTitle}>{title}</Text>
+      {description && <Text style={styles.drawerDesc}>{description}</Text>}
+      <TextInput
+        style={styles.pwdInput}
+        value={pwdInput}
+        onChangeText={setPwdInput}
+        placeholder="请输入密码"
+        placeholderTextColor="#C8C9CC"
+        secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoFocus
+        onSubmitEditing={handleConfirm}
+      />
+      {error && <Text style={styles.pwdError}>{error}</Text>}
+      <View style={styles.drawerActions}>
+        <TouchableOpacity
+          style={styles.drawerCancelBtn}
+          onPress={handleClose}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.drawerCancelText}>取消</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.drawerConfirmBtn, verifying && styles.drawerConfirmBtnDisabled]}
+          onPress={handleConfirm}
+          disabled={verifying || !pwdInput.trim()}
+          activeOpacity={0.7}
+        >
+          {verifying ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.drawerConfirmText}>确认</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   return (
     <Modal
       visible={visible}
@@ -59,51 +107,22 @@ export default function PasswordDrawer({
       animationType="slide"
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        style={styles.drawerOverlay}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <Pressable style={styles.drawerBackdrop} onPress={handleClose} />
-        <View style={styles.drawerContent}>
-          <View style={styles.drawerHandle} />
-          <Text style={styles.drawerTitle}>{title}</Text>
-          {description && <Text style={styles.drawerDesc}>{description}</Text>}
-          <TextInput
-            style={styles.pwdInput}
-            value={pwdInput}
-            onChangeText={setPwdInput}
-            placeholder="请输入密码"
-            placeholderTextColor="#C8C9CC"
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoFocus
-            onSubmitEditing={handleConfirm}
-          />
-          {error && <Text style={styles.pwdError}>{error}</Text>}
-          <View style={styles.drawerActions}>
-            <TouchableOpacity
-              style={styles.drawerCancelBtn}
-              onPress={handleClose}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.drawerCancelText}>取消</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.drawerConfirmBtn, verifying && styles.drawerConfirmBtnDisabled]}
-              onPress={handleConfirm}
-              disabled={verifying || !pwdInput.trim()}
-              activeOpacity={0.7}
-            >
-              {verifying ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.drawerConfirmText}>确认</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+      {Platform.OS === "ios" ? (
+        <KeyboardAvoidingView
+          style={styles.drawerOverlay}
+          behavior="padding"
+        >
+          <Pressable style={styles.drawerBackdrop} onPress={handleClose} />
+          {content}
+        </KeyboardAvoidingView>
+      ) : (
+        <View style={styles.drawerOverlay}>
+          <Pressable style={styles.drawerBackdrop} onPress={handleClose} />
+          <Animated.View style={{ transform: [{ translateY: animatedY }] }}>
+            {content}
+          </Animated.View>
         </View>
-      </KeyboardAvoidingView>
+      )}
     </Modal>
   );
 }
