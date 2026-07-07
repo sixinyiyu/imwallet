@@ -510,6 +510,8 @@ export default function RechargeScreen() {
             <View style={styles.footerLoading}>
               <ActivityIndicator size="small" color="#9CA3AF" />
             </View>
+          ) : records.length > 0 && records.length >= recordsTotal ? (
+            <Text style={styles.endHint}>— 已加载全部 —</Text>
           ) : null
         }
         contentContainerStyle={styles.listContent}
@@ -717,6 +719,7 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, color: "#9CA3AF" },
   // Footer loading
   footerLoading: { paddingVertical: 16, alignItems: "center" },
+  endHint: { textAlign: "center", paddingVertical: 20, fontSize: 13, color: "#D1D5DB" },
   // Modal
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24 },
   pickerCard: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20 },
