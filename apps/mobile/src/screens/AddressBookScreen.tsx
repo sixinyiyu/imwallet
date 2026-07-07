@@ -241,6 +241,11 @@ export default function AddressBookScreen() {
         contentContainerStyle={
           contacts.length === 0 ? styles.emptyList : undefined
         }
+        ListFooterComponent={
+          contacts.length > 0 ? (
+            <Text style={styles.endHint}>— 已加载全部 —</Text>
+          ) : null
+        }
       />
 
       {/* Toast */}
@@ -487,6 +492,7 @@ const styles = StyleSheet.create({
   toast: { backgroundColor: "rgba(0,0,0,0.75)", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
   toastText: { color: "#FFFFFF", fontSize: 14 },
   emptyList: { flexGrow: 1 },
+  endHint: { textAlign: "center", paddingVertical: 20, fontSize: 13, color: "#D1D5DB" },
 });
 
 const modalStyles = StyleSheet.create({
