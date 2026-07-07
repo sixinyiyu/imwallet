@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
   },
   walletHeader: {
     flexDirection: "row", alignItems: "center",
-    marginTop: 6,
+    marginTop: 10,
   },
   walletIconWrap: {
     marginRight: 12,
