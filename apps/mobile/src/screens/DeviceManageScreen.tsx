@@ -271,23 +271,21 @@ export default function DeviceManageScreen() {
                 onPress={() => handleSelectWallet(w.id)}
                 activeOpacity={0.7}
               >
-                <View style={styles.walletIconContainer}>
-                  <WalletIcon size={24} color="#287220" />
+                <View style={styles.walletIconWrap}>
+                  <View style={styles.walletIconContainer}>
+                    <WalletIcon size={24} color="#287220" />
+                  </View>
+                  {walletTag === "local" && (
+                    <View style={styles.tagLocal}><Text style={styles.tagText}>本地</Text></View>
+                  )}
+                  {walletTag === "subscribed" && (
+                    <View style={styles.tagSubscribed}><Text style={styles.tagText}>已订阅</Text></View>
+                  )}
                 </View>
                 <View style={styles.walletInfo}>
                   <View style={styles.walletNameRow}>
-                    <View style={styles.walletNameLeft}>
-                      <View style={styles.walletAliasTagRow}>
-                        <Text style={styles.walletAlias} numberOfLines={1} ellipsizeMode="tail">{w.alias}</Text>
-                        {walletTag === "local" && (
-                          <View style={styles.tagLocal}><Text style={styles.tagText}>本地</Text></View>
-                        )}
-                        {walletTag === "subscribed" && (
-                          <View style={styles.tagSubscribed}><Text style={styles.tagText}>已订阅</Text></View>
-                        )}
-                      </View>
-                      <Text style={styles.walletBalanceValue} numberOfLines={1}>¥{formatCny(w.totalBalanceCny)}</Text>
-                    </View>
+                    <Text style={styles.walletAlias} numberOfLines={1} ellipsizeMode="tail">{w.alias}</Text>
+                    <Text style={styles.walletBalanceValue} numberOfLines={1}>¥{formatCny(w.totalBalanceCny)}</Text>
                     {/* 未订阅 → 右侧显示订阅按钮 */}
                     {walletTag === "none" && (
                       <TouchableOpacity
@@ -590,6 +588,9 @@ const styles = StyleSheet.create({
   walletHeader: {
     flexDirection: "row", alignItems: "center",
   },
+  walletIconWrap: {
+    marginRight: 12,
+  },
   walletIconContainer: {
     width: 40,
     height: 40,
@@ -597,7 +598,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
     overflow: "hidden",
   },
   walletInfo: { flex: 1 },
@@ -607,29 +607,37 @@ const styles = StyleSheet.create({
   chevronExpanded: {
     transform: [{ rotate: "90deg" }],
   },
-  walletAlias: { fontSize: 16, fontWeight: "600", color: "#1F2937" },
-  walletAliasTagRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  walletNameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  walletNameLeft: { flexDirection: "column", flex: 1, minWidth: 0 },
-  walletBalanceValue: { fontSize: 14, fontWeight: "700", color: "#1F2937", marginTop: 2 },
+  walletAlias: { fontSize: 16, fontWeight: "600", color: "#1F2937", flex: 1, minWidth: 0 },
+  walletNameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  walletBalanceValue: { fontSize: 15, fontWeight: "700", color: "#1F2937", flexShrink: 0 },
   walletIdentifier: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
   walletMetaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   walletMeta: { fontSize: 13, color: "#9CA3AF" },
 
-  // ── 钱包标签（替代旧 ribbon） ──
+  // ── 钱包标签（icon右上角悬浮） ──
   tagLocal: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    position: "absolute",
+    top: -4,
+    right: -10,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
     borderRadius: 4,
     backgroundColor: "#DCFCE7",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
   },
   tagSubscribed: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    position: "absolute",
+    top: -4,
+    right: -10,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
     borderRadius: 4,
     backgroundColor: "#DBEAFE",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
   },
-  tagText: { fontSize: 11, fontWeight: "600", color: "#374151" },
+  tagText: { fontSize: 10, fontWeight: "600", color: "#374151" },
 
   // ── 卡片上的订阅按钮 ──
   cardSubscribeBtn: {
