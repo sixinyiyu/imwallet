@@ -39,7 +39,7 @@ public_key_path  = "keys/rsa_public.pem"    # RSA 公钥文件路径（不存在
 # 允许的跨域来源列表（前端访问后端 API 的域名）
 # permissive = true 时忽略此列表，回显请求 Origin（开发模式，生产环境务必设为 false）
 # 不配置时使用默认值：["https://imwallet.dpdns.org", "http://localhost:8081", "http://localhost:19006", "http://localhost:3000"]
-permissive = true
+permissive = false
 allowed_origins = [
     "https://imwallet.dpdns.org",
     "http://localhost:8081",

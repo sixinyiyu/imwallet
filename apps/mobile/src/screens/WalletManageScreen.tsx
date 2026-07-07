@@ -180,7 +180,7 @@ export default function WalletManageScreen() {
         data={wallets}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item, index }) => {
+        renderItem={({ item }) => {
           const networks = (item as AggregateWallet).networks || [];
           const hasAccounts = networks.length > 0;
 

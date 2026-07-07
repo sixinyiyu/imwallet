@@ -545,7 +545,7 @@ async fn get_all_recharges(
     let mut param_idx = 1u32;
 
     if let Some(ref wid) = query.wallet_id {
-        conditions.push(format!("r.wallet_id = ${}" , param_idx));
+        conditions.push(format!("r.wallet_id = ${}", param_idx));
         args.push(rbs::value!(wid));
         param_idx += 1;
     }
@@ -561,12 +561,19 @@ async fn get_all_recharges(
             _ => now.date(), // 未知值默认今日
         };
         let start_ts = start_date.with_time(time::Time::MIDNIGHT).assume_utc();
-        let end_ts = (now + time::Duration::days(1)).date().with_time(time::Time::MIDNIGHT).assume_utc();
+        let end_ts = (now + time::Duration::days(1))
+            .date()
+            .with_time(time::Time::MIDNIGHT)
+            .assume_utc();
         conditions.push(format!("r.created_at >= ${}::timestamp", param_idx));
-        args.push(rbs::value!(start_ts.format(&time::format_description::well_known::Iso8601::DEFAULT).unwrap_or_default()));
+        args.push(rbs::value!(start_ts
+            .format(&time::format_description::well_known::Iso8601::DEFAULT)
+            .unwrap_or_default()));
         param_idx += 1;
         conditions.push(format!("r.created_at < ${}::timestamp", param_idx));
-        args.push(rbs::value!(end_ts.format(&time::format_description::well_known::Iso8601::DEFAULT).unwrap_or_default()));
+        args.push(rbs::value!(end_ts
+            .format(&time::format_description::well_known::Iso8601::DEFAULT)
+            .unwrap_or_default()));
         param_idx += 1;
     }
 

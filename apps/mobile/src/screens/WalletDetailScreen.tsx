@@ -264,9 +264,10 @@ export default function WalletDetailScreen() {
                 showToast(ok ? "标识符已复制" : "复制失败");
               }}
               activeOpacity={0.6}
+              style={{ flex: 1 }}
             >
               <View style={styles.identifierRow}>
-                <Text style={styles.identifierValue} selectable>{wallet.id}</Text>
+                <Text style={styles.identifierValue} numberOfLines={1} ellipsizeMode="middle" selectable>{wallet.id}</Text>
                 <CopyIcon size={16} color="#9CA3AF" />
               </View>
             </TouchableOpacity>
@@ -826,6 +827,7 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     fontFamily: "monospace",
     lineHeight: 18,
+    flex: 1,
   },
   hintRight: {
     flexDirection: "row",
