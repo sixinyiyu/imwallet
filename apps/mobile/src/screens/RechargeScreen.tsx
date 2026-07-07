@@ -253,6 +253,8 @@ export default function RechargeScreen() {
   React.useEffect(() => {
     if (!loading) {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setRecords([]);
+      setRecordsTotal(0);
       loadRecords(1, false, true);
     }
   }, [filterWallet, filterTime]);
