@@ -575,17 +575,20 @@ export default function DeviceManageScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F8" },
-  listContent: { padding: 16, paddingBottom: 20 },
+  listContent: { padding: 20, paddingBottom: 24 },
   endHint: { textAlign: "center", paddingVertical: 20, fontSize: 13, color: "#D1D5DB" },
 
   // ── 钱包卡片 ──
   walletCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
     overflow: "hidden",
   },
   walletHeader: {
@@ -664,10 +667,10 @@ const styles = StyleSheet.create({
 
   // ── 关联设备 ──
   deviceSection: {
-    marginTop: 12,
+    marginTop: 16,
     borderTopWidth: 1,
     borderTopColor: "#F3F4F6",
-    paddingTop: 8,
+    paddingTop: 12,
   },
   sectionLabel: { fontSize: 13, fontWeight: "500", color: "#6B7280", marginBottom: 6 },
   deviceRow: {
@@ -685,15 +688,15 @@ const styles = StyleSheet.create({
 
   // ── 展开面板 ──
   expandPanel: {
-    marginTop: 12,
+    marginTop: 16,
     borderTopWidth: 1,
     borderTopColor: "#F3F4F6",
-    paddingTop: 12,
+    paddingTop: 16,
   },
 
   // ── 代币余额 ──
   assetSection: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
   assetRow: {
     flexDirection: "row",
@@ -727,15 +730,10 @@ const styles = StyleSheet.create({
 
   // ── 交易/充值卡片 ──
   txCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#F9FAFB",
     borderRadius: 12,
-    padding: 14,
+    padding: 16,
     marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
   },
   txTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   txTokenWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
