@@ -11,6 +11,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Animated,
+  LayoutAnimation,
+  UIManager,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { adminService, type WalletAdminInfo, type WalletTransaction, type WalletRecharge } from "../services/adminService";
@@ -67,6 +70,7 @@ export default function DeviceManageScreen() {
   const [, setSubscribeLoading] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const [subscribeError, setSubscribeError] = useState<string | null>(null);
+  const [quickSubscribingId, setQuickSubscribingId] = useState<string | null>(null);
 
   // 当前设备的本地钱包信息（ID + source），用于卡片标签区分：本地 vs 已订阅 vs 未订阅
   // 用字符串做 selector，避免每次创建新对象导致无限重渲染
@@ -85,6 +89,13 @@ export default function DeviceManageScreen() {
     setToastMsg(msg);
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2000);
+  }, []);
+
+  // Android LayoutAnimation
+  useEffect(() => {
+    if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
   }, []);
 
   // 缓存过期守卫
@@ -233,12 +244,19 @@ export default function DeviceManageScreen() {
 
   /** 卡片上直接订阅（快捷入口） */
   const handleQuickSubscribe = async (walletId: string) => {
+    if (quickSubscribingId) return;
+    setQuickSubscribingId(walletId);
     try {
       await useWalletStore.getState().subscribeWallet(walletId);
+      // 触发布局动画：按钮消失，角标淡入
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      // 延时让动画完成
+      await new Promise((r) => setTimeout(r, 400));
       showToast("订阅成功");
     } catch (err: unknown) {
       showToast(getErrorMessage(err, "订阅失败"));
     }
+    setQuickSubscribingId(null);
   };
 
   if (walletsLoading) {
@@ -290,14 +308,20 @@ export default function DeviceManageScreen() {
                     <Text style={styles.walletAlias} numberOfLines={1} ellipsizeMode="tail">{w.alias}</Text>
                     {/* 未订阅 → 右侧显示订阅按钮 */}
                     {walletTag === "none" && (
-                      <TouchableOpacity
-                        style={styles.cardSubscribeBtn}
-                        onPress={() => handleQuickSubscribe(w.id)}
-                        activeOpacity={0.7}
-                      >
-                        <SubscribeIcon size={14} color="#287220" />
-                        <Text style={styles.cardSubscribeText}>订阅</Text>
-                      </TouchableOpacity>
+                      <Animated.View style={{ opacity: quickSubscribingId === w.id ? 0 : 1, transform: [{ scale: quickSubscribingId === w.id ? 0.8 : 1 }] }}>
+                        <TouchableOpacity
+                          style={styles.cardSubscribeBtn}
+                          onPress={() => handleQuickSubscribe(w.id)}
+                          disabled={quickSubscribingId !== null}
+                          activeOpacity={0.7}
+                        >
+                          <SubscribeIcon size={14} color="#287220" />
+                          <Text style={styles.cardSubscribeText}>订阅</Text>
+                        </TouchableOpacity>
+                      </Animated.View>
+                    )}
+                    {quickSubscribingId === w.id && (
+                      <ActivityIndicator size="small" color="#287220" />
                     )}
                   </View>
                   <Text style={styles.walletIdentifier} numberOfLines={1} ellipsizeMode="middle" selectable>{w.id}</Text>
