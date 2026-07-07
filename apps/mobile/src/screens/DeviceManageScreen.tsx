@@ -692,13 +692,13 @@ const styles = StyleSheet.create({
 
   // ── 展开面板 ──
   expandPanel: {
-    marginTop: 16,
-    paddingTop: 16,
+    marginTop: 8,
+    paddingTop: 8,
   },
 
   // ── 代币余额 ──
   assetSection: {
-    marginBottom: 16,
+    marginBottom: 8,
   },
   assetRow: {
     flexDirection: "row",
