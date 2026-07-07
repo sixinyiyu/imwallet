@@ -836,7 +836,7 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     fontFamily: "monospace",
     lineHeight: 18,
-    flex: 1,
+    flexShrink: 1,
     textAlign: "right",
   },
   hintRight: {
