@@ -1,39 +1,34 @@
 import "react-native-get-random-values";
-import { sha256 } from "@noble/hashes/sha2.js";
-import QuickCrypto from "react-native-quick-crypto";
 import { getDatabase, nowISO } from "../db/database";
 import type { LocalWallet } from "../types";
-
-/** 将字节数组转为 hex 字符串 */
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+import {
+  pbkdf2Hex,
+  sha256Hex,
+  PBKDF2_ITERATIONS,
+  PBKDF2_SALT_PASSWORD,
+  PBKDF2_SALT_MNEMONIC,
+} from "../utils/crypto";
 
 // ── 哈希版本 ──
 // v1: SHA-256（旧版，兼容已创建钱包的密码和助记词哈希）
 // v2: PBKDF2-SHA256（新版，更安全）
-const PBKDF2_ITERATIONS = 100000;
-const PBKDF2_SALT_PASSWORD = "imwallet_password_salt_v2";
-const PBKDF2_SALT_MNEMONIC = "imwallet_mnemonic_salt_v2";
 
-/** 计算密码的 PBKDF2-SHA256 hex 哈希（v2） */
-export function hashPassword(password: string): string {
-  const derived = QuickCrypto.pbkdf2Sync(password, PBKDF2_SALT_PASSWORD, PBKDF2_ITERATIONS, 32, "sha256");
-  return derived.toString("hex");
+/** 计算密码的 PBKDF2-SHA256 hex 哈希（v2）
+ *  Web 环境下为异步，需要 await */
+export function hashPassword(password: string): string | Promise<string> {
+  return pbkdf2Hex(password, PBKDF2_SALT_PASSWORD, PBKDF2_ITERATIONS, 32, "sha256");
 }
 
-/** 计算助记词的 PBKDF2-SHA256 hex 哈希（v2） */
-export function hashMnemonic(mnemonic: string): string {
-  const derived = QuickCrypto.pbkdf2Sync(mnemonic, PBKDF2_SALT_MNEMONIC, PBKDF2_ITERATIONS, 32, "sha256");
-  return derived.toString("hex");
+/** 计算助记词的 PBKDF2-SHA256 hex 哈希（v2）
+ *  Web 环境下为异步，需要 await */
+export function hashMnemonic(mnemonic: string): string | Promise<string> {
+  return pbkdf2Hex(mnemonic, PBKDF2_SALT_MNEMONIC, PBKDF2_ITERATIONS, 32, "sha256");
 }
 
-/** 计算的 SHA-256 hex 哈希（v1 旧版，用于兼容验证） */
-function hashLegacy(input: string): string {
-  const data = new TextEncoder().encode(input);
-  return bytesToHex(sha256(data));
+/** 计算的 SHA-256 hex 哈希（v1 旧版，用于兼容验证）
+ *  Web 环境下为异步，需要 await */
+function hashLegacy(input: string): string | Promise<string> {
+  return sha256Hex(input);
 }
 
 /** 将 DB 行转换为 LocalWallet（布尔值 0/1 → true/false） */
@@ -157,11 +152,11 @@ export const localWalletService = {
     if (!wallet.password_hash) return false;
 
     // 先尝试 PBKDF2 v2 哈希
-    const v2Hash = hashPassword(password);
+    const v2Hash = await hashPassword(password);
     if (v2Hash === wallet.password_hash) return true;
 
     // 兼容旧版 SHA-256 v1 哈希
-    const v1Hash = hashLegacy(password);
+    const v1Hash = await hashLegacy(password);
     if (v1Hash === wallet.password_hash) {
       // 自动升级：旧哈希验证成功后，更新为 PBKDF2 v2 哈希
       await this.updatePassword(id, v2Hash);
@@ -188,11 +183,11 @@ export const localWalletService = {
     const storedHash = row.mnemonic_hash;
 
     // 先尝试 PBKDF2 v2 哈希
-    const v2Hash = hashMnemonic(mnemonic);
+    const v2Hash = await hashMnemonic(mnemonic);
     if (v2Hash === storedHash) return true;
 
     // 兼容旧版 SHA-256 v1 哈希
-    const v1Hash = hashLegacy(mnemonic);
+    const v1Hash = await hashLegacy(mnemonic);
     if (v1Hash === storedHash) {
       // 自动升级：旧哈希验证成功后，更新为 PBKDF2 v2 哈希
       await this.updateMnemonicHash(id, v2Hash);

@@ -305,7 +305,22 @@ async fn list_wallets(
 
     let rows: Vec<Row> = query(
         &state.db,
-        "SELECT w.id as wallet_id, w.alias, w.source, w.created_at as wallet_created_at, wa.chain, d.id as device_id, d.platform as device_platform, d.last_active_at as device_last_active_at, aa.asset_id, a.symbol, a.name as asset_name, aa.chain as asset_chain, a.icon_url, aa.balance as total_balance FROM wallets w LEFT JOIN wallet_subscriptions ws ON ws.wallet_id = w.id AND ws.address_id != '' LEFT JOIN wallets_addresses wa ON wa.id = ws.address_id LEFT JOIN devices d ON d.id = ws.device_id LEFT JOIN assets_addresses aa ON aa.address_id = ws.address_id LEFT JOIN assets a ON a.id = aa.asset_id WHERE w.id IN (SELECT id FROM wallets ORDER BY created_at DESC LIMIT $1 OFFSET $2) ORDER BY w.created_at DESC, wa.chain, d.last_active_at DESC NULLS LAST",
+        "WITH wallet_addr_ids AS ( \
+            SELECT DISTINCT ws.wallet_id, ws.address_id, ws.device_id \
+            FROM wallet_subscriptions ws \
+            WHERE ws.address_id != '' \
+        ) \
+        SELECT w.id as wallet_id, w.alias, w.source, w.created_at as wallet_created_at, \
+            wa.chain, d.id as device_id, d.platform as device_platform, d.last_active_at as device_last_active_at, \
+            aa.asset_id, a.symbol, a.name as asset_name, aa.chain as asset_chain, a.icon_url, aa.balance as total_balance \
+        FROM wallets w \
+        LEFT JOIN wallet_addr_ids wai ON wai.wallet_id = w.id \
+        LEFT JOIN wallets_addresses wa ON wa.id = wai.address_id \
+        LEFT JOIN devices d ON d.id = wai.device_id \
+        LEFT JOIN assets_addresses aa ON aa.address_id = wai.address_id \
+        LEFT JOIN assets a ON a.id = aa.asset_id \
+        WHERE w.id IN (SELECT id FROM wallets ORDER BY created_at DESC LIMIT $1 OFFSET $2) \
+        ORDER BY w.created_at DESC, wa.chain, d.last_active_at DESC NULLS LAST",
         vals![auth.limit as i64, offset as i64],
     )
     .await?;
@@ -385,15 +400,24 @@ async fn list_wallets(
         item.device_count = item.devices.len() as i64;
     }
 
-    // 合并余额数据到钱包列表（保持 Decimal，避免 String 往返）
+    // 合并余额数据到钱包列表（按 asset_id 去重，避免重复代币记录）
     for item in &mut items {
         let balances = balance_map.remove(&item.id).unwrap_or_default();
-        let total_cny: rust_decimal::Decimal = balances
+        // 按 asset_id 去重：相同 asset_id 只保留第一条（CTE 已消除 JOIN 倍增，此处为防御性去重）
+        let mut seen_assets: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut deduped_balances: Vec<BalTuple> = Vec::new();
+        for bal in balances {
+            if !seen_assets.contains(&bal.0) {
+                seen_assets.insert(bal.0.clone());
+                deduped_balances.push(bal);
+            }
+        }
+        let total_cny: rust_decimal::Decimal = deduped_balances
             .iter()
             .map(|(_, _, _, _, _, bal)| bal * cny_rate)
             .sum();
         item.total_balance_cny = total_cny.to_string();
-        item.assets = balances
+        item.assets = deduped_balances
             .into_iter()
             .map(|(aid, sym, name, chain, url, bal)| AssetBalanceBrief {
                 asset_id: aid,

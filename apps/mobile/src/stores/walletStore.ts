@@ -302,8 +302,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // 2. 网络注册 + PBKDF2 hash 并行（无依赖关系）
     const [, passwordHash, mnemonicHash] = await Promise.all([
       syncService.registerWallet("CREATE", walletId, alias),
-      Promise.resolve(hashPassword(password)),
-      Promise.resolve(hashMnemonic(mnemonic)),
+      hashPassword(password),
+      hashMnemonic(mnemonic),
     ]);
 
     // 3. SQLite 写入 + SecureStore 存助记词并行
@@ -335,8 +335,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // 2. 网络注册 + PBKDF2 hash 并行（无依赖关系）
     const [, passwordHash, mnemonicHash] = await Promise.all([
       syncService.registerWallet("IMPORT", walletId, alias),
-      Promise.resolve(hashPassword(password)),
-      Promise.resolve(hashMnemonic(cleaned)),
+      hashPassword(password),
+      hashMnemonic(cleaned),
     ]);
 
     // 3. SQLite 写入 + SecureStore 存助记词并行
@@ -372,7 +372,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
 
     // 更新本地密码
-    const newPasswordHash = hashPassword(password);
+    const newPasswordHash = await hashPassword(password);
     await localWalletService.updatePassword(walletId, newPasswordHash, passwordHint);
 
     // 更新本地助记词存储

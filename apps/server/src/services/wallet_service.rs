@@ -319,7 +319,23 @@ pub async fn get_wallet_balance(
         icon_url: String,
         total_balance: Decimal,
     }
-    let rows: Vec<R> = query(&rb, "SELECT aa.asset_id, a.symbol, a.name, aa.chain, a.decimals, a.icon_url, SUM(aa.balance) as total_balance FROM assets_addresses aa JOIN assets a ON a.id = aa.asset_id JOIN wallet_subscriptions ws ON ws.address_id = aa.address_id WHERE ws.wallet_id = $1 AND ws.address_id != '' GROUP BY aa.asset_id, a.symbol, a.name, aa.chain, a.decimals, a.icon_url", vals![wallet_id]).await?;
+    // CTE: 先查出该钱包的所有地址 ID（DISTINCT 去重，避免多设备订阅导致 JOIN 倍增），
+    // 再 JOIN assets_addresses 查余额 — 单条 SQL，减少 DB 往返
+    let rows: Vec<R> = query(
+        &rb,
+        "WITH wallet_addr_ids AS ( \
+            SELECT DISTINCT wa.id \
+            FROM wallets_addresses wa \
+            JOIN wallet_subscriptions ws ON wa.id = ws.address_id \
+            WHERE ws.wallet_id = $1 AND ws.address_id != '' \
+        ) \
+        SELECT aa.asset_id, a.symbol, a.name, aa.chain, a.decimals, a.icon_url, SUM(aa.balance) as total_balance \
+        FROM assets_addresses aa \
+        JOIN assets a ON a.id = aa.asset_id \
+        JOIN wallet_addr_ids wai ON aa.address_id = wai.id \
+        GROUP BY aa.asset_id, a.symbol, a.name, aa.chain, a.decimals, a.icon_url",
+        vals![wallet_id],
+    ).await?;
     let cny = cny_rate;
     let assets: Vec<AssetBalanceItem> = rows
         .into_iter()
