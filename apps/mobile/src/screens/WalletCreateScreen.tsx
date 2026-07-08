@@ -145,7 +145,7 @@ export default function WalletCreateScreen() {
       {/* 遮罩层加载效果 */}
       <CreatingOverlay visible={loading} />
 
-      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>创建钱包</Text>
           <Text style={styles.desc}>为你的多账户钱包命名并设置密码保护。你也可以稍后添加更多钱包。</Text>
@@ -240,7 +240,7 @@ export default function WalletCreateScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F8" },
-  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 40 },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 120 },
 
   title: { fontSize: 22, fontWeight: "700", color: "#1F2937", marginBottom: 8 },
   desc: { fontSize: 14, color: "#6B7280", lineHeight: 22, marginBottom: 24 },

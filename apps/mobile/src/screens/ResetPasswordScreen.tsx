@@ -193,7 +193,7 @@ export default function ResetPasswordScreen() {
     return (
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -296,7 +296,7 @@ export default function ResetPasswordScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -609,7 +609,7 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: 32,
+    paddingBottom: 120,
     backgroundColor: "#F5F6F8",
   },
   importBtn: {
