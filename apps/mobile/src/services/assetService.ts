@@ -1,22 +1,8 @@
 import api from "./api";
-import type { AssetBalance, AssetInfo } from "../types";
+import type { AssetInfo } from "../types";
 import { transactionService } from "./transactionService";
 
 export const assetService = {
-  async getBalance(
-    walletId: string
-  ): Promise<{ totalBalanceCny: string; totalBalanceUsd: string; address: string }> {
-    const { data } = await api.get(`/assets/${walletId}/balance`);
-    return data;
-  },
-
-  async getAssetList(
-    walletId: string
-  ): Promise<{ assets: AssetBalance[] }> {
-    const { data } = await api.get(`/assets/${walletId}/list`);
-    return data;
-  },
-
   async getAssets(): Promise<{ assets: AssetInfo[] }> {
     const { data } = await api.get("/assets");
     return data;

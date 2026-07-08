@@ -37,14 +37,6 @@ export const syncService = {
   },
 
   /**
-   * 获取钱包在服务端的所有地址记录。
-   */
-  async getServerAddresses(walletId: string): Promise<ServerWalletAddress[]> {
-    const { data } = await api.get(`/wallets/${walletId}/addresses`);
-    return data.addresses;
-  },
-
-  /**
    * 删除服务端钱包（取消当前设备的订阅）。
    */
   async deleteWallet(walletId: string): Promise<void> {

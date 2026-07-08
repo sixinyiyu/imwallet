@@ -1,5 +1,5 @@
 import api from "./api";
-import type { Wallet, SimpleWallet, AggregateWallet, WalletBalanceDetail, ServerWalletAddress, AssetBalance } from "../types";
+import type { Wallet, SimpleWallet, WalletBalanceDetail, ServerWalletAddress, AssetBalance } from "../types";
 
 function mapAssetBalance(item: any): AssetBalance {
   return {
@@ -64,12 +64,6 @@ export const walletService = {
     return { wallets, total: data.total || 0 };
   },
 
-  /** 获取钱包列表聚合数据（含网络列表） */
-  async getWalletsAggregate(): Promise<{ wallets: AggregateWallet[] }> {
-    const { data } = await api.get("/wallets/aggregate");
-    return data;
-  },
-
   async getWalletBalanceDetail(walletId: string): Promise<WalletBalanceDetail> {
     const { data } = await api.get(`/wallets/${walletId}/balance`);
     return {
@@ -106,16 +100,6 @@ export const walletService = {
   /** 删除钱包（服务端取消订阅） */
   async deleteWallet(walletId: string): Promise<void> {
     await api.delete(`/wallets/${walletId}`);
-  },
-
-  /** 订阅钱包到当前设备 */
-  async subscribeWallet(walletId: string): Promise<void> {
-    await api.post("/devices/wallets", { walletId });
-  },
-
-  /** 取消订阅钱包 */
-  async unsubscribeWallet(walletId: string): Promise<void> {
-    await api.delete(`/devices/wallets/${walletId}`);
   },
 
   /** 批量同步钱包+地址 — 一次请求替代 N+M 次串行同步

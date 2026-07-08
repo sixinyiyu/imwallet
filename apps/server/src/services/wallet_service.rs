@@ -223,69 +223,6 @@ pub async fn get_wallets_by_device(
 
 /// 批量获取钱包聚合数据（钱包 + 网络）（解决 N+1 查询）
 #[derive(Debug, Serialize)]
-pub struct WalletAggregate {
-    pub wallet_id: String,
-    pub alias: Option<String>,
-    pub source: Option<String>,
-    pub networks: Vec<String>,
-}
-
-pub async fn get_wallets_aggregate_by_device(
-    rb: Arc<RBatis>,
-    device_id: &str,
-) -> Result<Vec<WalletAggregate>, AppError> {
-    #[derive(serde::Deserialize)]
-    struct R {
-        wallet_id: String,
-        alias: Option<String>,
-        source: Option<String>,
-        chain: String,
-    }
-    let rows: Vec<R> = query(
-        &rb,
-        "SELECT ws.wallet_id, w.alias, w.source, wa.chain FROM wallet_subscriptions ws JOIN wallets w ON w.id = ws.wallet_id JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.device_id = $1 AND ws.address_id != '' ORDER BY ws.wallet_id, wa.chain",
-        vals![device_id],
-    )
-    .await?;
-
-    // 按钱包分组
-    let mut result = Vec::new();
-    let mut current_id = String::new();
-    let mut networks = Vec::new();
-    let mut current_alias: Option<String> = None;
-    let mut current_source: Option<String> = None;
-    for r in rows {
-        if r.wallet_id != current_id {
-            if !current_id.is_empty() {
-                networks.dedup();
-                result.push(WalletAggregate {
-                    wallet_id: current_id,
-                    alias: current_alias,
-                    source: current_source,
-                    networks,
-                });
-            }
-            current_id = r.wallet_id;
-            current_alias = r.alias;
-            current_source = r.source;
-            networks = vec![r.chain];
-        } else {
-            networks.push(r.chain);
-        }
-    }
-    if !current_id.is_empty() {
-        networks.dedup();
-        result.push(WalletAggregate {
-            wallet_id: current_id,
-            alias: current_alias,
-            source: current_source,
-            networks,
-        });
-    }
-    Ok(result)
-}
-
-#[derive(Debug, Serialize)]
 pub struct WalletBalance {
     pub total_balance_usd: Decimal,
     pub total_balance_cny: Decimal,
@@ -594,7 +531,12 @@ pub async fn batch_sync_wallets(
             };
 
             // 5. 收集订阅记录（不再逐条 INSERT，最后批量插入）
-            subscriptions.push((w.wallet_id.clone(), device_id.to_string(), a.chain.clone(), wa.id.clone()));
+            subscriptions.push((
+                w.wallet_id.clone(),
+                device_id.to_string(),
+                a.chain.clone(),
+                wa.id.clone(),
+            ));
 
             address_results.push(SyncAddressResult {
                 chain: a.chain.clone(),

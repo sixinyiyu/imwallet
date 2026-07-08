@@ -13,8 +13,6 @@ use serde::{Deserialize, Serialize};
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/assets", get(get_active_assets))
-        .route("/assets/{wallet_id}/balance", get(get_wallet_total_balance))
-        .route("/assets/{wallet_id}/list", get(get_wallet_asset_list))
         .route("/assets/{id}/tradable", put(toggle_tradable))
 }
 
@@ -28,40 +26,6 @@ async fn get_active_assets(
 ) -> Result<Json<AssetsResponse>, AppError> {
     let assets = asset_service::get_active_assets(state.db.clone()).await?;
     Ok(Json(AssetsResponse { assets }))
-}
-
-#[derive(Debug, Serialize)]
-struct BalanceSummary {
-    total_balance_cny: rust_decimal::Decimal,
-    total_balance_usd: rust_decimal::Decimal,
-}
-
-async fn get_wallet_total_balance(
-    State(state): State<AppState>,
-    Path(wallet_id): Path<String>,
-) -> Result<Json<BalanceSummary>, AppError> {
-    let cny_rate = crate::services::fiat_service::get_cached_cny_rate(&state);
-    let balance =
-        crate::services::wallet_service::get_wallet_balance(state.db.clone(), &wallet_id, cny_rate)
-            .await?;
-    Ok(Json(BalanceSummary {
-        total_balance_cny: balance.total_balance_cny,
-        total_balance_usd: balance.total_balance_usd,
-    }))
-}
-
-#[derive(Debug, Serialize)]
-struct AssetListResponse {
-    assets: Vec<asset_service::AssetBalanceDetail>,
-}
-
-async fn get_wallet_asset_list(
-    State(state): State<AppState>,
-    Path(wallet_id): Path<String>,
-) -> Result<Json<AssetListResponse>, AppError> {
-    let cny_rate = crate::services::fiat_service::get_cached_cny_rate(&state);
-    let list = asset_service::get_wallet_asset_list(state.db.clone(), &wallet_id, cny_rate).await?;
-    Ok(Json(AssetListResponse { assets: list }))
 }
 
 #[derive(Debug, Deserialize)]
