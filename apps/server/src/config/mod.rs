@@ -91,8 +91,6 @@ pub struct LoggingConfig {
 pub struct SecurityConfig {
     #[serde(default = "default_timestamp_window")]
     pub timestamp_window_secs: i64,
-    #[serde(default = "default_replay_capacity")]
-    pub replay_cache_capacity: usize,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -123,7 +121,6 @@ impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
             timestamp_window_secs: default_timestamp_window(),
-            replay_cache_capacity: default_replay_capacity(),
         }
     }
 }
@@ -171,9 +168,6 @@ fn default_log_level() -> String {
 }
 fn default_timestamp_window() -> i64 {
     300
-}
-fn default_replay_capacity() -> usize {
-    100_000
 }
 fn default_rsa_private_key_path() -> String {
     "keys/rsa_private.pem".into()
@@ -231,7 +225,6 @@ pub struct AppConfig {
     pub server_pwd: String,
     pub log_default_level: String,
     pub timestamp_window_secs: i64,
-    pub replay_cache_capacity: usize,
     pub rsa_private_key_path: String,
     pub rsa_public_key_path: String,
     pub admin_route_prefix: String,
@@ -311,7 +304,6 @@ impl From<ConfigFile> for AppConfig {
             server_pwd: env_override("SERVER_PWD", &c.service.password),
             log_default_level: c.logging.default_level,
             timestamp_window_secs: c.security.timestamp_window_secs,
-            replay_cache_capacity: c.security.replay_cache_capacity,
             rsa_private_key_path: env_override("RSA_PRIVATE_KEY_PATH", &c.rsa.private_key_path),
             rsa_public_key_path: env_override("RSA_PUBLIC_KEY_PATH", &c.rsa.public_key_path),
             admin_route_prefix: env_override("ADMIN_ROUTE_PREFIX", &c.admin.route_prefix),

@@ -12,11 +12,11 @@ use crate::services::rsa_service::RsaKeys;
 use arc_swap::ArcSwap;
 use axum::{extract::State, middleware::Next, response::Response};
 use dashmap::DashMap;
-use dashmap::DashSet;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
+use std::time::Instant;
 
 // ── 请求日志常量与辅助函数 ──
 
@@ -111,22 +111,52 @@ fn truncate_log(s: &str, max_len: usize) -> &str {
 }
 
 // ── 防重放缓存（内联，仅本中间件使用） ──
+//
+// 使用 DashMap<String, Instant> 替代 DashSet<String>，
+// 每次 check_and_insert 时顺便清理过期条目（超过 ttl 的签名），
+// 防止内存无限增长。
+
+/// 防重放缓存淘汰间隔：每处理 N 次请求后执行一次过期清理
+const REPLAY_EVICTION_INTERVAL: usize = 64;
 
 #[derive(Clone)]
 struct ReplayCache {
-    inner: Arc<DashSet<String>>,
+    inner: Arc<DashMap<String, Instant>>,
+    /// 签名有效期（秒），与 timestamp_window_secs 一致
+    ttl_secs: i64,
+    /// 内部计数器，每 REPLAY_EVICTION_INTERVAL 次请求触发一次清理
+    counter: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl ReplayCache {
-    fn new(_capacity: usize) -> Self {
+    fn new(ttl_secs: i64) -> Self {
         Self {
-            inner: Arc::new(DashSet::new()),
+            inner: Arc::new(DashMap::new()),
+            ttl_secs,
+            counter: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 
-    /// 检查签名是否已使用；未使用则插入，返回 true
+    /// 检查签名是否已使用；未使用则插入，返回 true。
+    /// 每隔 REPLAY_EVICTION_INTERVAL 次调用顺便清理过期条目。
     async fn check_and_insert(&self, sig: &str) -> bool {
-        self.inner.insert(sig.to_string())
+        let now = Instant::now();
+        let is_new = self.inner.insert(sig.to_string(), now).is_none();
+
+        // 每 N 次请求触发一次过期清理（避免每次请求都遍历整个 map）
+        let count = self.counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if count.is_multiple_of(REPLAY_EVICTION_INTERVAL as u64) {
+            self.evict_expired();
+        }
+
+        is_new
+    }
+
+    /// 清理超过 ttl_secs 的过期签名
+    fn evict_expired(&self) {
+        let ttl = std::time::Duration::from_secs(self.ttl_secs as u64);
+        // 使用 retain 批量删除，O(N) 但每 64 次请求才执行一次
+        self.inner.retain(|_, inserted_at| inserted_at.elapsed() < ttl);
     }
 }
 
@@ -143,8 +173,10 @@ pub struct AppState {
     log_rate_limiter: DashMap<String, i64>,
     /// 请求限频：device_id → (秒级时间戳, 该秒内已请求次数)（每设备每秒最多10次请求）
     request_rate_limiter: DashMap<String, (i64, u32)>,
-    /// 设备信息缓存：device_id → platform（减少每次请求查DB）
-    device_cache: DashMap<String, String>,
+    /// 设备信息缓存：device_id → (platform, last_db_update_ts)
+    /// last_db_update_ts: 上次更新 last_active_at 到 DB 的秒级时间戳
+    /// 缓存命中时也能判断距上次 DB 更新是否超过 5 分钟
+    device_cache: DashMap<String, (String, i64)>,
     /// 管理路由前缀（从 config.toml [admin].route_prefix 读取，如 "vault"）
     admin_route_prefix: String,
 }
@@ -170,15 +202,16 @@ impl AppState {
         db: Arc<rbatis::RBatis>,
         config: Arc<RuntimeConfig>,
         rsa_keys: Arc<RsaKeys>,
-        replay_cache_capacity: usize,
         cny_rate: Decimal,
         admin_route_prefix: String,
     ) -> Self {
+        let ttl_secs = config.timestamp_window_secs;
         Self {
             db,
             config,
             rsa_keys,
-            replay_cache: ReplayCache::new(replay_cache_capacity),
+            // ttl_secs 使用 timestamp_window_secs（签名有效期与时间窗口一致）
+            replay_cache: ReplayCache::new(ttl_secs),
             cny_rate: ArcSwap::from(Arc::new(cny_rate)),
             log_rate_limiter: DashMap::new(),
             request_rate_limiter: DashMap::new(),
@@ -188,14 +221,15 @@ impl AppState {
     }
 
     /// 获取设备 platform 缓存（命中则跳过 DB 查询）
-    pub async fn get_cached_device_platform(&self, device_id: &str) -> Option<String> {
+    /// 返回 (platform, last_db_update_ts)
+    pub fn get_cached_device_info(&self, device_id: &str) -> Option<(String, i64)> {
         self.device_cache.get(device_id).map(|v| v.value().clone())
     }
 
-    /// 缓存设备 platform
-    pub async fn cache_device_platform(&self, device_id: &str, platform: &str) {
+    /// 缓存设备 platform + last_db_update_ts
+    pub fn cache_device_info(&self, device_id: &str, platform: &str, update_ts: i64) {
         self.device_cache
-            .insert(device_id.to_string(), platform.to_string());
+            .insert(device_id.to_string(), (platform.to_string(), update_ts));
     }
 
     /// 日志限频检查：同一 device_id 每分钟最多允许 1 次上报
@@ -356,13 +390,12 @@ pub async fn device_auth(
         .get("x-platform")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("ios");
-    let (platform, should_update) = if let Some(cached_platform) =
-        state.get_cached_device_platform(device_id).await
+    let (platform, should_update) = if let Some((cached_platform, last_db_update_ts)) =
+        state.get_cached_device_info(device_id)
     {
-        // 缓存命中，无需查 DB — 但仍需判断是否更新 last_active_at
-        // 缓存命中意味着设备已存在，检查距上次 DB 更新是否超过 5 分钟
-        // 简化处理：缓存命中时跳过 last_active_at 更新（上次 DB 查询时已更新）
-        (cached_platform, false)
+        // 缓存命中：无需查 DB，但检查距上次 DB 更新是否超过 5 分钟
+        let should_upd = (now - last_db_update_ts).abs() > 300;
+        (cached_platform, should_upd)
     } else {
         let existing: Option<Device> = query_one(
             &state.db,
@@ -376,7 +409,8 @@ pub async fn device_auth(
                 .last_active_at
                 .clone()
                 .is_none_or(|la| (now - la.unix_timestamp()).abs() > 300);
-            state.cache_device_platform(device_id, &d.platform).await;
+            state.cache_device_info(device_id, &d.platform, now);
+
             (d.platform.clone(), upd)
         } else {
             let inserted: Option<Device> = query_one(
@@ -389,25 +423,33 @@ pub async fn device_auth(
             let plat = inserted
                 .map(|d| d.platform)
                 .unwrap_or_else(|| platform_from_header.to_string());
-            state.cache_device_platform(device_id, &plat).await;
+            state.cache_device_info(device_id, &plat, now);
             (plat, true)
         };
         (plat, should_upd)
     };
     // 仅在距上次更新超过 5 分钟时才写入 last_active_at，避免每个请求都写 DB
     // fire-and-forget：此操作不影响任何业务逻辑，写入失败也无害，不应阻塞请求
+    // 写入成功后更新缓存中的 last_db_update_ts，避免重复触发
     if should_update {
         let db = state.db.clone();
         let did = device_id.to_string();
+        let now_ts = now;
+        let state_clone = state.clone();
         tokio::spawn(async move {
-            if let Err(e) = crate::db::query::exec(
+            let result = crate::db::query::exec(
                 &db,
                 "UPDATE devices SET last_active_at = NOW() WHERE id = $1",
                 vals![&did],
             )
-            .await
-            {
+            .await;
+            if let Err(e) = result {
                 log::warn!("Failed to update last_active_at for device {}: {}", did, e);
+            } else {
+                // 更新缓存中的 last_db_update_ts，避免下次请求重复触发
+                if let Some((plat, _)) = state_clone.get_cached_device_info(&did) {
+                    state_clone.cache_device_info(&did, &plat, now_ts);
+                }
             }
         });
     }

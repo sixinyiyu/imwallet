@@ -29,7 +29,6 @@ pub async fn build_routes(
         &config.rsa_private_key_path,
         &config.rsa_public_key_path,
     )?);
-    let replay_cache_capacity = config.replay_cache_capacity;
     let admin_route_prefix = config.admin_route_prefix.clone();
     let runtime_config = Arc::new(RuntimeConfig::from(config));
 
@@ -40,7 +39,6 @@ pub async fn build_routes(
         db.clone(),
         runtime_config,
         rsa_keys,
-        replay_cache_capacity,
         cny_rate,
         admin_route_prefix.clone(),
     );

@@ -387,15 +387,26 @@ pub async fn subscribe_wallet_readonly(
         )
         .await?;
     } else {
-        // 逐条 INSERT ON CONFLICT（幂等，已订阅地址自动跳过）
-        for wa in &addresses {
-            crate::db::query::exec(
-                &rb,
-                "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES ($1, $2, $3, $4) ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
-                vals![wallet_id, device_id, &wa.chain, &wa.id],
-            )
-            .await?;
-        }
+        // 批量 INSERT ON CONFLICT（幂等，已订阅地址自动跳过）— 单次 DB 往返
+        // 每条记录 4 个参数：(wallet_id, device_id, chain, address_id)
+        let mut args: Vec<rbs::value::Value> = Vec::new();
+        let placeholders: Vec<String> = addresses
+            .iter()
+            .enumerate()
+            .map(|(i, wa)| {
+                let base = i * 4 + 1;
+                args.push(rbs::value::Value::String(wallet_id.to_string()));
+                args.push(rbs::value::Value::String(device_id.to_string()));
+                args.push(rbs::value::Value::String(wa.chain.clone()));
+                args.push(rbs::value::Value::String(wa.id.clone()));
+                format!("(${}, ${}, ${}, ${})", base, base + 1, base + 2, base + 3)
+            })
+            .collect();
+        let sql = format!(
+            "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES {} ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
+            placeholders.join(", ")
+        );
+        crate::db::query::exec(&rb, &sql, args).await?;
     }
 
     log::info!(
@@ -474,6 +485,8 @@ pub async fn batch_sync_wallets(
 
     let tx = rb.acquire_begin().await?;
     let mut results = Vec::new();
+    // 收集所有订阅记录，最后批量 INSERT（减少事务持有时间）
+    let mut subscriptions: Vec<(String, String, String, String)> = Vec::new(); // (wallet_id, device_id, chain, address_id)
 
     for w in &wallets {
         // 1. 确保钱包存在（幂等）
@@ -532,7 +545,6 @@ pub async fn batch_sync_wallets(
 
             let wa = if let Some(wa) = inserted_addr {
                 // 新地址：初始化该链的默认代币余额
-                // 注意：ensure_asset_balances 需要非事务连接，这里在事务内用 tx_query
                 let assets: Vec<crate::models::Asset> = crate::db::query::tx_query(
                     &tx,
                     "SELECT * FROM assets WHERE chain = $1 AND is_default = true",
@@ -578,13 +590,8 @@ pub async fn batch_sync_wallets(
                 existing
             };
 
-            // 5. 确保设备订阅该地址（幂等）
-            crate::db::query::tx_exec(
-                &tx,
-                "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES ($1, $2, $3, $4) ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
-                vals![&w.wallet_id, device_id, &a.chain, &wa.id],
-            )
-            .await?;
+            // 5. 收集订阅记录（不再逐条 INSERT，最后批量插入）
+            subscriptions.push((w.wallet_id.clone(), device_id.to_string(), a.chain.clone(), wa.id.clone()));
 
             address_results.push(SyncAddressResult {
                 chain: a.chain.clone(),
@@ -599,12 +606,35 @@ pub async fn batch_sync_wallets(
         });
     }
 
+    // 6. 批量插入所有订阅记录（单次 DB 往返，ON CONFLICT 保证幂等）
+    if !subscriptions.is_empty() {
+        let mut args: Vec<rbs::value::Value> = Vec::new();
+        let placeholders: Vec<String> = subscriptions
+            .iter()
+            .enumerate()
+            .map(|(i, (wid, did, chain, addr_id))| {
+                let base = i * 4 + 1;
+                args.push(rbs::value::Value::String(wid.clone()));
+                args.push(rbs::value::Value::String(did.clone()));
+                args.push(rbs::value::Value::String(chain.clone()));
+                args.push(rbs::value::Value::String(addr_id.clone()));
+                format!("(${}, ${}, ${}, ${})", base, base + 1, base + 2, base + 3)
+            })
+            .collect();
+        let sql = format!(
+            "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES {} ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
+            placeholders.join(", ")
+        );
+        crate::db::query::tx_exec(&tx, &sql, args).await?;
+    }
+
     tx.commit().await?;
     log::info!(
-        "[批量同步] 完成 — 设备={}, 钱包数={}, 总地址数={}",
+        "[批量同步] 完成 — 设备={}, 钱包数={}, 总地址数={}, 总订阅数={}",
         device_id,
         wallets.len(),
-        results.iter().map(|r| r.addresses.len()).sum::<usize>()
+        results.iter().map(|r| r.addresses.len()).sum::<usize>(),
+        subscriptions.len()
     );
     Ok(results)
 }
