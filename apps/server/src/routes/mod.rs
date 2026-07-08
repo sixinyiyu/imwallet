@@ -53,7 +53,6 @@ pub async fn build_routes(
         .merge(log::router());
 
     let auth_routes: Router<AppState> = Router::new()
-        .merge(device::protected_router())
         .merge(wallet::router())
         .merge(asset::router())
         .merge(transaction::router())

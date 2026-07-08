@@ -12,12 +12,6 @@ pub fn public_router() -> Router<AppState> {
     Router::new().route("/devices", post(register_device))
 }
 
-pub fn protected_router() -> Router<AppState> {
-    // GET /devices/me, GET/POST /devices/wallets, DELETE /devices/wallets/{wallet_id}
-    // 已删除：前端未调用，功能被其他接口覆盖
-    Router::new()
-}
-
 #[derive(Debug, Deserialize)]
 struct RegisterDeviceRequest {
     device_id: String,
