@@ -475,9 +475,10 @@ const styles = StyleSheet.create({
   // 第三行：备注(左) + 操作链接(右)
   row3: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     alignItems: "center",
     marginTop: 8,
+    gap: 16,
   },
   memoText: {
     fontSize: 12,
@@ -487,6 +488,7 @@ const styles = StyleSheet.create({
   row3Actions: {
     flexDirection: "row",
     gap: 16,
+    flexShrink: 0,
   },
   linkText: {
     fontSize: 13,
