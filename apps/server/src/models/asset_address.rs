@@ -4,6 +4,7 @@ use rbdc::DateTime;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
+#[allow(dead_code)] // ORM 模型仅通过 query<T> 泛型反序列化使用
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssetAddress {
     pub id: String,
