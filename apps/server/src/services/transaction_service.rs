@@ -258,6 +258,14 @@ pub async fn check_address(rb: Arc<RBatis>, address: &str) -> Result<bool, AppEr
     .await?;
     Ok(cnt > 0)
 }
+
+/// 获取钱包交易记录 — UNION ALL 方案
+/// PG 对 OR 条件优化不如两条独立查询，分别走索引更高效。
+/// 策略：
+///   1. 查询钱包地址列表（一次查询）
+///   2. 构建参数化 IN 子句
+///   3. 并行执行两条查询：from_address IN (...) 和 to_address IN (...)
+///   4. 应用层合并去重（按 id）+ 排序（created_at DESC）+ 分页
 pub async fn get_transactions(
     rb: Arc<RBatis>,
     wallet_id: &str,
@@ -265,82 +273,93 @@ pub async fn get_transactions(
     page: u64,
     limit: u64,
 ) -> Result<(Vec<crate::models::Transaction>, u64), AppError> {
-    let o = ((page - 1) * limit) as i64;
+    let offset = ((page - 1) * limit) as i64;
     let l = limit as i64;
     use crate::db::query::query;
 
-    // CTE: 预计算钱包地址集合（只执行一次），UNION ALL 让两条分支各自走索引
-    // from_address IN (...) 走 from_address 索引，to_address IN (...) 走 to_address 索引
-    // NOT IN 排除已作为发送方出现的记录，避免重复
-    let cte_prefix = "WITH wallet_addr AS ( \
-        SELECT DISTINCT wa.address \
-        FROM wallet_subscriptions ws \
-        JOIN wallets_addresses wa ON wa.id = ws.address_id \
-        WHERE ws.wallet_id = $1 AND ws.address_id != '' \
-    ), \
-    matched_tx AS ( \
-        SELECT t.*, COUNT(*) OVER() as total_count \
-        FROM transactions t \
-        WHERE t.from_address IN (SELECT address FROM wallet_addr) \
-           OR t.to_address   IN (SELECT address FROM wallet_addr) \
-        ORDER BY t.created_at DESC \
-        LIMIT $2 OFFSET $3 \
-    ) \
-    SELECT * FROM matched_tx";
+    // ── Step 1: 查询钱包地址列表 ──
+    #[derive(serde::Deserialize)]
+    struct AddrRow {
+        address: String,
+    }
+    let addr_rows: Vec<AddrRow> = query(
+        &rb,
+        "SELECT DISTINCT wa.address FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id = $1 AND ws.address_id != ''",
+        vals![wallet_id],
+    )
+    .await?;
+    let addresses: Vec<String> = addr_rows.iter().map(|r| r.address.clone()).collect();
 
-    let (rows, total) = if let Some(sym) = token_symbol {
-        // CTE + token_symbol 过滤：$1=wallet_id, $2=symbol, $3=limit, $4=offset
-        let sql_with_sym = "WITH wallet_addr AS ( \
-            SELECT DISTINCT wa.address \
-            FROM wallet_subscriptions ws \
-            JOIN wallets_addresses wa ON wa.id = ws.address_id \
-            WHERE ws.wallet_id = $1 AND ws.address_id != '' \
-        ), \
-        matched_tx AS ( \
-            SELECT t.*, COUNT(*) OVER() as total_count \
-            FROM transactions t \
-            WHERE (t.from_address IN (SELECT address FROM wallet_addr) \
-               OR t.to_address   IN (SELECT address FROM wallet_addr)) \
-              AND t.token_symbol = $2 \
-            ORDER BY t.created_at DESC \
-            LIMIT $3 OFFSET $4 \
-        ) \
-        SELECT * FROM matched_tx";
+    if addresses.is_empty() {
+        return Ok((Vec::new(), 0));
+    }
 
-        #[derive(serde::Deserialize)]
-        struct TxWithCount {
-            #[serde(flatten)]
-            tx: crate::models::Transaction,
-            total_count: Option<i64>,
-        }
-        let rows_with_count: Vec<TxWithCount> =
-            query(&rb, sql_with_sym, vals![wallet_id, sym, l, o]).await?;
-        let total = rows_with_count
-            .first()
-            .and_then(|r| r.total_count)
-            .unwrap_or(0) as u64;
-        let rows: Vec<crate::models::Transaction> =
-            rows_with_count.into_iter().map(|r| r.tx).collect();
-        (rows, total)
+    // ── Step 2: 构建参数化 IN 子句 ──
+    let (in_ph, in_args) = crate::db::query::in_clause(&addresses, 1);
+
+    // ── Step 3: 构建两条独立查询 SQL ──
+    // from_address IN (...) 起始走 from_address 复合索引
+    // to_address IN (...) 起始走 to_address 复合索引
+    let from_sql = format!(
+        "SELECT t.id, t.tx_hash, t.from_address, t.to_address, t.token_symbol, t.amount, t.fee, t.status, t.memo, t.platform, t.created_at, t.updated_at \
+         FROM transactions t \
+         WHERE t.from_address IN {}",
+        in_ph
+    );
+    let to_sql = format!(
+        "SELECT t.id, t.tx_hash, t.from_address, t.to_address, t.token_symbol, t.amount, t.fee, t.status, t.memo, t.platform, t.created_at, t.updated_at \
+         FROM transactions t \
+         WHERE t.to_address IN {}",
+        in_ph
+    );
+
+    // ── Step 4: 并行查询两条分支 ──
+    let (from_res, to_res) = if let Some(sym) = token_symbol {
+        // 有 token_symbol 过滤时，追加 AND t.token_symbol = $N
+        let sym_idx = addresses.len() + 1;
+        let from_sql_sym = format!("{} AND t.token_symbol = ${}", from_sql, sym_idx);
+        let to_sql_sym = format!("{} AND t.token_symbol = ${}", to_sql, sym_idx);
+        let mut args_from = in_args.clone();
+        args_from.push(rbs::value!(sym));
+        let mut args_to = in_args.clone();
+        args_to.push(rbs::value!(sym));
+        tokio::join!(
+            query::<crate::models::Transaction>(&rb, &from_sql_sym, args_from),
+            query::<crate::models::Transaction>(&rb, &to_sql_sym, args_to),
+        )
     } else {
-        #[derive(serde::Deserialize)]
-        struct TxWithCount {
-            #[serde(flatten)]
-            tx: crate::models::Transaction,
-            total_count: Option<i64>,
-        }
-        let rows_with_count: Vec<TxWithCount> =
-            query(&rb, cte_prefix, vals![wallet_id, l, o]).await?;
-        let total = rows_with_count
-            .first()
-            .and_then(|r| r.total_count)
-            .unwrap_or(0) as u64;
-        let rows: Vec<crate::models::Transaction> =
-            rows_with_count.into_iter().map(|r| r.tx).collect();
-        (rows, total)
+        tokio::join!(
+            query::<crate::models::Transaction>(&rb, &from_sql, in_args.clone()),
+            query::<crate::models::Transaction>(&rb, &to_sql, in_args),
+        )
     };
 
-    Ok((rows, total))
+    let from_rows = from_res.map_err(AppError::from)?;
+    let to_rows = to_res.map_err(AppError::from)?;
+
+    // ── Step 5: 应用层合并去重 + 排序 + 分页 ──
+    // 用 HashMap 按 id 去重（同一交易可能同时作为 from 和 to 出现）
+    let mut tx_map: std::collections::HashMap<String, crate::models::Transaction> =
+        std::collections::HashMap::new();
+    for txn in from_rows {
+        tx_map.insert(txn.id.clone(), txn);
+    }
+    for txn in to_rows {
+        tx_map.entry(txn.id.clone()).or_insert(txn);
+    }
+
+    let total = tx_map.len() as u64;
+    let mut all_txs: Vec<crate::models::Transaction> = tx_map.into_values().collect();
+    // 按 created_at DESC 排序
+    all_txs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    // 分页
+    let end = std::cmp::min((offset + l) as usize, all_txs.len());
+    if offset as usize >= all_txs.len() {
+        return Ok((Vec::new(), total));
+    }
+    let page_txs: Vec<crate::models::Transaction> = all_txs[offset as usize..end].to_vec();
+
+    Ok((page_txs, total))
 }
 
 pub async fn get_transaction(

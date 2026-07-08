@@ -483,6 +483,10 @@ pub async fn batch_sync_wallets(
         return Ok(Vec::new());
     }
 
+    // 预加载活跃资产缓存（触发一次 DB 查询或命中内存缓存），
+    // 事务内按 chain 内存过滤，避免每个新地址都查 DB
+    let all_assets = crate::services::asset_service::get_active_assets(rb.clone()).await?;
+
     let tx = rb.acquire_begin().await?;
     let mut results = Vec::new();
     // 收集所有订阅记录，最后批量 INSERT（减少事务持有时间）
@@ -545,12 +549,11 @@ pub async fn batch_sync_wallets(
 
             let wa = if let Some(wa) = inserted_addr {
                 // 新地址：初始化该链的默认代币余额
-                let assets: Vec<crate::models::Asset> = crate::db::query::tx_query(
-                    &tx,
-                    "SELECT * FROM assets WHERE chain = $1 AND is_default = true",
-                    vals![&a.chain],
-                )
-                .await?;
+                // 使用预加载的缓存按 chain 内存过滤，避免事务内每次查 DB
+                let assets: Vec<&crate::models::Asset> = all_assets
+                    .iter()
+                    .filter(|a| a.chain == wa.chain && a.is_default)
+                    .collect();
                 if !assets.is_empty() {
                     let mut args: Vec<rbs::value::Value> = Vec::new();
                     let placeholders: Vec<String> = assets
@@ -561,7 +564,7 @@ pub async fn batch_sync_wallets(
                             args.push(rbs::value::Value::String(uuid::Uuid::new_v4().to_string()));
                             args.push(rbs::value::Value::String(wa.id.clone()));
                             args.push(rbs::value::Value::String(asset.id.clone()));
-                            args.push(rbs::value::Value::String(a.chain.clone()));
+                            args.push(rbs::value::Value::String(wa.chain.clone()));
                             format!(
                                 "(${}, ${}, ${}, ${}, 0)",
                                 base,

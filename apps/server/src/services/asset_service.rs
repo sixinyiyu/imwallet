@@ -65,7 +65,23 @@ pub async fn get_wallet_asset_list(
         balance: Decimal,
         is_tradable: bool,
     }
-    let rows: Vec<R> = query(&rb, "SELECT a.id, a.symbol, a.name, aa.chain, SUM(aa.balance) as balance, a.is_tradable FROM assets_addresses aa JOIN assets a ON a.id = aa.asset_id JOIN wallet_subscriptions ws ON ws.address_id = aa.address_id WHERE ws.wallet_id = $1 AND ws.address_id != '' GROUP BY a.id, a.symbol, a.name, aa.chain, a.is_tradable", vals![wallet_id]).await?;
+    // CTE: 先用 DISTINCT 子查询获取地址 ID 集合，避免多设备订阅导致 JOIN 倍增
+    // 与 get_wallet_balance 的 CTE 方案一致
+    let rows: Vec<R> = query(
+        &rb,
+        "WITH wallet_addr_ids AS ( \
+            SELECT DISTINCT wa.id \
+            FROM wallets_addresses wa \
+            JOIN wallet_subscriptions ws ON wa.id = ws.address_id \
+            WHERE ws.wallet_id = $1 AND ws.address_id != '' \
+        ) \
+        SELECT a.id, a.symbol, a.name, aa.chain, SUM(aa.balance) as balance, a.is_tradable \
+        FROM assets_addresses aa \
+        JOIN assets a ON a.id = aa.asset_id \
+        JOIN wallet_addr_ids wai ON aa.address_id = wai.id \
+        GROUP BY a.id, a.symbol, a.name, aa.chain, a.is_tradable",
+        vals![wallet_id],
+    ).await?;
     Ok(rows
         .into_iter()
         .map(|r| AssetBalanceDetail {
