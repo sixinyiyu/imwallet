@@ -223,69 +223,6 @@ pub async fn get_wallets_by_device(
 
 /// 批量获取钱包聚合数据（钱包 + 网络）（解决 N+1 查询）
 #[derive(Debug, Serialize)]
-pub struct WalletAggregate {
-    pub wallet_id: String,
-    pub alias: Option<String>,
-    pub source: Option<String>,
-    pub networks: Vec<String>,
-}
-
-pub async fn get_wallets_aggregate_by_device(
-    rb: Arc<RBatis>,
-    device_id: &str,
-) -> Result<Vec<WalletAggregate>, AppError> {
-    #[derive(serde::Deserialize)]
-    struct R {
-        wallet_id: String,
-        alias: Option<String>,
-        source: Option<String>,
-        chain: String,
-    }
-    let rows: Vec<R> = query(
-        &rb,
-        "SELECT ws.wallet_id, w.alias, w.source, wa.chain FROM wallet_subscriptions ws JOIN wallets w ON w.id = ws.wallet_id JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.device_id = $1 AND ws.address_id != '' ORDER BY ws.wallet_id, wa.chain",
-        vals![device_id],
-    )
-    .await?;
-
-    // 按钱包分组
-    let mut result = Vec::new();
-    let mut current_id = String::new();
-    let mut networks = Vec::new();
-    let mut current_alias: Option<String> = None;
-    let mut current_source: Option<String> = None;
-    for r in rows {
-        if r.wallet_id != current_id {
-            if !current_id.is_empty() {
-                networks.dedup();
-                result.push(WalletAggregate {
-                    wallet_id: current_id,
-                    alias: current_alias,
-                    source: current_source,
-                    networks,
-                });
-            }
-            current_id = r.wallet_id;
-            current_alias = r.alias;
-            current_source = r.source;
-            networks = vec![r.chain];
-        } else {
-            networks.push(r.chain);
-        }
-    }
-    if !current_id.is_empty() {
-        networks.dedup();
-        result.push(WalletAggregate {
-            wallet_id: current_id,
-            alias: current_alias,
-            source: current_source,
-            networks,
-        });
-    }
-    Ok(result)
-}
-
-#[derive(Debug, Serialize)]
 pub struct WalletBalance {
     pub total_balance_usd: Decimal,
     pub total_balance_cny: Decimal,
@@ -387,15 +324,26 @@ pub async fn subscribe_wallet_readonly(
         )
         .await?;
     } else {
-        // 逐条 INSERT ON CONFLICT（幂等，已订阅地址自动跳过）
-        for wa in &addresses {
-            crate::db::query::exec(
-                &rb,
-                "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES ($1, $2, $3, $4) ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
-                vals![wallet_id, device_id, &wa.chain, &wa.id],
-            )
-            .await?;
-        }
+        // 批量 INSERT ON CONFLICT（幂等，已订阅地址自动跳过）— 单次 DB 往返
+        // 每条记录 4 个参数：(wallet_id, device_id, chain, address_id)
+        let mut args: Vec<rbs::value::Value> = Vec::new();
+        let placeholders: Vec<String> = addresses
+            .iter()
+            .enumerate()
+            .map(|(i, wa)| {
+                let base = i * 4 + 1;
+                args.push(rbs::value::Value::String(wallet_id.to_string()));
+                args.push(rbs::value::Value::String(device_id.to_string()));
+                args.push(rbs::value::Value::String(wa.chain.clone()));
+                args.push(rbs::value::Value::String(wa.id.clone()));
+                format!("(${}, ${}, ${}, ${})", base, base + 1, base + 2, base + 3)
+            })
+            .collect();
+        let sql = format!(
+            "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES {} ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
+            placeholders.join(", ")
+        );
+        crate::db::query::exec(&rb, &sql, args).await?;
     }
 
     log::info!(
@@ -472,8 +420,14 @@ pub async fn batch_sync_wallets(
         return Ok(Vec::new());
     }
 
+    // 预加载活跃资产缓存（触发一次 DB 查询或命中内存缓存），
+    // 事务内按 chain 内存过滤，避免每个新地址都查 DB
+    let all_assets = crate::services::asset_service::get_active_assets(rb.clone()).await?;
+
     let tx = rb.acquire_begin().await?;
     let mut results = Vec::new();
+    // 收集所有订阅记录，最后批量 INSERT（减少事务持有时间）
+    let mut subscriptions: Vec<(String, String, String, String)> = Vec::new(); // (wallet_id, device_id, chain, address_id)
 
     for w in &wallets {
         // 1. 确保钱包存在（幂等）
@@ -532,13 +486,11 @@ pub async fn batch_sync_wallets(
 
             let wa = if let Some(wa) = inserted_addr {
                 // 新地址：初始化该链的默认代币余额
-                // 注意：ensure_asset_balances 需要非事务连接，这里在事务内用 tx_query
-                let assets: Vec<crate::models::Asset> = crate::db::query::tx_query(
-                    &tx,
-                    "SELECT * FROM assets WHERE chain = $1 AND is_default = true",
-                    vals![&a.chain],
-                )
-                .await?;
+                // 使用预加载的缓存按 chain 内存过滤，避免事务内每次查 DB
+                let assets: Vec<&crate::models::Asset> = all_assets
+                    .iter()
+                    .filter(|a| a.chain == wa.chain && a.is_default)
+                    .collect();
                 if !assets.is_empty() {
                     let mut args: Vec<rbs::value::Value> = Vec::new();
                     let placeholders: Vec<String> = assets
@@ -549,7 +501,7 @@ pub async fn batch_sync_wallets(
                             args.push(rbs::value::Value::String(uuid::Uuid::new_v4().to_string()));
                             args.push(rbs::value::Value::String(wa.id.clone()));
                             args.push(rbs::value::Value::String(asset.id.clone()));
-                            args.push(rbs::value::Value::String(a.chain.clone()));
+                            args.push(rbs::value::Value::String(wa.chain.clone()));
                             format!(
                                 "(${}, ${}, ${}, ${}, 0)",
                                 base,
@@ -578,13 +530,13 @@ pub async fn batch_sync_wallets(
                 existing
             };
 
-            // 5. 确保设备订阅该地址（幂等）
-            crate::db::query::tx_exec(
-                &tx,
-                "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES ($1, $2, $3, $4) ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
-                vals![&w.wallet_id, device_id, &a.chain, &wa.id],
-            )
-            .await?;
+            // 5. 收集订阅记录（不再逐条 INSERT，最后批量插入）
+            subscriptions.push((
+                w.wallet_id.clone(),
+                device_id.to_string(),
+                a.chain.clone(),
+                wa.id.clone(),
+            ));
 
             address_results.push(SyncAddressResult {
                 chain: a.chain.clone(),
@@ -599,12 +551,35 @@ pub async fn batch_sync_wallets(
         });
     }
 
+    // 6. 批量插入所有订阅记录（单次 DB 往返，ON CONFLICT 保证幂等）
+    if !subscriptions.is_empty() {
+        let mut args: Vec<rbs::value::Value> = Vec::new();
+        let placeholders: Vec<String> = subscriptions
+            .iter()
+            .enumerate()
+            .map(|(i, (wid, did, chain, addr_id))| {
+                let base = i * 4 + 1;
+                args.push(rbs::value::Value::String(wid.clone()));
+                args.push(rbs::value::Value::String(did.clone()));
+                args.push(rbs::value::Value::String(chain.clone()));
+                args.push(rbs::value::Value::String(addr_id.clone()));
+                format!("(${}, ${}, ${}, ${})", base, base + 1, base + 2, base + 3)
+            })
+            .collect();
+        let sql = format!(
+            "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES {} ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
+            placeholders.join(", ")
+        );
+        crate::db::query::tx_exec(&tx, &sql, args).await?;
+    }
+
     tx.commit().await?;
     log::info!(
-        "[批量同步] 完成 — 设备={}, 钱包数={}, 总地址数={}",
+        "[批量同步] 完成 — 设备={}, 钱包数={}, 总地址数={}, 总订阅数={}",
         device_id,
         wallets.len(),
-        results.iter().map(|r| r.addresses.len()).sum::<usize>()
+        results.iter().map(|r| r.addresses.len()).sum::<usize>(),
+        subscriptions.len()
     );
     Ok(results)
 }

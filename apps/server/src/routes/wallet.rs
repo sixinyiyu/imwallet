@@ -18,7 +18,6 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/wallets", get(get_wallets).post(create_wallet))
         .route("/wallets/sync", post(batch_sync_wallets))
-        .route("/wallets/aggregate", get(get_wallets_aggregate))
         .route("/wallets/all", get(get_all_wallets))
         .route("/wallets/{id}", get(get_wallet).delete(delete_wallet))
         .route("/wallets/{id}/balance", get(get_wallet_balance))
@@ -81,11 +80,6 @@ impl From<Wallet> for WalletBrief {
             source: w.source,
         }
     }
-}
-
-#[derive(Debug, Serialize)]
-struct WalletAggregateResponse {
-    wallets: Vec<wallet_service::WalletAggregate>,
 }
 
 #[derive(Debug, Serialize)]
@@ -242,19 +236,6 @@ async fn get_wallets(
         wallet_service::get_wallets_by_device(state.db.clone(), &device.device_id).await?;
     Ok(Json(WalletListResponse {
         wallets: wallets.into_iter().map(WalletBrief::from).collect(),
-    }))
-}
-
-/// GET /wallets/aggregate — 获取钱包列表聚合数据
-async fn get_wallets_aggregate(
-    State(state): State<AppState>,
-    Extension(device): Extension<DevicePayload>,
-) -> Result<Json<WalletAggregateResponse>, AppError> {
-    let aggregates =
-        wallet_service::get_wallets_aggregate_by_device(state.db.clone(), &device.device_id)
-            .await?;
-    Ok(Json(WalletAggregateResponse {
-        wallets: aggregates,
     }))
 }
 

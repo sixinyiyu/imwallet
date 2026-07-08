@@ -14,14 +14,14 @@ import {
 // v2: PBKDF2-SHA256（新版，更安全）
 
 /** 计算密码的 PBKDF2-SHA256 hex 哈希（v2）
- *  Web 环境下为异步，需要 await */
-export function hashPassword(password: string): string | Promise<string> {
+ *  所有平台均为异步，需要 await */
+export async function hashPassword(password: string): Promise<string> {
   return pbkdf2Hex(password, PBKDF2_SALT_PASSWORD, PBKDF2_ITERATIONS, 32, "sha256");
 }
 
 /** 计算助记词的 PBKDF2-SHA256 hex 哈希（v2）
- *  Web 环境下为异步，需要 await */
-export function hashMnemonic(mnemonic: string): string | Promise<string> {
+ *  所有平台均为异步，需要 await */
+export async function hashMnemonic(mnemonic: string): Promise<string> {
   return pbkdf2Hex(mnemonic, PBKDF2_SALT_MNEMONIC, PBKDF2_ITERATIONS, 32, "sha256");
 }
 

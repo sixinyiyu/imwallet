@@ -1,7 +1,7 @@
 //! 设备服务
 //! 迁移自 IMWallet services/deviceService.ts
 
-use crate::db::query::{exec, query, query_one, vals};
+use crate::db::query::{query_one, vals};
 use crate::errors::AppError;
 use crate::models::{Device, WalletSubscription};
 use rbatis::RBatis;
@@ -70,31 +70,4 @@ pub async fn subscribe_wallet(
     .await?
     .ok_or_else(|| AppError::Internal("订阅查询失败".into()))?;
     Ok(existing)
-}
-
-pub async fn unsubscribe_wallet(
-    rb: Arc<RBatis>,
-    wallet_id: &str,
-    device_id: &str,
-) -> Result<(), AppError> {
-    exec(
-        &rb,
-        "DELETE FROM wallet_subscriptions WHERE wallet_id = $1 AND device_id = $2",
-        vals![wallet_id, device_id],
-    )
-    .await?;
-    Ok(())
-}
-
-pub async fn get_device_wallets(
-    rb: Arc<RBatis>,
-    device_id: &str,
-) -> Result<Vec<WalletSubscription>, AppError> {
-    query(
-        &rb,
-        "SELECT * FROM wallet_subscriptions WHERE device_id = $1",
-        vals![device_id],
-    )
-    .await
-    .map_err(AppError::from)
 }
