@@ -12,10 +12,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Animated,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { configService, type FeeConfig } from "../services/configService";
 import { adminService } from "../services/adminService";
+import { useKeyboardHeight } from "../hooks/useKeyboardHeight";
 import { EditIcon, ChevronRightIcon } from "../components/icons";
 import { GreenToggle } from "../components/GreenToggle";
 import { ConfigManageSkeleton } from "../components/Skeleton";
@@ -26,6 +28,9 @@ import { cacheAdminAuth, clearAdminAuthCache } from "../utils/adminAuthCache";
 import { getErrorMessage } from "../utils/format";
 
 export default function ConfigManageScreen() {
+  const { animatedY: toggleKbY } = useKeyboardHeight(true);
+  const { animatedY: deviceKbY } = useKeyboardHeight(true);
+  const { animatedY: editKbY } = useKeyboardHeight(true);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [feeConfig, setFeeConfig] = useState<FeeConfig | null>(null);
   const [txRestrictWallet, setTxRestrictWallet] = useState(false);
@@ -325,7 +330,8 @@ export default function ConfigManageScreen() {
 
       {/* 编辑费率弹窗（含密码输入） */}
       <Modal visible={showEditModal} transparent animationType="fade">
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        {Platform.OS === "ios" ? (
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
           <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
             <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss}>
               <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
@@ -377,6 +383,60 @@ export default function ConfigManageScreen() {
           </Pressable>
           </ScrollView>
         </KeyboardAvoidingView>
+        ) : (
+        <View style={{ flex: 1 }}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
+            <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss}>
+              <Animated.View style={[styles.modalCard, { transform: [{ translateY: editKbY }] }]}>
+            <Text style={styles.modalTitle}>修改费率</Text>
+            <Text style={styles.modalDesc}>请输入 0~1 之间的数值，如 0.005 表示 0.5%</Text>
+            <TextInput
+              style={[styles.modalInput, editError ? styles.modalInputError : null]}
+              value={editFeeRate}
+              onChangeText={(text) => { setEditFeeRate(text); setEditError(""); }}
+              placeholder="如 0.005"
+              placeholderTextColor="#C8C9CC"
+              keyboardType="decimal-pad"
+              autoFocus
+            />
+            <Text style={styles.modalPwdLabel}>管理密码</Text>
+            <TextInput
+              style={[styles.modalInput, editError ? styles.modalInputError : null]}
+              value={editPwd}
+              onChangeText={(text) => { setEditPwd(text); setEditError(""); }}
+              placeholder="请输入管理密码"
+              placeholderTextColor="#C8C9CC"
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {editError ? <Text style={styles.errorText}>{editError}</Text> : null}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowEditModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, (saving || !editFeeRate.trim() || !editPwd.trim()) ? styles.modalConfirmBtnDisabled : null]}
+                onPress={handleConfirmEdit}
+                disabled={saving || !editFeeRate.trim() || !editPwd.trim()}
+                activeOpacity={0.7}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>确认</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+            </Animated.View>
+          </Pressable>
+          </ScrollView>
+        </View>
+        )}
       </Modal>
 
       {/* 交易限制开关密码抽屉 */}
@@ -386,9 +446,10 @@ export default function ConfigManageScreen() {
         animationType="slide"
         onRequestClose={handleCloseTogglePwdDrawer}
       >
+        {Platform.OS === "ios" ? (
         <KeyboardAvoidingView
           style={styles.drawerOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior="padding"
         >
           <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
             <Pressable style={styles.drawerBackdrop} onPress={handleCloseTogglePwdDrawer} />
@@ -435,6 +496,54 @@ export default function ConfigManageScreen() {
           </View>
           </ScrollView>
         </KeyboardAvoidingView>
+        ) : (
+        <View style={styles.drawerOverlay}>
+          <Pressable style={styles.drawerBackdrop} onPress={handleCloseTogglePwdDrawer} />
+          <Animated.View style={{ transform: [{ translateY: toggleKbY }] }}>
+          <View style={styles.drawerContent}>
+            <View style={styles.drawerHandle} />
+            <Text style={styles.drawerTitle}>请输入管理密码</Text>
+            <Text style={styles.drawerDesc}>
+              {pendingToggleValue ? "开启交易限制需要验证管理密码" : "关闭交易限制需要验证管理密码"}
+            </Text>
+            <TextInput
+              style={styles.pwdInput}
+              value={togglePwdInput}
+              onChangeText={setTogglePwdInput}
+              placeholder="请输入密码"
+              placeholderTextColor="#C8C9CC"
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+              onSubmitEditing={handleConfirmTogglePwd}
+            />
+            {togglePwdError && <Text style={styles.pwdError}>{togglePwdError}</Text>}
+            <View style={styles.drawerActions}>
+              <TouchableOpacity
+                style={styles.drawerCancelBtn}
+                onPress={handleCloseTogglePwdDrawer}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.drawerCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.drawerConfirmBtn, togglePwdVerifying && styles.drawerConfirmBtnDisabled]}
+                onPress={handleConfirmTogglePwd}
+                disabled={togglePwdVerifying}
+                activeOpacity={0.7}
+              >
+                {togglePwdVerifying ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.drawerConfirmText}>确认</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+          </Animated.View>
+        </View>
+        )}
       </Modal>
 
       {/* 设备管理密码抽屉 */}
@@ -444,9 +553,10 @@ export default function ConfigManageScreen() {
         animationType="slide"
         onRequestClose={handleCloseDevicePwdDrawer}
       >
+        {Platform.OS === "ios" ? (
         <KeyboardAvoidingView
           style={styles.drawerOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior="padding"
         >
           <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
             <Pressable style={styles.drawerBackdrop} onPress={handleCloseDevicePwdDrawer} />
@@ -491,6 +601,52 @@ export default function ConfigManageScreen() {
           </View>
           </ScrollView>
         </KeyboardAvoidingView>
+        ) : (
+        <View style={styles.drawerOverlay}>
+          <Pressable style={styles.drawerBackdrop} onPress={handleCloseDevicePwdDrawer} />
+          <Animated.View style={{ transform: [{ translateY: deviceKbY }] }}>
+          <View style={styles.drawerContent}>
+            <View style={styles.drawerHandle} />
+            <Text style={styles.drawerTitle}>请输入管理密码</Text>
+            <Text style={styles.drawerDesc}>进入设备管理需要验证管理密码</Text>
+            <TextInput
+              style={styles.pwdInput}
+              value={devicePwdInput}
+              onChangeText={setDevicePwdInput}
+              placeholder="请输入密码"
+              placeholderTextColor="#C8C9CC"
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+              onSubmitEditing={handleConfirmDevicePwd}
+            />
+            {devicePwdError && <Text style={styles.pwdError}>{devicePwdError}</Text>}
+            <View style={styles.drawerActions}>
+              <TouchableOpacity
+                style={styles.drawerCancelBtn}
+                onPress={handleCloseDevicePwdDrawer}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.drawerCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.drawerConfirmBtn, devicePwdVerifying && styles.drawerConfirmBtnDisabled]}
+                onPress={handleConfirmDevicePwd}
+                disabled={devicePwdVerifying}
+                activeOpacity={0.7}
+              >
+                {devicePwdVerifying ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.drawerConfirmText}>确认</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+          </Animated.View>
+        </View>
+        )}
       </Modal>
     </View>
   );

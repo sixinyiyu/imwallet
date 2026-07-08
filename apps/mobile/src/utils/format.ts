@@ -1,10 +1,18 @@
-/** 智能去除尾部多余零，保留至多6位小数：50.000000→50，40.040000→40.04，50.249404→50.249404 */
+/** 智能去除尾部多余零，至少保留2位小数，至多6位小数：
+ * 50.000000→50.00，40.040000→40.04，1.200000→1.20，0.049404→0.049404
+ */
 export function trimAmount(value: number | string): string {
   const num = typeof value === "string" ? parseFloat(value) : value;
-  if (isNaN(num)) return "0";
+  if (isNaN(num)) return "0.00";
+  // 先用6位精度
   let s = num.toFixed(6);
-  s = s.replace(/\.?0+$/, "");
-  return s || "0";
+  // 从末尾去掉0，直到只剩2位小数为止
+  while (s.includes(".") && s.endsWith("0") && s.length - s.indexOf(".") - 1 > 2) {
+    s = s.slice(0, -1);
+  }
+  // 如果没有小数点，补上 .00
+  if (!s.includes(".")) s += ".00";
+  return s;
 }
 
 /** 格式化 CNY 金额：保留2位小数 */

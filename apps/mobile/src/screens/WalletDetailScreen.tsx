@@ -12,8 +12,10 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Animated,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useKeyboardHeight } from "../hooks/useKeyboardHeight";
 import EmptyState from "../components/EmptyState";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
@@ -53,6 +55,9 @@ type RouteType = RouteProp<RootStackParamList, "WalletDetail">;
 
 
 export default function WalletDetailScreen() {
+  const { animatedY: removeKbY } = useKeyboardHeight(true);
+  const { animatedY: backupKbY } = useKeyboardHeight(true);
+  const { animatedY: editKbY } = useKeyboardHeight(true);
   const alert = useAlert();
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
@@ -257,19 +262,18 @@ export default function WalletDetailScreen() {
 
           {/* 标识符 */}
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>标识符</Text>
+            <Text style={[styles.infoLabel, styles.identifierLabel]}>标识符</Text>
             <TouchableOpacity
               onPress={async () => {
                 const ok = await copyToClipboard(wallet.id);
                 showToast(ok ? "标识符已复制" : "复制失败");
               }}
               activeOpacity={0.6}
-              style={{ flex: 1 }}
+              style={styles.identifierValueWrap}
             >
-              <View style={styles.identifierRow}>
-                <Text style={styles.identifierValue} numberOfLines={1} ellipsizeMode="middle" selectable>{wallet.id}</Text>
-                <CopyIcon size={16} color="#9CA3AF" />
-              </View>
+              <Text style={styles.identifierValue} numberOfLines={2} ellipsizeMode="middle" selectable>
+                {wallet.id}
+              </Text>
             </TouchableOpacity>
           </View>
           <View style={styles.infoDivider} />
@@ -495,7 +499,8 @@ export default function WalletDetailScreen() {
         animationType="slide"
         onRequestClose={() => setShowRemoveDrawer(false)}
       >
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        {Platform.OS === "ios" ? (
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
           <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <Pressable style={styles.drawerOverlay} onPress={() => setShowRemoveDrawer(false)}>
           <Pressable style={styles.drawerContent} onPress={(e) => e.stopPropagation()}>
@@ -559,11 +564,70 @@ export default function WalletDetailScreen() {
         </Pressable>
           </ScrollView>
         </KeyboardAvoidingView>
+        ) : (
+        <View style={styles.drawerOverlay}>
+          <Pressable style={{ flex: 1 }} onPress={() => setShowRemoveDrawer(false)} />
+          <Animated.View style={{ transform: [{ translateY: removeKbY }] }}>
+          <View style={styles.drawerContent}>
+            <Text style={styles.drawerPasswordTitle}>密码</Text>
+            <View style={styles.drawerInputRow}>
+              <TextInput
+                style={styles.drawerInput}
+                value={removePassword}
+                onChangeText={(text) => { setRemovePassword(text); setRemovePasswordError(""); }}
+                placeholder="钱包密码"
+                placeholderTextColor="#C8C9CC"
+                secureTextEntry={!showRemovePassword}
+                autoComplete="current-password"
+                autoFocus
+              />
+              <TouchableOpacity
+                style={styles.drawerEyeBtn}
+                onPress={() => setShowRemovePassword(!showRemovePassword)}
+                activeOpacity={0.6}
+              >
+                {showRemovePassword ? (
+                  <EyeIcon size={20} color="#8899B8" />
+                ) : (
+                  <EyeOffIcon size={20} color="#C4C5C5" />
+                )}
+              </TouchableOpacity>
+            </View>
+            {removePasswordError ? (
+              <Text style={styles.errorText}>{removePasswordError}</Text>
+            ) : null}
+            <TouchableOpacity
+              style={styles.forgotPwdLink}
+              onPress={() => {
+                setShowRemoveDrawer(false);
+                navigation.navigate("ForgotPassword", { walletId: wallet.id });
+              }}
+              activeOpacity={0.6}
+            >
+              <Text style={styles.forgotPwdText}>忘记密码?</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.drawerRemoveBtn, (!removePassword.trim() || removing) ? styles.drawerRemoveBtnDisabled : null]}
+              onPress={handleRemoveWallet}
+              disabled={!removePassword.trim() || removing}
+              activeOpacity={0.7}
+            >
+              {removing ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.drawerRemoveText}>移除</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+          </Animated.View>
+        </View>
+        )}
       </Modal>
 
       {/* Password verification modal (for backup) */}
       <Modal visible={showPasswordModal} transparent animationType="fade">
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        {Platform.OS === "ios" ? (
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
           <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <Pressable style={styles.modalOverlay} onPress={() => Keyboard.dismiss()}>
           <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
@@ -645,9 +709,91 @@ export default function WalletDetailScreen() {
         </Pressable>
           </ScrollView>
         </KeyboardAvoidingView>
+        ) : (
+        <View style={{ flex: 1 }}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
+        <Pressable style={styles.modalOverlay} onPress={() => Keyboard.dismiss()}>
+          <Animated.View style={[styles.modalCard, { transform: [{ translateY: backupKbY }] }]}>
+            <Text style={styles.modalTitle}>验证钱包密码</Text>
+            <Text style={styles.modalDesc}>为保障资产安全，请输入钱包密码以确认身份</Text>
+            <TextInput
+              style={[styles.modalInput, passwordError ? styles.modalInputError : null]}
+              value={backupPassword}
+              onChangeText={(text) => { setBackupPassword(text); setPasswordError(""); }}
+              placeholder="请输入钱包密码"
+              placeholderTextColor="#C8C9CC"
+              secureTextEntry
+              autoFocus
+              returnKeyType="go"
+              onSubmitEditing={async () => {
+                if (!walletId || !backupPassword.trim()) return;
+                setVerifying(true);
+                setPasswordError("");
+                try {
+                  const verified = await verifyPassword(walletId, backupPassword.trim());
+                  if (verified) {
+                    setShowPasswordModal(false);
+                    navigation.navigate("BackupGuide", { walletId: wallet.id, source: "detail" });
+                  } else {
+                    setShowPasswordModal(false);
+                    setPasswordErrorContext("backup");
+                    setShowPasswordErrorDialog(true);
+                  }
+                } catch {
+                  setShowPasswordModal(false);
+                  setPasswordErrorContext("backup");
+                  setShowPasswordErrorDialog(true);
+                }
+                setVerifying(false);
+              }}
+            />
+            {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowPasswordModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, (!backupPassword.trim() || verifying) ? styles.modalConfirmBtnDisabled : null]}
+                onPress={async () => {
+                  if (!walletId || !backupPassword.trim()) return;
+                  setVerifying(true);
+                  setPasswordError("");
+                try {
+                  const verified = await verifyPassword(walletId, backupPassword.trim());
+                  if (verified) {
+                    setShowPasswordModal(false);
+                    navigation.navigate("BackupGuide", { walletId: wallet.id, source: "detail" });
+                  } else {
+                    setShowPasswordModal(false);
+                    setPasswordErrorContext("backup");
+                    setShowPasswordErrorDialog(true);
+                  }
+                } catch {
+                  setShowPasswordModal(false);
+                  setPasswordErrorContext("backup");
+                  setShowPasswordErrorDialog(true);
+                }                  setVerifying(false);
+                }}
+                disabled={!backupPassword.trim() || verifying}
+                activeOpacity={0.7}
+              >
+                {verifying ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>确认</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </Pressable>
+          </ScrollView>
+        </View>
+        )}
       </Modal>
-
-      {/* Password error dialog (forgot password / retry) */}
       <Modal visible={showPasswordErrorDialog} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowPasswordErrorDialog(false)}>
           <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
@@ -689,7 +835,8 @@ export default function WalletDetailScreen() {
 
       {/* Edit alias modal */}
       <Modal visible={showEditModal} transparent animationType="fade">
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        {Platform.OS === "ios" ? (
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
           <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -729,6 +876,48 @@ export default function WalletDetailScreen() {
         </View>
           </ScrollView>
         </KeyboardAvoidingView>
+        ) : (
+        <View style={{ flex: 1 }}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
+        <View style={styles.modalOverlay}>
+          <Animated.View style={[styles.modalCard, { transform: [{ translateY: editKbY }] }]}>
+            <Text style={styles.modalTitle}>修改钱包名称</Text>
+            <Text style={styles.modalDesc}>输入的名称不超过12个英文字符</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={editAlias}
+              onChangeText={setEditAlias}
+              placeholder="输入钱包名称"
+              placeholderTextColor="#C8C9CC"
+              maxLength={12}
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowEditModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalConfirmBtn}
+                onPress={handleConfirmEditAlias}
+                disabled={savingAlias || !editAlias.trim()}
+                activeOpacity={0.7}
+              >
+                {savingAlias ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>确认</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
+          </ScrollView>
+        </View>
+        )}
       </Modal>
     </View>
   );
@@ -816,18 +1005,19 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#F3F4F6",
   },
-  // 标识符行（标签与值在同一行，值过长时换行）
-  identifierRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginTop: 2,
+  // 标识符行（标签占30%，值区域占70%，CopyIcon跟在文本后面）
+  identifierLabel: {
+    marginRight: "30%",
+  },
+  identifierValueWrap: {
+    flex: 1,
   },
   identifierValue: {
     fontSize: 13,
     color: "#6B7280",
     fontFamily: "monospace",
     lineHeight: 18,
-    flex: 1,
+    textAlign: "right",
   },
   hintRight: {
     flexDirection: "row",

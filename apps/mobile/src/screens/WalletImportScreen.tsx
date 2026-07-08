@@ -157,7 +157,7 @@ export default function WalletImportScreen() {
   // ─── Step 1: Mnemonic Input (white background) ───
   if (step === 1) {
     return (
-      <KeyboardAvoidingView style={s1.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <KeyboardAvoidingView style={s1.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={s1.scrollContent} keyboardShouldPersistTaps="handled">
           {/* 点击空白区域收起键盘 */}
           <Pressable style={s1.inner} onPress={Keyboard.dismiss}>
@@ -423,7 +423,7 @@ const s1 = StyleSheet.create({
 // ─── Step 2 Styles (white background) ───
 const s2 = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F8" },
-  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 40 },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 120 },
   header: { marginBottom: 24 },
   title: {
     fontSize: 22,

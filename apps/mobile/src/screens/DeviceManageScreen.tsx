@@ -11,6 +11,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Animated,
+  LayoutAnimation,
+  UIManager,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { adminService, type WalletAdminInfo, type WalletTransaction, type WalletRecharge } from "../services/adminService";
@@ -67,6 +70,7 @@ export default function DeviceManageScreen() {
   const [, setSubscribeLoading] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const [subscribeError, setSubscribeError] = useState<string | null>(null);
+  const [quickSubscribingId, setQuickSubscribingId] = useState<string | null>(null);
 
   // 当前设备的本地钱包信息（ID + source），用于卡片标签区分：本地 vs 已订阅 vs 未订阅
   // 用字符串做 selector，避免每次创建新对象导致无限重渲染
@@ -85,6 +89,13 @@ export default function DeviceManageScreen() {
     setToastMsg(msg);
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2000);
+  }, []);
+
+  // Android LayoutAnimation
+  useEffect(() => {
+    if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
   }, []);
 
   // 缓存过期守卫
@@ -233,12 +244,19 @@ export default function DeviceManageScreen() {
 
   /** 卡片上直接订阅（快捷入口） */
   const handleQuickSubscribe = async (walletId: string) => {
+    if (quickSubscribingId) return;
+    setQuickSubscribingId(walletId);
     try {
       await useWalletStore.getState().subscribeWallet(walletId);
+      // 触发布局动画：按钮消失，角标淡入
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      // 延时让动画完成
+      await new Promise((r) => setTimeout(r, 400));
       showToast("订阅成功");
     } catch (err: unknown) {
       showToast(getErrorMessage(err, "订阅失败"));
     }
+    setQuickSubscribingId(null);
   };
 
   if (walletsLoading) {
@@ -265,49 +283,48 @@ export default function DeviceManageScreen() {
 
           return (
             <View style={styles.walletCard}>
-              {/* 右上角角标：本地(绿) / 已订阅(蓝) */}
+              {/* 卡片左上角标签 */}
               {walletTag === "local" && (
-                <View style={styles.ribbonWrap}>
-                  <View style={styles.ribbonLocal}>
-                    <Text style={styles.ribbonText}>本地</Text>
-                  </View>
-                </View>
+                <View style={styles.tagLocal}><Text style={styles.tagText}>本地</Text></View>
               )}
               {walletTag === "subscribed" && (
-                <View style={styles.ribbonWrap}>
-                  <View style={styles.ribbonSubscribed}>
-                    <Text style={styles.ribbonText}>已订阅</Text>
-                  </View>
-                </View>
+                <View style={styles.tagSubscribed}><Text style={styles.tagText}>已订阅</Text></View>
               )}
-              {/* 钱包头部 */}
+              {/* 卡片右上角余额 */}
+              <View style={styles.balanceTag}><Text style={styles.balanceTagText}>¥{formatCny(w.totalBalanceCny)}</Text></View>
+              {/* 钱包头部（点击展开/折叠） */}
               <TouchableOpacity
                 style={styles.walletHeader}
                 onPress={() => handleSelectWallet(w.id)}
                 activeOpacity={0.7}
               >
-                <View style={styles.walletIconContainer}>
-                  <WalletIcon size={24} color="#287220" />
+                <View style={styles.walletIconWrap}>
+                  <View style={styles.walletIconContainer}>
+                    <WalletIcon size={24} color="#287220" />
+                  </View>
                 </View>
                 <View style={styles.walletInfo}>
                   <View style={styles.walletNameRow}>
-                    <View style={styles.walletNameLeft}>
-                      <Text style={styles.walletAlias}>{w.alias}</Text>
-                      <Text style={styles.walletBalanceValue} numberOfLines={1}>¥{formatCny(w.totalBalanceCny)}</Text>
-                    </View>
+                    <Text style={styles.walletAlias} numberOfLines={1} ellipsizeMode="tail">{w.alias}</Text>
                     {/* 未订阅 → 右侧显示订阅按钮 */}
                     {walletTag === "none" && (
-                      <TouchableOpacity
-                        style={styles.cardSubscribeBtn}
-                        onPress={() => handleQuickSubscribe(w.id)}
-                        activeOpacity={0.7}
-                      >
-                        <SubscribeIcon size={16} color="#287220" />
-                        <Text style={styles.cardSubscribeText}>订阅</Text>
-                      </TouchableOpacity>
+                      <Animated.View style={{ opacity: quickSubscribingId === w.id ? 0 : 1, transform: [{ scale: quickSubscribingId === w.id ? 0.8 : 1 }] }}>
+                        <TouchableOpacity
+                          style={styles.cardSubscribeBtn}
+                          onPress={() => handleQuickSubscribe(w.id)}
+                          disabled={quickSubscribingId !== null}
+                          activeOpacity={0.7}
+                        >
+                          <SubscribeIcon size={14} color="#287220" />
+                          <Text style={styles.cardSubscribeText}>订阅</Text>
+                        </TouchableOpacity>
+                      </Animated.View>
+                    )}
+                    {quickSubscribingId === w.id && (
+                      <ActivityIndicator size="small" color="#287220" />
                     )}
                   </View>
-                  <Text style={styles.walletIdentifier} selectable>{w.id}</Text>
+                  <Text style={styles.walletIdentifier} numberOfLines={1} ellipsizeMode="middle" selectable>{w.id}</Text>
                   <View style={styles.walletMetaRow}>
                     <Text style={styles.walletMeta}>
                       {w.chains.length > 0 ? w.chains.join(" · ") : "无链"} · {w.deviceCount} 个设备关联
@@ -319,13 +336,13 @@ export default function DeviceManageScreen() {
                 </View>
               </TouchableOpacity>
 
-              {/* 关联设备 */}
-              {w.devices.length > 0 && (
+              {/* 关联设备（折叠） */}
+              {selectedWallet === w.id && w.devices.length > 0 && (
                 <View style={styles.deviceSection}>
                   <Text style={styles.sectionLabel}>关联设备</Text>
                   {w.devices.map((d) => (
                     <View key={d.id} style={styles.deviceRow}>
-                      <Text style={styles.deviceId}>{d.id.slice(0, 24)}...{d.id.slice(-18)}</Text>
+                      <Text style={styles.deviceId} numberOfLines={1} ellipsizeMode="middle">{d.id}</Text>
                       <View style={styles.deviceRight}>
                         <PlatformIcon platform={d.platform} size={16} />
                         <View style={[styles.onlineDot, d.online ? styles.onlineDotOn : styles.onlineDotOff]} />
@@ -338,12 +355,12 @@ export default function DeviceManageScreen() {
                 </View>
               )}
 
-              {/* 代币余额 */}
-              {w.assets.length > 0 && (
+              {/* 代币余额（折叠） */}
+              {selectedWallet === w.id && w.assets.length > 0 && (
                 <View style={styles.assetSection}>
                   <Text style={styles.sectionLabel}>代币余额</Text>
-                  {w.assets.map((a) => (
-                    <View key={a.assetId} style={styles.assetRow}>
+                  {w.assets.map((a, idx) => (
+                    <View key={a.assetId} style={[styles.assetRow, idx < w.assets.length - 1 && styles.assetRowBorder]}>
                       <View style={styles.assetIconWrap}>
                         {renderTokenIcon(a.symbol, 20)}
                       </View>
@@ -400,6 +417,8 @@ export default function DeviceManageScreen() {
                             const prefix = isReceive ? "+" : "-";
                             return (
                               <View key={t.id} style={styles.txCard}>
+                                <View style={[styles.txLeftBar, { backgroundColor: directionColor }]} />
+                                <View style={styles.txContent}>
                                 <View style={styles.txTopRow}>
                                   <View style={styles.txTokenWrap}>
                                     {TOKEN_ICONS[t.tokenSymbol]
@@ -428,8 +447,9 @@ export default function DeviceManageScreen() {
                                     <Text style={styles.txTime}>{formatTime(t.createdAt)}</Text>
                                   </View>
                                   {isSend && feeNum > 0 && (
-                                    <Text style={styles.txFee}>手续费 {trimAmount(feeNum)} · 实到 {trimAmount(receivedNum)}</Text>
+                                    <Text style={styles.txFee} numberOfLines={1}>手续费 {trimAmount(feeNum)}</Text>
                                   )}
+                                </View>
                                 </View>
                               </View>
                             );
@@ -575,21 +595,28 @@ export default function DeviceManageScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F8" },
-  listContent: { padding: 16, paddingBottom: 20 },
+  listContent: { padding: 12, paddingBottom: 20 },
   endHint: { textAlign: "center", paddingVertical: 20, fontSize: 13, color: "#D1D5DB" },
 
   // ── 钱包卡片 ──
   walletCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 16,
+    borderRadius: 16,
+    padding: 14,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
     overflow: "hidden",
   },
   walletHeader: {
     flexDirection: "row", alignItems: "center",
+    marginTop: 10,
+  },
+  walletIconWrap: {
+    marginRight: 12,
   },
   walletIconContainer: {
     width: 40,
@@ -598,7 +625,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
     overflow: "hidden",
   },
   walletInfo: { flex: 1 },
@@ -608,66 +634,71 @@ const styles = StyleSheet.create({
   chevronExpanded: {
     transform: [{ rotate: "90deg" }],
   },
-  walletAlias: { fontSize: 16, fontWeight: "600", color: "#1F2937", flexShrink: 1 },
-  walletNameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  walletNameLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
-  walletBalanceValue: { fontSize: 14, fontWeight: "700", color: "#1F2937", flexShrink: 0 },
+  walletAlias: { fontSize: 15, fontWeight: "600", color: "#1F2937", flex: 1, minWidth: 0 },
+  walletNameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 6 },
   walletIdentifier: { fontSize: 12, color: "#9CA3AF", fontFamily: "monospace", marginTop: 2 },
   walletMetaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   walletMeta: { fontSize: 13, color: "#9CA3AF" },
 
-  // ── 右上角角标（ribbon） ──
-  ribbonWrap: {
+  // ── 钱包标签（卡片左上角） ──
+  tagLocal: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderBottomRightRadius: 8,
+    borderTopLeftRadius: 16,
+    backgroundColor: "#DCFCE7",
+    zIndex: 10,
+  },
+  tagSubscribed: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderBottomRightRadius: 8,
+    borderTopLeftRadius: 16,
+    backgroundColor: "#DBEAFE",
+    zIndex: 10,
+  },
+  tagText: { fontSize: 10, fontWeight: "600", color: "#374151" },
+
+  // ── 卡片右上角余额 ──
+  balanceTag: {
     position: "absolute",
     top: 0,
     right: 0,
-    width: 60,
-    height: 60,
-    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderBottomLeftRadius: 8,
+    borderTopRightRadius: 16,
+    backgroundColor: "#F0FDF4",
     zIndex: 10,
   },
-  ribbonLocal: {
-    position: "absolute",
-    top: 4,
-    right: -34,
-    width: 96,
-    backgroundColor: "#8CC884",
-    transform: [{ rotate: "45deg" }],
-    paddingVertical: 2,
-    alignItems: "center",
-  },
-  ribbonSubscribed: {
-    position: "absolute",
-    top: 4,
-    right: -34,
-    width: 96,
-    backgroundColor: "#5B9BD5",
-    transform: [{ rotate: "45deg" }],
-    paddingVertical: 2,
-    alignItems: "center",
-  },
-  ribbonText: { fontSize: 11, fontWeight: "600", color: "#FFFFFF" },
+  balanceTagText: { fontSize: 12, fontWeight: "700", color: "#287220" },
 
   // ── 卡片上的订阅按钮 ──
   cardSubscribeBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
     backgroundColor: "#F0F7FF",
     borderWidth: 1,
     borderColor: "#DBEAFE",
   },
-  cardSubscribeText: { fontSize: 13, fontWeight: "500", color: "#287220" },
+  cardSubscribeText: { fontSize: 12, fontWeight: "500", color: "#287220" },
 
   // ── 关联设备 ──
   deviceSection: {
-    marginTop: 12,
+    marginTop: 16,
     borderTopWidth: 1,
     borderTopColor: "#F3F4F6",
-    paddingTop: 8,
+    paddingTop: 12,
   },
   sectionLabel: { fontSize: 13, fontWeight: "500", color: "#6B7280", marginBottom: 6 },
   deviceRow: {
@@ -685,20 +716,20 @@ const styles = StyleSheet.create({
 
   // ── 展开面板 ──
   expandPanel: {
-    marginTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
-    paddingTop: 12,
+    marginTop: 8,
+    paddingTop: 8,
   },
 
   // ── 代币余额 ──
   assetSection: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
   assetRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 8,
+  },
+  assetRowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
   },
@@ -729,13 +760,19 @@ const styles = StyleSheet.create({
   txCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
-    padding: 14,
+    padding: 0,
     marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+  },
+  txLeftBar: {
+    width: 3,
+    alignSelf: "stretch",
+  },
+  txContent: {
+    flex: 1,
+    padding: 16,
   },
   txTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   txTokenWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
@@ -743,14 +780,14 @@ const styles = StyleSheet.create({
   txSymbol: { fontSize: 15, fontWeight: "600", color: "#1F2937" },
   txAmount: { fontSize: 15, fontWeight: "700", color: "#1F2937" },
   txDirection: { fontSize: 13, fontWeight: "500", marginLeft: 6 },
-  txFee: { fontSize: 12, color: "#9CA3AF" },
   txAddrRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   txAddr: { fontSize: 13, color: "#6B7280", fontFamily: "monospace", flex: 1 },
   txAddrLabel: { fontSize: 13, fontWeight: "500", color: "#374151", marginRight: 6 },
   txArrow: { fontSize: 13, color: "#9CA3AF", fontWeight: "500" },
-  txBottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 },
-  txBottomLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
+  txBottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8, gap: 8 },
+  txBottomLeft: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
   txTime: { fontSize: 12, color: "#9CA3AF" },
+  txFee: { fontSize: 12, color: "#9CA3AF", flex: 1, textAlign: "right" },
 
   // ── 加载更多 ──
   loadMoreBtn: { paddingVertical: 10, alignItems: "center" },

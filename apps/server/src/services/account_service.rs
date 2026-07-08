@@ -2,11 +2,12 @@
 
 use crate::db::query::{query, vals};
 use crate::errors::AppError;
+use arc_swap::ArcSwap;
 use rbatis::RBatis;
 use serde::Serialize;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct AvailableChain {
     pub name: String,
     pub display_name: String,
@@ -14,7 +15,7 @@ pub struct AvailableChain {
     pub derivation_path: String,
     pub assets: Vec<ChainAsset>,
 }
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct ChainAsset {
     pub id: String,
     pub symbol: String,
@@ -24,8 +25,31 @@ pub struct ChainAsset {
     pub token_id: String,
 }
 
+/// 可用链列表缓存（ArcSwap 无锁读取）
+/// 链配置仅在部署时变更，适合长期缓存
+static CHAINS_CACHE: LazyLock<ArcSwap<Vec<AvailableChain>>> =
+    LazyLock::new(|| ArcSwap::from_pointee(Vec::new()));
+static CHAINS_INIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// 使链缓存失效
+#[allow(dead_code)]
+pub fn invalidate_chains_cache() {
+    CHAINS_INIT.store(false, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// 从缓存获取可用链列表，未初始化时查 DB 并缓存
+pub async fn get_available_chains_cached(rb: Arc<RBatis>) -> Result<Vec<AvailableChain>, AppError> {
+    if CHAINS_INIT.load(std::sync::atomic::Ordering::Relaxed) {
+        return Ok(CHAINS_CACHE.load_full().as_ref().clone());
+    }
+    let chains = get_available_chains(rb).await?;
+    CHAINS_CACHE.store(Arc::new(chains.clone()));
+    CHAINS_INIT.store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(chains)
+}
+
 /// 批量获取支持创建账户的链列表及其资产（解决 N+1 查询）
-pub async fn get_available_chains(rb: Arc<RBatis>) -> Result<Vec<AvailableChain>, AppError> {
+async fn get_available_chains(rb: Arc<RBatis>) -> Result<Vec<AvailableChain>, AppError> {
     // 一条 JOIN SQL 批量获取链 + 资产
     #[derive(serde::Deserialize)]
     struct R {

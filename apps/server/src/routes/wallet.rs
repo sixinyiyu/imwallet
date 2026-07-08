@@ -281,11 +281,10 @@ async fn get_wallet(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<WalletDetailResponse>, AppError> {
-    let wallet = wallet_service::get_wallet(state.db.clone(), &id)
-        .await?
-        .ok_or_else(|| AppError::NotFound("钱包不存在".into()))?;
     let cny_rate = crate::services::fiat_service::get_cached_cny_rate(&state);
-    let balance = wallet_service::get_wallet_balance(state.db.clone(), &id, cny_rate).await?;
+    // 合并为单次查询：钱包详情 + 余额聚合
+    let result = wallet_service::get_wallet_with_balance(state.db.clone(), &id, cny_rate).await?;
+    let (wallet, balance) = result.ok_or_else(|| AppError::NotFound("钱包不存在".into()))?;
     Ok(Json(WalletDetailResponse {
         id: wallet.id,
         alias: wallet.alias,
@@ -337,9 +336,8 @@ async fn subscribe_chain(
         device.device_id
     );
 
+    // 事务包裹：地址创建/获取 + 设备订阅，保证一致性
     let wa = wallet_service::subscribe_chain(state.db.clone(), &body.chain, &body.address).await?;
-
-    // 创建订阅记录
     device_service::subscribe_wallet(
         state.db.clone(),
         &wallet_id,
@@ -470,34 +468,32 @@ async fn get_my_recharges(
     };
     let base_where = format!("r.wallet_id IN (SELECT DISTINCT ws.wallet_id FROM wallet_subscriptions ws WHERE ws.device_id = $1 AND ws.address_id != ''){}", where_extra);
 
-    let total: u64 = crate::db::query::query_count(
-        &state.db,
-        &format!(
-            "SELECT COUNT(*) as cnt FROM recharges r WHERE {}",
-            base_where
-        ),
-        args.clone(),
-    )
-    .await?;
-
-    // 分页参数追加到 args 末尾
+    // 合并 COUNT+SELECT 为单次查询（窗口函数）
     args.push(rbs::value!(query.limit as i64));
     args.push(rbs::value!(offset as i64));
     let limit_ph = format!("${}", args.len() - 1);
     let offset_ph = format!("${}", args.len());
 
-    let rows: Vec<crate::models::Recharge> = crate::db::query::query(
+    #[derive(serde::Deserialize)]
+    struct RechargeWithCount {
+        #[serde(flatten)]
+        recharge: crate::models::Recharge,
+        total_count: Option<i64>,
+    }
+    let rows: Vec<RechargeWithCount> = crate::db::query::query(
         &state.db,
         &format!(
-            "SELECT r.* FROM recharges r WHERE {} ORDER BY r.created_at DESC LIMIT {} OFFSET {}",
+            "SELECT r.*, COUNT(*) OVER() as total_count FROM recharges r WHERE {} ORDER BY r.created_at DESC LIMIT {} OFFSET {}",
             base_where, limit_ph, offset_ph
         ),
         args,
     )
     .await?;
+    let total = rows.first().and_then(|r| r.total_count).unwrap_or(0) as u64;
+    let recharges: Vec<crate::models::Recharge> = rows.into_iter().map(|r| r.recharge).collect();
 
     Ok(Json(MyRechargesResponse {
-        recharges: rows,
+        recharges,
         total,
         page: query.page,
         limit: query.limit,
@@ -583,30 +579,32 @@ async fn get_all_recharges(
         format!(" WHERE {}", conditions.join(" AND "))
     };
 
-    let total: u64 = crate::db::query::query_count(
-        &state.db,
-        &format!("SELECT COUNT(*) as cnt FROM recharges r{}", where_clause),
-        args.clone(),
-    )
-    .await?;
-
+    // 合并 COUNT+SELECT 为单次查询（窗口函数）
     args.push(rbs::value!(query.limit as i64));
     args.push(rbs::value!(offset as i64));
     let limit_ph = format!("${}", args.len() - 1);
     let offset_ph = format!("${}", args.len());
 
-    let rows: Vec<crate::models::Recharge> = crate::db::query::query(
+    #[derive(serde::Deserialize)]
+    struct RechargeWithCount {
+        #[serde(flatten)]
+        recharge: crate::models::Recharge,
+        total_count: Option<i64>,
+    }
+    let rows: Vec<RechargeWithCount> = crate::db::query::query(
         &state.db,
         &format!(
-            "SELECT r.* FROM recharges r{} ORDER BY r.created_at DESC LIMIT {} OFFSET {}",
+            "SELECT r.*, COUNT(*) OVER() as total_count FROM recharges r{} ORDER BY r.created_at DESC LIMIT {} OFFSET {}",
             where_clause, limit_ph, offset_ph
         ),
         args,
     )
     .await?;
+    let total = rows.first().and_then(|r| r.total_count).unwrap_or(0) as u64;
+    let recharges: Vec<crate::models::Recharge> = rows.into_iter().map(|r| r.recharge).collect();
 
     Ok(Json(MyRechargesResponse {
-        recharges: rows,
+        recharges,
         total,
         page: query.page,
         limit: query.limit,
