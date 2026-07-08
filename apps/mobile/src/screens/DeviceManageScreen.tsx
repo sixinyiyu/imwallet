@@ -447,7 +447,7 @@ export default function DeviceManageScreen() {
                                     <Text style={styles.txTime}>{formatTime(t.createdAt)}</Text>
                                   </View>
                                   {isSend && feeNum > 0 && (
-                                    <Text style={styles.txFee} numberOfLines={1}>fee {trimAmount(feeNum)}</Text>
+                                    <Text style={styles.txFee} numberOfLines={1}>手续费 {trimAmount(feeNum)}</Text>
                                   )}
                                 </View>
                                 </View>

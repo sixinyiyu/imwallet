@@ -351,7 +351,7 @@ export function TransactionCard({
         <Text style={card.time}>{formatTime(transaction.createdAt)}</Text>
         {/* 接收方(B)不显示手续费，发送方(A)显示手续费和实到金额 */}
         {!isReceive && feeNum > 0 && (
-          <Text style={card.fee}>fee {trimAmount(feeNum)}</Text>
+          <Text style={card.fee}>手续费 {trimAmount(feeNum)}</Text>
         )}
       </View>
     </TouchableOpacity>
