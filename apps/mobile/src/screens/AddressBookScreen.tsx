@@ -217,20 +217,25 @@ export default function AddressBookScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* 第三行：文字链接（居右对齐） */}
+              {/* 第三行：备注(左) + 操作链接(右) */}
               <View style={styles.row3}>
-                <TouchableOpacity
-                  onPress={() => openEditForm(item)}
-                  activeOpacity={0.6}
-                >
-                  <Text style={styles.linkText}>编辑</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => handleDelete(item)}
-                  activeOpacity={0.6}
-                >
-                  <Text style={styles.linkTextDanger}>删除</Text>
-                </TouchableOpacity>
+                {item.memo ? (
+                  <Text style={styles.memoText} numberOfLines={1} ellipsizeMode="tail">备注：{item.memo}</Text>
+                ) : null}
+                <View style={styles.row3Actions}>
+                  <TouchableOpacity
+                    onPress={() => openEditForm(item)}
+                    activeOpacity={0.6}
+                  >
+                    <Text style={styles.linkText}>编辑</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDelete(item)}
+                    activeOpacity={0.6}
+                  >
+                    <Text style={styles.linkTextDanger}>删除</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           </View>
@@ -467,15 +472,21 @@ const styles = StyleSheet.create({
     padding: 4,
     flexShrink: 0,
   },
-  // 第三行：文字链接（居右对齐）
+  // 第三行：备注(左) + 操作链接(右)
   row3: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  memoText: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    flex: 1,
+  },
+  row3Actions: {
+    flexDirection: "row",
     gap: 16,
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
   },
   linkText: {
     fontSize: 13,
