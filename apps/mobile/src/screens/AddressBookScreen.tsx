@@ -208,7 +208,8 @@ export default function AddressBookScreen() {
               <View style={styles.contactAddressRow}>
                   <Text style={styles.contactAddress} numberOfLines={1} ellipsizeMode="middle">
                     {item.address}
-                  </Text>                <TouchableOpacity
+                  </Text>
+                <TouchableOpacity
                   style={styles.copyBtn}
                   onPress={() => handleCopyAddress(item.address)}
                   activeOpacity={0.6}
