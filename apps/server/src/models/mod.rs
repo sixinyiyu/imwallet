@@ -15,6 +15,7 @@ pub mod wallet_address;
 pub mod wallet_subscription;
 
 pub use asset::Asset;
+#[allow(unused_imports)] // ORM 模型仅通过 query<T> 泛型反序列化使用
 pub use asset_address::AssetAddress;
 #[allow(unused_imports)] // ORM 模型仅通过 query<T> 泛型反序列化使用
 pub use chain_entity::ChainEntity;
