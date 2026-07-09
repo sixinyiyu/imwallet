@@ -298,6 +298,9 @@ export default function WalletImportScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          {password.length > 0 && password.length < 8 && (
+            <Text style={s2.errorHint}>密码至少需要8个字符</Text>
+          )}
           {confirmPassword.length > 0 && password !== confirmPassword && (
             <Text style={s2.errorHint}>两次输入的密码不一致</Text>
           )}
