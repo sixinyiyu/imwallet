@@ -435,7 +435,6 @@ async fn get_all_recharges(
     // 动态构建 WHERE 条件：不做 device_id 过滤，支持 wallet_id / time_range
     let mut conditions: Vec<String> = Vec::new();
     let mut args: Vec<rbs::value::Value> = Vec::new();
-    #[allow(unused_assignments)]
     let mut param_idx = 1u32;
 
     if let Some(ref wid) = query.wallet_id {

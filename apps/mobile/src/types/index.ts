@@ -144,7 +144,6 @@ export interface ChainInfo {
 
 export interface Transaction {
   id: string;
-  txHash: string;
   fromAddress: string;
   toAddress: string;
   tokenSymbol: string;
