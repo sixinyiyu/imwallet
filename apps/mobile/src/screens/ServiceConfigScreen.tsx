@@ -6,16 +6,20 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Switch,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import Constants from "expo-constants";
 import api from "../services/api";
+import { configService } from "../services/configService";
 import { getErrorMessage } from "../utils/format";
+import { refreshPerfProbeEnabled } from "../utils/perfProbe";
 
 export default function ServiceConfigScreen() {
   const [serverUrl, setServerUrl] = useState("");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [perfProbeEnabled, setPerfProbeEnabled] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -24,6 +28,7 @@ export default function ServiceConfigScreen() {
         Constants.expoConfig?.extra?.apiBaseUrl ||
         "https://imwallet.dpdns.org/api/v1";
       setServerUrl(url);
+      configService.getPerfProbeEnabled().then(setPerfProbeEnabled);
     }, [])
   );
 
@@ -47,6 +52,12 @@ export default function ServiceConfigScreen() {
       }
     }
     setTesting(false);
+  };
+
+  const handlePerfProbeToggle = async (value: boolean) => {
+    setPerfProbeEnabled(value);
+    await configService.setPerfProbeEnabled(value);
+    refreshPerfProbeEnabled();
   };
 
   return (
@@ -90,6 +101,27 @@ export default function ServiceConfigScreen() {
         {testResult && (
           <Text style={styles.testResult}>{testResult}</Text>
         )}
+      </View>
+
+      {/* 性能探测 */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>性能探测</Text>
+      </View>
+      <View style={styles.card}>
+        <View style={styles.switchRow}>
+          <View style={styles.switchLabelWrap}>
+            <Text style={styles.switchLabel}>开启性能探测</Text>
+            <Text style={styles.switchDesc}>
+              记录核心业务各步骤耗时并上报，用于排查卡顿问题。关闭后零开销。
+            </Text>
+          </View>
+          <Switch
+            value={perfProbeEnabled}
+            onValueChange={handlePerfProbeToggle}
+            trackColor={{ false: "#D1D5DB", true: "#287220" }}
+            thumbColor={perfProbeEnabled ? "#FFFFFF" : "#F3F4F6"}
+          />
+        </View>
       </View>
     </View>
   );
@@ -138,5 +170,25 @@ const styles = StyleSheet.create({
     color: "#374151",
     marginTop: 12,
     textAlign: "center",
+  },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  switchLabelWrap: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  switchLabel: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#1F2937",
+  },
+  switchDesc: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    marginTop: 4,
+    lineHeight: 18,
   },
 });

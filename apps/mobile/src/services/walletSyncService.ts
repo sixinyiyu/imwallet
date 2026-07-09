@@ -3,6 +3,7 @@ import { localWalletService } from "./localWalletService";
 import { localAccountService } from "./localAccountService";
 import { localAddressService } from "./localAddressService";
 import type { Account } from "../types";
+import { perfProbe } from "../utils/perfProbe";
 
 /**
  * 钱包同步服务 — 从 walletStore 中抽离的同步逻辑。
@@ -17,11 +18,13 @@ import type { Account } from "../types";
  *  返回每个地址的 server_address_id，前端据此更新本地记录。
  */
 export async function syncWalletsWithServer(): Promise<void> {
+  const trace = await perfProbe.startTrace("批量同步");
   try {
     const localWallets = await localWalletService.getAllWallets();
-    if (localWallets.length === 0) return;
+    if (localWallets.length === 0) { perfProbe.endTrace(trace); return; }
 
     // 一次性查询所有账户，内存中按 wallet_id 分组（消除 N+1 查询）
+    trace.mark("本地数据读取");
     const allAccounts = await localAccountService.getAllAccounts();
     const accountsByWallet = new Map<string, Account[]>();
     for (const acc of allAccounts) {
@@ -43,12 +46,13 @@ export async function syncWalletsWithServer(): Promise<void> {
         })),
       }));
 
-    if (syncInputs.length === 0) return;
+    if (syncInputs.length === 0) { perfProbe.endTrace(trace); return; }
 
     // 一次请求完成所有同步
-    const results = await walletService.batchSyncWallets(syncInputs);
+    const results = await trace.markAsync("POST /wallets/sync", walletService.batchSyncWallets(syncInputs));
 
     // 更新本地 server_address_id（如果服务端重置导致 ID 变化）
+    trace.mark("更新本地ID");
     for (const r of results) {
       for (const a of r.addresses) {
         const localAccount = await localAccountService.getAccountByAddress(a.address);
@@ -62,6 +66,7 @@ export async function syncWalletsWithServer(): Promise<void> {
   } catch {
     // silent — 同步失败不应阻塞应用启动
   }
+  perfProbe.endTrace(trace);
 }
 
 /** 异步加载订阅钱包 — 从后端获取当前设备的钱包列表，发现本地不存在时以 SUBSCRIBE 写入 */

@@ -45,7 +45,7 @@ export async function setLogUploadEnabled(enabled: boolean): Promise<void> {
  * @param logType  "crash" for app crashes, "mnemonic" for mnemonic generation failures
  * @param content  Error message + stack trace or mnemonic context
  */
-export async function uploadLog(logType: "crash" | "mnemonic" | "info", content: string): Promise<void> {
+export async function uploadLog(logType: "crash" | "mnemonic" | "info" | "perf", content: string): Promise<void> {
   try {
     const deviceId = await SecureStore.getItemAsync(DEVICE_PUBLIC_KEY);
     const version = Constants.expoConfig?.version || "unknown";
@@ -69,7 +69,7 @@ export async function uploadLog(logType: "crash" | "mnemonic" | "info", content:
 // ─── Crash log: save to local, upload on next startup ───
 
 interface PendingLog {
-  logType: "crash" | "mnemonic" | "info";
+  logType: "crash" | "mnemonic" | "info" | "perf";
   content: string;
   timestamp: string;
 }
@@ -78,7 +78,7 @@ interface PendingLog {
  * Save a crash/mnemonic log to AsyncStorage (for upload on next app startup).
  * Used when the app is crashing or in an unstable state — never sends network request.
  */
-export async function saveLogToLocal(logType: "crash" | "mnemonic" | "info", content: string): Promise<void> {
+export async function saveLogToLocal(logType: "crash" | "mnemonic" | "info" | "perf", content: string): Promise<void> {
   try {
     const existing = await SecureStore.getItemAsync(CRASH_LOGS_KEY);
     const logs: PendingLog[] = existing ? JSON.parse(existing) : [];
