@@ -180,10 +180,16 @@ async fn update_config(
         "admin_activation_key",
     ];
     if PROTECTED_KEYS.contains(&body.key.as_str()) {
-        return Err(AppError::Forbidden(format!(
-            "配置项 '{}' 仅允许运维人员通过数据库直接修改",
-            body.key
-        )));
+        log::warn!(
+            "[配置更新] 命中黑名单 — key='{}'，跳过更新，直接返回当前值",
+            &body.key
+        );
+        // 查询当前值返回给前端，不进行更新操作
+        let current = config_service::get_config_value(state.db.clone(), &body.key).await?;
+        return Ok(Json(UpdateConfigResponse {
+            key: body.key,
+            value: current,
+        }));
     }
 
     // RSA 私钥解密密码

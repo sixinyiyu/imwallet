@@ -109,6 +109,11 @@ pub async fn get_all_configs(rb: Arc<RBatis>) -> Result<Vec<AppConfigEntity>, Ap
     Ok(configs)
 }
 
+/// 获取指定配置项的值（公开接口，供路由层使用）
+pub async fn get_config_value(rb: Arc<RBatis>, key: &str) -> Result<String, AppError> {
+    get_config_cached(rb, key).await
+}
+
 pub async fn update_config(
     rb: Arc<RBatis>,
     key: &str,
