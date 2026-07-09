@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS "transactions" (
     "id"            TEXT        NOT NULL,
     "tx_hash"       VARCHAR(66) NOT NULL,
     "from_address"  VARCHAR(64) NOT NULL,
-    "to_address"    VARCHAR(128) NOT NULL,
+    "to_address"    VARCHAR(64) NOT NULL,
     "token_symbol"  VARCHAR(16) NOT NULL,
     "amount"        DECIMAL(30,8) NOT NULL,
     "fee"           DECIMAL(30,8) NOT NULL DEFAULT 0,

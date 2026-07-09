@@ -31,6 +31,13 @@ static CHAINS_CACHE: LazyLock<ArcSwap<Vec<AvailableChain>>> =
     LazyLock::new(|| ArcSwap::from_pointee(Vec::new()));
 static CHAINS_INIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// 启动时预热缓存 — 主动查 DB 并填充，确保后续业务代码可直接读缓存
+pub async fn warmup_chains_cache(rb: Arc<RBatis>) -> Result<(), AppError> {
+    get_available_chains_cached(rb).await?; // 内部已填充 CHAINS_CACHE
+    log::info!("[预热] chains 缓存已初始化");
+    Ok(())
+}
+
 /// 使链缓存失效
 #[allow(dead_code)]
 pub fn invalidate_chains_cache() {
@@ -132,7 +139,8 @@ pub struct WalletNetworkInfo {
 }
 
 /// 批量获取钱包网络列表（解决 N+1 查询）
-/// 使用临时表 + JOIN 方式实现参数化 IN 查询，避免 SQL 拼接
+/// 去掉 JOIN wallets_addresses，直接从 wallet_subscriptions 的 chain 字段获取
+/// DISTINCT 在 SQL 层去重，Rust 侧用 HashMap 收集，无需手动分组+dedup
 pub async fn get_wallet_networks(
     rb: Arc<RBatis>,
     wallet_ids: &[String],
@@ -141,7 +149,6 @@ pub async fn get_wallet_networks(
         return Ok(Vec::new());
     }
 
-    // 使用 in_clause 实现参数化 IN 查询，避免 rbdc_pg 将 Vec<String> 序列化为 JSON 导致类型转换失败
     #[derive(serde::Deserialize)]
     struct R {
         wallet_id: String,
@@ -150,47 +157,36 @@ pub async fn get_wallet_networks(
     let (in_ph, in_args) = crate::db::query::in_clause(wallet_ids, 1);
     let rows: Vec<R> = query(
         &rb,
-        &format!("SELECT ws.wallet_id, wa.chain FROM wallet_subscriptions ws JOIN wallets_addresses wa ON wa.id = ws.address_id WHERE ws.wallet_id IN {} AND ws.address_id != '' ORDER BY ws.wallet_id, wa.chain", in_ph),
+        &format!(
+            "SELECT DISTINCT ws.wallet_id, ws.chain FROM wallet_subscriptions ws WHERE ws.wallet_id IN {} AND ws.address_id != '' AND ws.chain != '' ORDER BY ws.wallet_id, ws.chain",
+            in_ph
+        ),
         in_args,
     )
     .await?;
 
-    // 按钱包分组
-    let mut result = Vec::new();
-    let mut current_id = String::new();
-    let mut networks = Vec::new();
+    // 用 HashMap 收集，SQL DISTINCT 已去重，无需 Rust 侧 dedup
+    let mut map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
     for r in rows {
-        if r.wallet_id != current_id {
-            if !current_id.is_empty() {
-                networks.dedup();
-                result.push(WalletNetworkInfo {
-                    wallet_id: current_id,
-                    networks,
-                });
-            }
-            current_id = r.wallet_id;
-            networks = vec![r.chain];
-        } else {
-            networks.push(r.chain);
-        }
-    }
-    if !current_id.is_empty() {
-        networks.dedup();
-        result.push(WalletNetworkInfo {
-            wallet_id: current_id,
-            networks,
-        });
+        map.entry(r.wallet_id).or_default().push(r.chain);
     }
 
     // 补充没有网络的 wallet_id（传入但无地址关联）
     for wid in wallet_ids {
-        if !result.iter().any(|w| w.wallet_id == *wid) {
-            result.push(WalletNetworkInfo {
-                wallet_id: wid.clone(),
-                networks: Vec::new(),
-            });
+        if !map.contains_key(wid) {
+            map.insert(wid.clone(), Vec::new());
         }
     }
+
+    let result: Vec<WalletNetworkInfo> = wallet_ids
+        .iter()
+        .filter_map(|wid| {
+            map.get(wid).map(|networks| WalletNetworkInfo {
+                wallet_id: wid.clone(),
+                networks: networks.clone(),
+            })
+        })
+        .collect();
 
     Ok(result)
 }

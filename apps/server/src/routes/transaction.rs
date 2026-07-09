@@ -54,8 +54,40 @@ pub struct TransactionQuery {
 
 #[derive(Debug, Serialize)]
 struct TransactionsResponse {
-    transactions: Vec<Transaction>,
+    transactions: Vec<TransactionItem>,
     total: u64,
+}
+
+/// 交易列表返回 DTO — status 写死 CONFIRMED（私有链即时确认，无状态流转）
+#[derive(Debug, Serialize)]
+struct TransactionItem {
+    id: String,
+    from_address: String,
+    to_address: String,
+    token_symbol: String,
+    amount: rust_decimal::Decimal,
+    fee: rust_decimal::Decimal,
+    status: String,
+    memo: String,
+    platform: String,
+    created_at: Option<rbdc::DateTime>,
+}
+
+impl From<Transaction> for TransactionItem {
+    fn from(t: Transaction) -> Self {
+        Self {
+            id: t.id,
+            from_address: t.from_address,
+            to_address: t.to_address,
+            token_symbol: t.token_symbol,
+            amount: t.amount,
+            fee: t.fee,
+            status: "CONFIRMED".to_string(),
+            memo: t.memo,
+            platform: t.platform,
+            created_at: t.created_at,
+        }
+    }
 }
 
 async fn get_transactions(
@@ -74,7 +106,7 @@ async fn get_transactions(
     .await?;
 
     Ok(Json(TransactionsResponse {
-        transactions: txns,
+        transactions: txns.into_iter().map(TransactionItem::from).collect(),
         total,
     }))
 }
@@ -102,9 +134,9 @@ async fn check_address(
 async fn get_transaction(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Json<Transaction>, AppError> {
+) -> Result<Json<TransactionItem>, AppError> {
     let txn = transaction_service::get_transaction(state.db.clone(), &id)
         .await?
         .ok_or_else(|| AppError::NotFound("交易不存在".into()))?;
-    Ok(Json(txn))
+    Ok(Json(TransactionItem::from(txn)))
 }

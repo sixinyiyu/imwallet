@@ -144,7 +144,9 @@ impl ReplayCache {
         let is_new = self.inner.insert(sig.to_string(), now).is_none();
 
         // 每 N 次请求触发一次过期清理（避免每次请求都遍历整个 map）
-        let count = self.counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let count = self
+            .counter
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if count.is_multiple_of(REPLAY_EVICTION_INTERVAL as u64) {
             self.evict_expired();
         }
@@ -156,7 +158,8 @@ impl ReplayCache {
     fn evict_expired(&self) {
         let ttl = std::time::Duration::from_secs(self.ttl_secs as u64);
         // 使用 retain 批量删除，O(N) 但每 64 次请求才执行一次
-        self.inner.retain(|_, inserted_at| inserted_at.elapsed() < ttl);
+        self.inner
+            .retain(|_, inserted_at| inserted_at.elapsed() < ttl);
     }
 }
 

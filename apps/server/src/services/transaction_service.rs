@@ -4,7 +4,6 @@
 use crate::chain::address_validator;
 use crate::config::{FeeMode, RuntimeConfig};
 use crate::db::query::vals;
-use crate::db::query::{tx_exec, tx_query};
 use crate::errors::AppError;
 use rbatis::RBatis;
 use rust_decimal::Decimal;
@@ -55,10 +54,9 @@ pub async fn execute_transfer(
         ));
     }
 
-    let tx = rb.acquire_begin().await?;
+    // ── 事务外：查询阶段（缩小事务持有时间） ──
 
-    // ── 合并查询 1+2+3：from_addr + asset + balance 三表 JOIN ──
-    // 单次 DB 往返替代原来的 3 次串行查询
+    // 合并查询 from_addr + asset + balance（单次 DB 往返）
     #[derive(serde::Deserialize)]
     struct FromInfo {
         address_id: String,
@@ -66,8 +64,8 @@ pub async fn execute_transfer(
         asset_id: String,
         balance: Decimal,
     }
-    let from_info: Vec<FromInfo> = tx_query(
-        &tx,
+    let from_info: Vec<FromInfo> = crate::db::query::query(
+        &rb,
         "SELECT wa.id as address_id, wa.address as from_address, a.id as asset_id, aa.balance \
          FROM wallet_subscriptions ws \
          JOIN wallets_addresses wa ON wa.id = ws.address_id \
@@ -100,31 +98,40 @@ pub async fn execute_transfer(
         return Err(AppError::BadRequest("余额不足".into()));
     }
 
-    // ── 合并查询 4+5：to_addr + restrict_check ──
-    // 如果 tx_restrict_wallet 开启，一条 SQL 同时查 to_addr 和是否存在
+    // 查询 to_addr + restrict_check
     #[derive(serde::Deserialize)]
     struct ToInfo {
         id: String,
     }
-    let to_addr: Vec<ToInfo> = tx_query(
-        &tx,
+    let to_addr: Vec<ToInfo> = crate::db::query::query(
+        &rb,
         "SELECT id FROM wallets_addresses WHERE address = $1 LIMIT 1",
         vals![&input.to_address],
     )
     .await?;
-
-    // tx_restrict_wallet 检查：to_addr 查询已包含地址是否存在的信息
     if cfg.tx_restrict_wallet && to_addr.is_empty() {
         return Err(AppError::BadRequest("收款地址不在系统内".into()));
     }
 
-    // ── 执行余额变更 ──
-    // 扣款
-    tx_exec(&tx, "UPDATE assets_addresses SET balance = balance - $1, updated_at = NOW() WHERE address_id = $2 AND asset_id = $3", vals![rbdc::Decimal::new(&total_debit.to_string()).unwrap(), &from.address_id, &from.asset_id]).await?;
+    // ── 事务内：写入阶段（只做余额变更 + 交易记录，缩小事务范围） ──
+    let tx = rb.acquire_begin().await?;
 
-    // 加款：使用 INSERT ON CONFLICT DO UPDATE 替代先 COUNT 再 INSERT/UPDATE（1次往返替代2次）
+    // 扣款（带余额校验：AND balance >= $1，防止并发修改导致余额不足）
+    #[derive(serde::Deserialize)]
+    struct DeductResult {}
+    let deducted: Option<DeductResult> = crate::db::query::tx_query_one(
+        &tx,
+        "UPDATE assets_addresses SET balance = balance - $1, updated_at = NOW() WHERE address_id = $2 AND asset_id = $3 AND balance >= $1 RETURNING id",
+        vals![rbdc::Decimal::new(&total_debit.to_string()).unwrap(), &from.address_id, &from.asset_id],
+    )
+    .await?;
+    if deducted.is_none() {
+        return Err(AppError::BadRequest("余额不足（并发冲突）".into()));
+    }
+
+    // 加款
     if let Some(to) = to_addr.first() {
-        tx_exec(
+        crate::db::query::tx_exec(
             &tx,
             "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance, created_at, updated_at) \
              VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) \
@@ -134,7 +141,7 @@ pub async fn execute_transfer(
         .await?;
     }
 
-    // ── 插入交易记录 ──
+    // 插入交易记录
     let tx_id = uuid::Uuid::new_v4().to_string();
     let hash = format!(
         "{}{}{}{}{}",
@@ -145,57 +152,123 @@ pub async fn execute_transfer(
         time::OffsetDateTime::now_utc()
     );
     let tx_hash = format!("0x{}", hex::encode(Sha256::digest(hash.as_bytes())));
-    tx_exec(&tx, "INSERT INTO transactions (id, tx_hash, from_address, to_address, token_symbol, amount, fee, status, memo, platform, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, 'CONFIRMED', $8, $9, NOW(), NOW())", vals![&tx_id, &tx_hash, &from.from_address, &input.to_address, &input.token_symbol, rbdc::Decimal::new(&input.amount.to_string()).unwrap(), rbdc::Decimal::new(&fee.to_string()).unwrap(), input.memo.as_deref().unwrap_or(""), platform]).await?;
+    crate::db::query::tx_exec(
+        &tx,
+        "INSERT INTO transactions (id, tx_hash, from_address, to_address, token_symbol, amount, fee, status, memo, platform, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, 'CONFIRMED', $8, $9, NOW(), NOW())",
+        vals![&tx_id, &tx_hash, &from.from_address, &input.to_address, &input.token_symbol, rbdc::Decimal::new(&input.amount.to_string()).unwrap(), rbdc::Decimal::new(&fee.to_string()).unwrap(), input.memo.as_deref().unwrap_or(""), platform],
+    )
+    .await?;
 
-    // ── 批量插入通知 ──
-    // 1. 转出通知（发送方钱包）
-    // 2. 收到转账通知（接收方钱包的所有订阅者）
+    tx.commit().await?;
+
+    log::info!(
+        "[转账] 完成 — 交易ID={}, 发送方(地址{}) -- {}({}) --> 接收方(地址{}), 转账金额 {} {}, 手续费 {}, 实到 {}, 手续费模式{}, 转账结果：已确认, 交易哈希{}",
+        &tx_id,
+        short_addr(&from.from_address),
+        &input.token_symbol,
+        &input.network,
+        short_addr(&input.to_address),
+        input.amount,
+        &input.token_symbol,
+        fee,
+        received,
+        &cfg.fee_mode,
+        &tx_hash
+    );
+
+    // ── 事务后：异步插入通知（不影响转账响应速度） ──
+    let rb_clone = rb.clone();
+    let from_wallet_id = input.from_wallet_id.clone();
+    let token_symbol = input.token_symbol.clone();
+    let network = input.network.clone();
     let amount_display = input.amount.round_dp(6);
     let received_display = received.round_dp(6);
+    let to_addr_id = to_addr.first().map(|t| t.id.clone());
+    let result_id = tx_id.clone();
+    tokio::spawn(async move {
+        if let Err(e) = spawn_insert_notifications(
+            rb_clone,
+            &tx_id,
+            &from_wallet_id,
+            &token_symbol,
+            &network,
+            amount_display,
+            received_display,
+            to_addr_id.as_deref(),
+        )
+        .await
+        {
+            log::warn!("[转账] 通知插入失败 — 交易ID={}, 错误={}", &tx_id, e);
+        }
+    });
 
-    // 先查询接收方钱包的订阅者（用于收款通知）
+    Ok(TransferResult {
+        id: result_id,
+        tx_hash,
+        from_address: from.from_address,
+        to_address: input.to_address,
+        amount: input.amount,
+        fee,
+        received_amount: received,
+        fee_mode: cfg.fee_mode.clone(),
+        status: "CONFIRMED".into(),
+    })
+}
+
+/// 异步插入转账通知（事务外执行，不影响转账响应速度）
+/// 通知是"尽力而为"的副作用，失败不影响转账结果
+#[allow(clippy::too_many_arguments)]
+async fn spawn_insert_notifications(
+    rb: Arc<RBatis>,
+    tx_id: &str,
+    from_wallet_id: &str,
+    token_symbol: &str,
+    network: &str,
+    amount_display: Decimal,
+    received_display: Decimal,
+    to_addr_id: Option<&str>,
+) -> Result<(), AppError> {
+    // 查询接收方钱包的订阅者
     #[derive(serde::Deserialize)]
     struct W {
         wallet_id: String,
     }
-    let to_wallets: Vec<W> = if let Some(to) = to_addr.first() {
-        tx_query(
-            &tx,
+    let to_wallets: Vec<W> = if let Some(addr_id) = to_addr_id {
+        crate::db::query::query(
+            &rb,
             "SELECT DISTINCT wallet_id FROM wallet_subscriptions WHERE address_id = $1",
-            vals![&to.id],
+            vals![addr_id],
         )
         .await?
     } else {
         Vec::new()
     };
 
-    // 构建所有通知的批量 INSERT（1次 DB 往返替代 N 次）
+    // 构建通知数据
     let out_meta = serde_json::json!({
         "transaction_id": tx_id,
-        "token_symbol": input.token_symbol,
-        "chain": input.network,
+        "token_symbol": token_symbol,
+        "chain": network,
         "amount": amount_display.to_string()
     });
     let in_meta = serde_json::json!({
         "transaction_id": tx_id,
-        "token_symbol": input.token_symbol,
-        "chain": input.network,
+        "token_symbol": token_symbol,
+        "chain": network,
         "amount": received_display.to_string()
     });
     let out_meta_str = serde_json::to_string(&out_meta).unwrap_or_default();
     let in_meta_str = serde_json::to_string(&in_meta).unwrap_or_default();
-    let out_content = format!("转出 {} {}", amount_display, input.token_symbol);
-    let in_content = format!("收到 {} {}", received_display, input.token_symbol);
+    let out_content = format!("转出 {} {}", amount_display, token_symbol);
+    let in_content = format!("收到 {} {}", received_display, token_symbol);
 
-    // 总通知数 = 1（转出） + to_wallets.len()（收款）
+    // 批量 INSERT 通知（1次 DB 往返）
     let total_notifs = 1 + to_wallets.len();
     let mut notif_args: Vec<rbs::value::Value> = Vec::new();
     let placeholders: Vec<String> = (0..total_notifs)
         .enumerate()
         .map(|(i, _)| {
             let base = i * 7 + 1;
-            // 每条通知: (id, wallet_id, title, content, type, metadata, created_at)
-            // id 和 created_at 由参数提供
             format!(
                 "(${}, ${}, ${}, ${}, ${}, ${}, NOW())",
                 base,
@@ -210,7 +283,7 @@ pub async fn execute_transfer(
 
     // 转出通知
     notif_args.push(rbs::value::Value::String(uuid::Uuid::new_v4().to_string()));
-    notif_args.push(rbs::value::Value::String(input.from_wallet_id.clone()));
+    notif_args.push(rbs::value::Value::String(from_wallet_id.to_string()));
     notif_args.push(rbs::value::Value::String("转账成功".to_string()));
     notif_args.push(rbs::value::Value::String(out_content));
     notif_args.push(rbs::value::Value::String(TRANSFER_OUT.to_string()));
@@ -230,36 +303,8 @@ pub async fn execute_transfer(
         "INSERT INTO notifications (id, wallet_id, title, content, type, metadata, created_at) VALUES {}",
         placeholders.join(", ")
     );
-    tx_exec(&tx, &notif_sql, notif_args).await?;
-
-    tx.commit().await?;
-
-    log::info!(
-        "[转账] 完成 — 交易ID={}, 发送方(地址{}) -- {}({}) --> 接收方(地址{}), 转账金额 {} {}, 手续费 {}, 实到 {}, 手续费模式{}, 转账结果：已确认, 交易哈希{}",
-        &tx_id,
-        short_addr(&from.from_address),
-        &input.token_symbol,
-        &input.network,
-        short_addr(&input.to_address),
-        input.amount,
-        &input.token_symbol,
-        fee,
-        received,
-        &cfg.fee_mode,
-        &tx_hash
-    );
-
-    Ok(TransferResult {
-        id: tx_id,
-        tx_hash,
-        from_address: from.from_address,
-        to_address: input.to_address,
-        amount: input.amount,
-        fee,
-        received_amount: received,
-        fee_mode: cfg.fee_mode.clone(),
-        status: "CONFIRMED".into(),
-    })
+    crate::db::query::exec(&rb, &notif_sql, notif_args).await?;
+    Ok(())
 }
 
 pub async fn check_address(rb: Arc<RBatis>, address: &str) -> Result<bool, AppError> {
@@ -335,13 +380,13 @@ pub async fn get_transactions(
 
     let sql = format!(
         "WITH combined AS (\\
-            SELECT t.id, t.tx_hash, t.from_address, t.to_address, t.token_symbol, t.amount, t.fee, t.status, t.memo, t.platform, t.created_at, t.updated_at\\
+            SELECT t.id, t.from_address, t.to_address, t.token_symbol, t.amount, t.fee, t.memo, t.platform, t.created_at\\
             FROM transactions t WHERE t.from_address IN {in_ph}{token_cond}\\
             UNION ALL\\
-            SELECT t.id, t.tx_hash, t.from_address, t.to_address, t.token_symbol, t.amount, t.fee, t.status, t.memo, t.platform, t.created_at, t.updated_at\\
+            SELECT t.id, t.from_address, t.to_address, t.token_symbol, t.amount, t.fee, t.memo, t.platform, t.created_at\\
             FROM transactions t WHERE t.to_address IN {in_ph}{token_cond}\\
         )\\
-        SELECT DISTINCT id, tx_hash, from_address, to_address, token_symbol, amount, fee, status, memo, platform, created_at, updated_at,\\
+        SELECT DISTINCT id, from_address, to_address, token_symbol, amount, fee, memo, platform, created_at,\\
             COUNT(*) OVER() as total_count\\
         FROM combined\\
         ORDER BY created_at DESC\\

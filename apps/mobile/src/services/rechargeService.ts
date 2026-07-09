@@ -48,20 +48,6 @@ export const rechargeService = {
     });
     return data;
   },
-
-  /** 查询我的充值记录 — GET /recharges/my（仅需 device_auth + 白名单，不需要管理密码） */
-  async getMyRechargeRecords(page: number = 1, limit: number = 20, walletId?: string): Promise<{ recharges: RechargeRecord[]; total: number; page: number; limit: number }> {
-    const params: Record<string, unknown> = { page, limit };
-    if (walletId) params.wallet_id = walletId;
-    const { data } = await api.get("/recharges/my", { params });
-    return {
-      recharges: (data.recharges || []).map(mapRechargeItem),
-      total: data.total || 0,
-      page: data.page || page,
-      limit: data.limit || limit,
-    };
-  },
-
   /** 查询全部充值记录 — GET /recharges（仅需 device_auth + 白名单，不做设备过滤）
    *  支持按 wallet_id / time_range 筛选
    *  time_range: "today" / "7d" / "30d" / "90d"，后端内部转换为 timestamp */

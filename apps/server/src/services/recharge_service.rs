@@ -3,7 +3,7 @@
 use crate::chain::address_validator;
 use crate::db::query::{tx_exec, tx_query, tx_query_count, vals};
 use crate::errors::AppError;
-use crate::models::{AppConfigEntity, Asset};
+use crate::models::AppConfigEntity;
 use rbatis::RBatis;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -53,7 +53,7 @@ pub async fn execute_recharge(
             short_addr(device_id),
             allowed.is_empty()
         );
-        return Err(AppError::Forbidden("该设备不在充值白名单中".into()));
+        return Err(AppError::Forbidden("无权限进行充值操作".into()));
     }
 
     // 校验充值地址格式与链类型匹配
@@ -67,15 +67,12 @@ pub async fn execute_recharge(
     // 使用事务保护整个充值操作
     let tx = rb.acquire_begin().await?;
 
-    let assets: Vec<Asset> = tx_query(
-        &tx,
-        "SELECT * FROM assets WHERE symbol = $1 AND chain = $2 LIMIT 1",
-        vals![&input.token_symbol, &input.network],
-    )
-    .await?;
-    let asset = assets
-        .into_iter()
-        .next()
+    // 从缓存获取资产元数据（启动时已预热），按 symbol + chain 查找
+    let asset_map = crate::services::asset_service::get_cached_assets_map();
+    let asset = asset_map
+        .values()
+        .find(|a| a.symbol == input.token_symbol && a.chain == input.network)
+        .cloned()
         .ok_or_else(|| AppError::NotFound("代币类型不存在".into()))?;
 
     #[derive(serde::Deserialize)]

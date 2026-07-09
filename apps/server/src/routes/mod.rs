@@ -35,6 +35,10 @@ pub async fn build_routes(
     // 启动时加载汇率缓存
     let cny_rate = crate::services::fiat_service::get_usd_cny_rate(db.clone()).await?;
 
+    // 启动时预热必要缓存（assets、chains），确保后续业务代码可直接读内存
+    crate::services::asset_service::warmup_active_assets_cache(db.clone()).await?;
+    crate::services::account_service::warmup_chains_cache(db.clone()).await?;
+
     let state = AppState::new(
         db.clone(),
         runtime_config,
@@ -44,7 +48,10 @@ pub async fn build_routes(
     );
 
     // 启动汇率定时刷新（每 5 分钟，支持优雅关闭）
-    spawn_cny_rate_refresh(db, state.clone(), cancel.clone());
+    spawn_cny_rate_refresh(db.clone(), state.clone(), cancel.clone());
+
+    // 启动孤儿钱包定时清理（每月 1 日凌晨执行，支持优雅关闭）
+    spawn_orphan_wallet_cleanup(db.clone(), cancel.clone());
 
     let public_routes: Router<AppState> = Router::new()
         .merge(device::public_router())
@@ -94,6 +101,36 @@ fn spawn_cny_rate_refresh(db: Arc<rbatis::RBatis>, state: AppState, cancel: Canc
                 }
                 _ = cancel.cancelled() => {
                     ::log::info!("CNY rate refresh task cancelled — graceful shutdown");
+                    break;
+                }
+            }
+        }
+    });
+}
+
+/// 每月清理孤儿钱包（无订阅且超过阈值天数未活跃），支持优雅关闭
+/// 使用 tokio::time::interval 实现，间隔 30 天（2592000 秒）
+fn spawn_orphan_wallet_cleanup(db: Arc<rbatis::RBatis>, cancel: CancellationToken) {
+    tokio::spawn(async move {
+        // 首次延迟 1 小时执行（避免启动时立即清理），之后每 30 天执行一次
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2592000));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        // 首次 tick 立即触发，跳过它，等下一个周期
+        interval.tick().await;
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    match crate::services::wallet_service::cleanup_orphan_wallets(db.clone()).await {
+                        Ok(count) => {
+                            ::log::info!("Orphan wallet cleanup completed: {} wallets removed", count);
+                        }
+                        Err(e) => {
+                            ::log::warn!("Failed to cleanup orphan wallets: {}", e);
+                        }
+                    }
+                }
+                _ = cancel.cancelled() => {
+                    ::log::info!("Orphan wallet cleanup task cancelled — graceful shutdown");
                     break;
                 }
             }
