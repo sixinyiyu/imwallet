@@ -6,8 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Switch,
-  Platform,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import Constants from "expo-constants";
@@ -15,6 +13,7 @@ import api from "../services/api";
 import { configService } from "../services/configService";
 import { getErrorMessage } from "../utils/format";
 import { refreshPerfProbeEnabled } from "../utils/perfProbe";
+import { GreenToggle } from "../components/GreenToggle";
 
 export default function ServiceConfigScreen() {
   const [serverUrl, setServerUrl] = useState("");
@@ -116,12 +115,7 @@ export default function ServiceConfigScreen() {
               记录核心业务各步骤耗时并上报，用于排查卡顿问题。关闭后零开销。
             </Text>
           </View>
-          <Switch
-            value={perfProbeEnabled}
-            onValueChange={handlePerfProbeToggle}
-            trackColor={{ false: "#D1D5DB", true: "#287220" }}
-            thumbColor={Platform.OS === "android" ? (perfProbeEnabled ? "#FFFFFF" : "#F3F4F6") : undefined}
-          />
+          <GreenToggle value={perfProbeEnabled} onValueChange={handlePerfProbeToggle} />
         </View>
       </View>
     </View>
