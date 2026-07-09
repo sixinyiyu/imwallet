@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Switch,
+  Platform,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import Constants from "expo-constants";
@@ -119,7 +120,7 @@ export default function ServiceConfigScreen() {
             value={perfProbeEnabled}
             onValueChange={handlePerfProbeToggle}
             trackColor={{ false: "#D1D5DB", true: "#287220" }}
-            thumbColor={perfProbeEnabled ? "#FFFFFF" : "#F3F4F6"}
+            thumbColor={Platform.OS === "android" ? (perfProbeEnabled ? "#FFFFFF" : "#F3F4F6") : undefined}
           />
         </View>
       </View>
