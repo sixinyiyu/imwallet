@@ -277,9 +277,6 @@ pub async fn get_wallet_balance(
         .into_iter()
         .filter_map(|r| {
             let asset = asset_map.get(&r.asset_id);
-            if asset.is_none() {
-                log::warn!("[余额] asset_id={} 在缓存中未找到，跳过", &r.asset_id);
-            }
             asset.map(|a| AssetBalanceItem {
                 usd_value: r.total_balance,
                 cny_value: r.total_balance * cny,
