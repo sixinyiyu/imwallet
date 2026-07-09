@@ -38,7 +38,9 @@ pub async fn execute_recharge(
     platform: &str,
     version: &str,
 ) -> Result<RechargeResult, AppError> {
+    let t0 = std::time::Instant::now();
     // 校验充值设备白名单：仅白名单中的设备可充值，白名单为空时拒绝所有设备
+    let t1 = std::time::Instant::now();
     let allowed: Vec<String> = crate::db::query::query_one::<AppConfigEntity>(
         &rb,
         "SELECT * FROM app_configs WHERE key = $1",
@@ -47,6 +49,10 @@ pub async fn execute_recharge(
     .await?
     .and_then(|c| serde_json::from_str::<Vec<String>>(&c.value).ok())
     .unwrap_or_default();
+    log::debug!(
+        "[耗时] recharge 查询白名单 {:.2}ms",
+        t1.elapsed().as_millis() as f64
+    );
     if allowed.is_empty() || !allowed.iter().any(|d| d == device_id) {
         log::warn!(
             "[充值] 拒绝 — 设备{}不在充值白名单中(白名单为空={})",
@@ -65,7 +71,12 @@ pub async fn execute_recharge(
     }
 
     // 使用事务保护整个充值操作
+    let t2 = std::time::Instant::now();
     let tx = rb.acquire_begin().await?;
+    log::debug!(
+        "[耗时] recharge acquire_tx {:.2}ms",
+        t2.elapsed().as_millis() as f64
+    );
 
     // 从缓存获取资产元数据（启动时已预热），按 symbol + chain 查找
     let asset_map = crate::services::asset_service::get_cached_assets_map();
@@ -101,16 +112,21 @@ pub async fn execute_recharge(
     tx_exec(&tx, "INSERT INTO recharges (id, wallet_id, wallet_alias, account_address, token_symbol, token_name, amount, memo, device_id, platform, version, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())", vals![&rid, &input.wallet_id, &input.wallet_alias, &input.account_address, &input.token_symbol, &asset.name, rbdc::Decimal::new(&input.amount.to_string()).unwrap(), input.memo.as_deref().unwrap_or(""), device_id, platform, version]).await?;
 
     tx.commit().await?;
+    log::debug!(
+        "[耗时] recharge 事务写入+commit {:.2}ms",
+        t2.elapsed().as_millis() as f64
+    );
 
     log::info!(
-        "[充值] 完成 — 充值ID={}, 钱包{}(ID{}), 代币{}({}), 充值金额 {}, 设备{}",
+        "[充值] 完成 — 充值ID={}, 钱包{}(ID{}), 代币{}({}), 充值金额 {}, 设备{}, 总耗时 {:.2}ms",
         &rid,
         &input.wallet_alias,
         &input.wallet_id,
         &input.token_symbol,
         &input.network,
         input.amount,
-        short_addr(device_id)
+        short_addr(device_id),
+        t0.elapsed().as_millis() as f64
     );
 
     Ok(RechargeResult {

@@ -46,6 +46,7 @@ pub async fn execute_transfer(
     platform: &str,
     cfg: &RuntimeConfig,
 ) -> Result<TransferResult, AppError> {
+    let t0 = std::time::Instant::now();
     // 校验收款地址格式与链类型匹配
     let v = address_validator::validate_address_for_chain(&input.to_address, &input.network);
     if !v.is_valid {
@@ -57,6 +58,7 @@ pub async fn execute_transfer(
     // ── 事务外：查询阶段（缩小事务持有时间） ──
 
     // 合并查询 from_addr + asset + balance（单次 DB 往返）
+    let t1 = std::time::Instant::now();
     #[derive(serde::Deserialize)]
     struct FromInfo {
         address_id: String,
@@ -81,6 +83,10 @@ pub async fn execute_transfer(
         ],
     )
     .await?;
+    log::debug!(
+        "[耗时] transfer 查询from_info {:.2}ms",
+        t1.elapsed().as_millis() as f64
+    );
     let from = from_info
         .into_iter()
         .next()
@@ -99,6 +105,7 @@ pub async fn execute_transfer(
     }
 
     // 查询 to_addr + restrict_check
+    let t2 = std::time::Instant::now();
     #[derive(serde::Deserialize)]
     struct ToInfo {
         id: String,
@@ -109,12 +116,21 @@ pub async fn execute_transfer(
         vals![&input.to_address],
     )
     .await?;
+    log::debug!(
+        "[耗时] transfer 查询to_addr {:.2}ms",
+        t2.elapsed().as_millis() as f64
+    );
     if cfg.tx_restrict_wallet && to_addr.is_empty() {
         return Err(AppError::BadRequest("收款地址不在系统内".into()));
     }
 
     // ── 事务内：写入阶段（只做余额变更 + 交易记录，缩小事务范围） ──
+    let t3 = std::time::Instant::now();
     let tx = rb.acquire_begin().await?;
+    log::debug!(
+        "[耗时] transfer acquire_tx {:.2}ms",
+        t3.elapsed().as_millis() as f64
+    );
 
     // 扣款（带余额校验：AND balance >= $1，防止并发修改导致余额不足）
     #[derive(serde::Deserialize)]
@@ -160,9 +176,13 @@ pub async fn execute_transfer(
     .await?;
 
     tx.commit().await?;
+    log::debug!(
+        "[耗时] transfer 事务写入+commit {:.2}ms",
+        t3.elapsed().as_millis() as f64
+    );
 
     log::info!(
-        "[转账] 完成 — 交易ID={}, 发送方(地址{}) -- {}({}) --> 接收方(地址{}), 转账金额 {} {}, 手续费 {}, 实到 {}, 手续费模式{}, 转账结果：已确认, 交易哈希{}",
+        "[转账] 完成 — 交易ID={}, 发送方(地址{}) -- {}({}) --> 接收方(地址{}), 转账金额 {} {}, 手续费 {}, 实到 {}, 手续费模式{}, 转账结果：已确认, 交易哈希{}, 总耗时 {:.2}ms",
         &tx_id,
         short_addr(&from.from_address),
         &input.token_symbol,
@@ -173,7 +193,8 @@ pub async fn execute_transfer(
         fee,
         received,
         &cfg.fee_mode,
-        &tx_hash
+        &tx_hash,
+        t0.elapsed().as_millis() as f64
     );
 
     // ── 事务后：异步插入通知（不影响转账响应速度） ──
