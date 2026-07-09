@@ -84,21 +84,20 @@ pub async fn get_wallet_with_balance(
     }
 }
 
-/// 删除钱包（事务内同时删除订阅和钱包，保证原子性）
-pub async fn delete_wallet_with_subs(
+/// 删除钱包订阅 — 仅删除当前设备对该钱包的订阅记录，不删除 wallets 记录。
+/// 钱包是全局资源，多设备可能共享同一钱包，删除订阅不影响其他设备。
+pub async fn delete_wallet_subscription(
     rb: Arc<RBatis>,
     wallet_id: &str,
     device_id: &str,
 ) -> Result<(), AppError> {
-    let tx = rb.acquire_begin().await?;
-    crate::db::query::tx_exec(
-        &tx,
+    crate::db::query::exec(
+        &rb,
         "DELETE FROM wallet_subscriptions WHERE wallet_id = $1 AND device_id = $2",
         vals![wallet_id, device_id],
     )
     .await?;
-    crate::db::query::tx_exec(&tx, "DELETE FROM wallets WHERE id = $1", vals![wallet_id]).await?;
-    tx.commit().await?;
+    log::info!("[钱包] 删除订阅 — 钱包={}, 设备={}", wallet_id, device_id);
     Ok(())
 }
 
@@ -147,17 +146,17 @@ pub async fn subscribe_chain(
 /// 确保地址在该链的 assets_addresses 中有默认代币余额记录。
 /// 已有记录的跳过，只补缺失的（balance=0）。
 /// 使用批量 INSERT 代替逐条插入，减少 DB 往返。
+/// assets 数据从内存缓存获取（启动时已预热），不再查 DB。
 async fn ensure_asset_balances(
     rb: &Arc<RBatis>,
     _address_id: &str,
     chain: &str,
 ) -> Result<(), AppError> {
-    let assets: Vec<crate::models::Asset> = query(
-        rb,
-        "SELECT * FROM assets WHERE chain = $1 AND is_default = true",
-        vals![chain],
-    )
-    .await?;
+    let asset_map = crate::services::asset_service::get_cached_assets_map();
+    let assets: Vec<&crate::models::Asset> = asset_map
+        .values()
+        .filter(|a| a.chain == chain && a.is_default)
+        .collect();
 
     if assets.is_empty() {
         return Ok(());
@@ -249,15 +248,12 @@ pub async fn get_wallet_balance(
     #[derive(serde::Deserialize)]
     struct R {
         asset_id: String,
-        symbol: String,
-        name: String,
         chain: String,
-        decimals: i32,
-        icon_url: String,
         total_balance: Decimal,
     }
     // CTE: 先查出该钱包的所有地址 ID（DISTINCT 去重，避免多设备订阅导致 JOIN 倍增），
     // 再 JOIN assets_addresses 查余额 — 单条 SQL，减少 DB 往返
+    // 不再 JOIN assets 表，资产元数据从内存缓存合并（启动时已预热）
     let rows: Vec<R> = query(
         &rb,
         "WITH wallet_addr_ids AS ( \
@@ -266,26 +262,35 @@ pub async fn get_wallet_balance(
             JOIN wallet_subscriptions ws ON wa.id = ws.address_id \
             WHERE ws.wallet_id = $1 AND ws.address_id != '' \
         ) \
-        SELECT aa.asset_id, a.symbol, a.name, aa.chain, a.decimals, a.icon_url, SUM(aa.balance) as total_balance \
+        SELECT aa.asset_id, aa.chain, SUM(aa.balance) as total_balance \
         FROM assets_addresses aa \
-        JOIN assets a ON a.id = aa.asset_id \
         JOIN wallet_addr_ids wai ON aa.address_id = wai.id \
-        GROUP BY aa.asset_id, a.symbol, a.name, aa.chain, a.decimals, a.icon_url",
+        GROUP BY aa.asset_id, aa.chain",
         vals![wallet_id],
-    ).await?;
+    )
+    .await?;
+
+    // 从内存缓存获取资产元数据（启动时已预热，无需 DB 往返）
+    let asset_map = crate::services::asset_service::get_cached_assets_map();
     let cny = cny_rate;
     let assets: Vec<AssetBalanceItem> = rows
         .into_iter()
-        .map(|r| AssetBalanceItem {
-            usd_value: r.total_balance,
-            cny_value: r.total_balance * cny,
-            asset_id: r.asset_id,
-            symbol: r.symbol,
-            name: r.name,
-            chain: r.chain,
-            decimals: r.decimals,
-            icon_url: r.icon_url,
-            balance: r.total_balance,
+        .filter_map(|r| {
+            let asset = asset_map.get(&r.asset_id);
+            if asset.is_none() {
+                log::warn!("[余额] asset_id={} 在缓存中未找到，跳过", &r.asset_id);
+            }
+            asset.map(|a| AssetBalanceItem {
+                usd_value: r.total_balance,
+                cny_value: r.total_balance * cny,
+                asset_id: r.asset_id,
+                symbol: a.symbol.clone(),
+                name: a.name.clone(),
+                chain: r.chain,
+                decimals: a.decimals,
+                icon_url: a.icon_url.clone(),
+                balance: r.total_balance,
+            })
         })
         .collect();
     Ok(WalletBalance {
@@ -355,26 +360,19 @@ pub async fn subscribe_wallet_readonly(
     Ok((wallet, addresses))
 }
 
-/// 取消只读订阅 — 仅删除当前设备对该钱包的订阅记录，不删除钱包本身
+/// 取消只读订阅 — 仅删除当前设备对该钱包的订阅记录，不删除钱包本身。
+/// 幂等操作：重复调用不会报错。
 pub async fn unsubscribe_wallet_readonly(
     rb: Arc<RBatis>,
     wallet_id: &str,
     device_id: &str,
 ) -> Result<(), AppError> {
-    // 直接 DELETE，用 rows_affected 判断是否命中
-    let result = crate::db::query::exec(
+    crate::db::query::exec(
         &rb,
         "DELETE FROM wallet_subscriptions WHERE wallet_id = $1 AND device_id = $2",
         vals![wallet_id, device_id],
     )
     .await?;
-    if result.rows_affected == 0 {
-        // 检查钱包是否存在（仅 DELETE 未命中时才查，减少正常路径的 DB 往返）
-        let exists = get_wallet(rb.clone(), wallet_id).await?;
-        if exists.is_none() {
-            return Err(AppError::NotFound("钱包不存在".into()));
-        }
-    }
 
     log::info!("[只读订阅] 取消 — 钱包={}, 设备={}", wallet_id, device_id);
     Ok(())
@@ -430,27 +428,19 @@ pub async fn batch_sync_wallets(
     let mut subscriptions: Vec<(String, String, String, String)> = Vec::new(); // (wallet_id, device_id, chain, address_id)
 
     for w in &wallets {
-        // 1. 确保钱包存在（幂等）
+        // 1. 确保钱包存在（幂等）— 一条 SQL 完成创建/更新 alias
         let src = if w.source == "IMPORT" {
             "IMPORT"
         } else {
             "CREATE"
         };
-        let inserted: Option<Wallet> = crate::db::query::tx_query_one(
+        let _wallet: Wallet = crate::db::query::tx_query_one(
             &tx,
-            "INSERT INTO wallets (id, alias, source) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING RETURNING *",
+            "INSERT INTO wallets (id, alias, source) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET alias = EXCLUDED.alias RETURNING *",
             vals![&w.wallet_id, &w.alias, src],
         )
-        .await?;
-        // 钱包已存在时也确保别名可更新（前端可能修改了别名）
-        if inserted.is_none() {
-            crate::db::query::tx_exec(
-                &tx,
-                "UPDATE wallets SET alias = $1 WHERE id = $2 AND alias != $1",
-                vals![&w.alias, &w.wallet_id],
-            )
-            .await?;
-        }
+        .await?
+        .ok_or_else(|| AppError::Internal("钱包同步失败".into()))?;
 
         // 2. 确保设备有空订阅占位（与 create_wallet_and_subscribe 一致）
         crate::db::query::tx_exec(
@@ -475,60 +465,47 @@ pub async fn batch_sync_wallets(
                 continue; // 跳过无效地址，不中断整个同步
             }
 
-            // 4. 确保地址存在（幂等）
+            // 4. 确保地址存在（幂等）— 一条 SQL 完成创建/获取，dummy update 确保 RETURNING * 始终返回记录
             let addr_id = uuid::Uuid::new_v4().to_string();
-            let inserted_addr: Option<WalletAddress> = crate::db::query::tx_query_one(
+            let wa: WalletAddress = crate::db::query::tx_query_one(
                 &tx,
-                "INSERT INTO wallets_addresses (id, chain, address) VALUES ($1, $2, $3) ON CONFLICT (chain, address) DO NOTHING RETURNING *",
+                "INSERT INTO wallets_addresses (id, chain, address) VALUES ($1, $2, $3) ON CONFLICT (chain, address) DO UPDATE SET chain = EXCLUDED.chain RETURNING *",
                 vals![&addr_id, &a.chain, &a.address],
             )
-            .await?;
+            .await?
+            .ok_or_else(|| AppError::Internal("地址同步失败".into()))?;
 
-            let wa = if let Some(wa) = inserted_addr {
-                // 新地址：初始化该链的默认代币余额
-                // 使用预加载的缓存按 chain 内存过滤，避免事务内每次查 DB
-                let assets: Vec<&crate::models::Asset> = all_assets
+            // 新地址：初始化该链的默认代币余额（从缓存获取 assets）
+            let assets: Vec<&crate::models::Asset> = all_assets
+                .iter()
+                .filter(|x| x.chain == wa.chain && x.is_default)
+                .collect();
+            if !assets.is_empty() {
+                let mut args: Vec<rbs::value::Value> = Vec::new();
+                let placeholders: Vec<String> = assets
                     .iter()
-                    .filter(|a| a.chain == wa.chain && a.is_default)
+                    .enumerate()
+                    .map(|(i, asset)| {
+                        let base = i * 4 + 1;
+                        args.push(rbs::value::Value::String(uuid::Uuid::new_v4().to_string()));
+                        args.push(rbs::value::Value::String(wa.id.clone()));
+                        args.push(rbs::value::Value::String(asset.id.clone()));
+                        args.push(rbs::value::Value::String(wa.chain.clone()));
+                        format!(
+                            "(${}, ${}, ${}, ${}, 0)",
+                            base,
+                            base + 1,
+                            base + 2,
+                            base + 3
+                        )
+                    })
                     .collect();
-                if !assets.is_empty() {
-                    let mut args: Vec<rbs::value::Value> = Vec::new();
-                    let placeholders: Vec<String> = assets
-                        .iter()
-                        .enumerate()
-                        .map(|(i, asset)| {
-                            let base = i * 4 + 1;
-                            args.push(rbs::value::Value::String(uuid::Uuid::new_v4().to_string()));
-                            args.push(rbs::value::Value::String(wa.id.clone()));
-                            args.push(rbs::value::Value::String(asset.id.clone()));
-                            args.push(rbs::value::Value::String(wa.chain.clone()));
-                            format!(
-                                "(${}, ${}, ${}, ${}, 0)",
-                                base,
-                                base + 1,
-                                base + 2,
-                                base + 3
-                            )
-                        })
-                        .collect();
-                    let sql = format!(
-                        "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance) VALUES {} ON CONFLICT (address_id, asset_id) DO NOTHING",
-                        placeholders.join(", ")
-                    );
-                    crate::db::query::tx_exec(&tx, &sql, args).await?;
-                }
-                wa
-            } else {
-                // 地址已存在，查询已有记录
-                let existing: WalletAddress = crate::db::query::tx_query_one(
-                    &tx,
-                    "SELECT * FROM wallets_addresses WHERE chain = $1 AND address = $2",
-                    vals![&a.chain, &a.address],
-                )
-                .await?
-                .ok_or_else(|| AppError::Internal("地址同步失败".into()))?;
-                existing
-            };
+                let sql = format!(
+                    "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance) VALUES {} ON CONFLICT (address_id, asset_id) DO NOTHING",
+                    placeholders.join(", ")
+                );
+                crate::db::query::tx_exec(&tx, &sql, args).await?;
+            }
 
             // 5. 收集订阅记录（不再逐条 INSERT，最后批量插入）
             subscriptions.push((
@@ -633,4 +610,60 @@ pub async fn get_all_wallets(
         (rows, total)
     };
     Ok((rows, total))
+}
+/// 清理孤儿钱包 — 删除没有任何订阅记录且超过指定天数未活跃的钱包。
+/// 由定时任务每月调用一次，阈值天数从 app_configs 表读取（key = orphan_wallet_cleanup_days）。
+pub async fn cleanup_orphan_wallets(rb: Arc<RBatis>) -> Result<u64, AppError> {
+    // 从 app_configs 读取清理阈值天数，默认 180 天
+    let days: i64 = crate::db::query::query_one::<crate::models::AppConfigEntity>(
+        &rb,
+        "SELECT * FROM app_configs WHERE key = $1",
+        vals!["orphan_wallet_cleanup_days"],
+    )
+    .await?
+    .and_then(|c| c.value.parse::<i64>().ok())
+    .unwrap_or(180);
+
+    // 找出没有任何订阅记录的孤儿钱包，且超过阈值天数未活跃（updated_at）
+    #[derive(serde::Deserialize)]
+    struct OrphanWallet {
+        id: String,
+        alias: String,
+    }
+    let orphans: Vec<OrphanWallet> = query(
+        &rb,
+        "SELECT w.id, w.alias FROM wallets w \
+        WHERE NOT EXISTS (SELECT 1 FROM wallet_subscriptions ws WHERE ws.wallet_id = w.id AND ws.address_id != '') \
+        AND w.updated_at < NOW() - ($1 || ' days')::interval \
+        ORDER BY w.updated_at ASC",
+        vals![days.to_string()],
+    )
+    .await?;
+
+    if orphans.is_empty() {
+        log::info!("[孤儿清理] 无需清理 — 阈值={}天", days);
+        return Ok(0);
+    }
+
+    // 批量删除孤儿钱包（wallets 表，无 FK 依赖的订阅记录已不存在）
+    let ids: Vec<String> = orphans.iter().map(|o| o.id.clone()).collect();
+    let (in_ph, in_args) = crate::db::query::in_clause(&ids, 1);
+    let result = exec(
+        &rb,
+        &format!("DELETE FROM wallets WHERE id IN {}", in_ph),
+        in_args,
+    )
+    .await?;
+
+    log::info!(
+        "[孤儿清理] 完成 — 阈值={}天, 清理={}个钱包: {}",
+        days,
+        result.rows_affected,
+        orphans
+            .iter()
+            .map(|o| format!("{}({})", o.alias, o.id))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    Ok(result.rows_affected as u64)
 }

@@ -31,6 +31,13 @@ static CHAINS_CACHE: LazyLock<ArcSwap<Vec<AvailableChain>>> =
     LazyLock::new(|| ArcSwap::from_pointee(Vec::new()));
 static CHAINS_INIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// 启动时预热缓存 — 主动查 DB 并填充，确保后续业务代码可直接读缓存
+pub async fn warmup_chains_cache(rb: Arc<RBatis>) -> Result<(), AppError> {
+    get_available_chains_cached(rb).await?; // 内部已填充 CHAINS_CACHE
+    log::info!("[预热] chains 缓存已初始化");
+    Ok(())
+}
+
 /// 使链缓存失效
 #[allow(dead_code)]
 pub fn invalidate_chains_cache() {
