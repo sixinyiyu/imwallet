@@ -238,7 +238,7 @@ export default function WalletImportScreen() {
     }
 
     setLoading(true);
-    setLoadingStage("正在加密密码...");
+    setLoadingStage("正在加密数据...");
     const stageTimer1 = setTimeout(() => setLoadingStage("正在注册钱包..."), 800);
     const stageTimer2 = setTimeout(() => setLoadingStage("正在跳转..."), 1600);
     try {

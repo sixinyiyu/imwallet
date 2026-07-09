@@ -156,7 +156,7 @@ export default function WalletCreateScreen() {
     setLoading(true);
     setLoadingStage("正在生成助记词...");
     // 阶段提示：模拟创建流程的各步骤
-    const stageTimer1 = setTimeout(() => setLoadingStage("正在加密密码..."), 800);
+    const stageTimer1 = setTimeout(() => setLoadingStage("正在加密数据..."), 800);
     const stageTimer2 = setTimeout(() => setLoadingStage("正在注册钱包..."), 1600);
     try {
       const id = await createWallet(alias.trim(), password, passwordHint.trim() || undefined);
