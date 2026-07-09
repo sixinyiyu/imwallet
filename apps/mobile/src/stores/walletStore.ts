@@ -389,6 +389,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   /** Delete wallet — delete local + server */
   deleteWallet: async (walletId: string) => {
+    const trace = await perfProbe.startTrace("删除钱包");
     try {
       // 从内存 Set 中移除备份标记
       const backedUpSet = new Set(get().backedUpWallets);
@@ -396,12 +397,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       set({ backedUpWallets: backedUpSet });
 
       // 本地 SQLite 删除 + SecureStore 删除 + 服务端删除并行
-      await Promise.all([
+      await trace.markAsync("本地+服务端删除", Promise.all([
         localWalletService.deleteWallet(walletId),
         SecureStore.deleteItemAsync(mnemonicKey(walletId)),
         SecureStore.deleteItemAsync(backedUpKey(walletId)),
         syncService.deleteWallet(walletId),
-      ]);
+      ]));
 
       // 通知清理后台执行，不阻塞
       localNotificationService.deleteWalletNotifications(walletId);
@@ -410,6 +411,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     } catch {
       // silent
     }
+    perfProbe.endTrace(trace);
   },
 
   backupWallet: async (walletId: string) => {
@@ -611,18 +613,22 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   /** Unsubscribe wallet (readonly) — cancel subscription and clean local data */
   unsubscribeWallet: async (walletId: string) => {
+    const trace = await perfProbe.startTrace("取消订阅钱包");
     try {
       // 1. 调用后端取消订阅 API
-      await syncService.unsubscribeWalletReadonly(walletId);
+      await trace.markAsync("DELETE /subscribe", syncService.unsubscribeWalletReadonly(walletId));
 
       // 2. 删除本地数据（钱包+账户+地址+通知）
+      trace.mark("本地删除开始");
       await localWalletService.deleteWallet(walletId);
       await localNotificationService.deleteWalletNotifications(walletId);
 
       // 3. 刷新钱包列表
-      await get().fetchWallets();
+      await trace.markAsync("刷新钱包列表", get().fetchWallets());
     } catch (err: unknown) {
+      perfProbe.endTrace(trace);
       throw err;
     }
+    perfProbe.endTrace(trace);
   },
   }));
