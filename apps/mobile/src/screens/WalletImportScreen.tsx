@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
   Modal,
   Pressable,
   Keyboard,
+  Animated,
+  Easing,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -39,6 +41,97 @@ function getPasswordStrength(pwd: string): { level: number; label: string; color
   if (score <= 3) return { level: 3, label: "强", color: "#3B82F6" };
   return { level: 4, label: "很好", color: "#10B981" };
 }
+
+/** Import overlay with rotating dashed circle and stage text */
+function ImportOverlay({ visible, stage }: { visible: boolean; stage: string }) {
+  const rotation = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!visible) return;
+    const rotate = Animated.loop(
+      Animated.timing(rotation, {
+        toValue: 1,
+        duration: 1500,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    const pulseAnim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1.15,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    rotate.start();
+    pulseAnim.start();
+    return () => {
+      rotate.stop();
+      pulseAnim.stop();
+    };
+  }, [visible]);
+
+  const rotateInterpolate = rotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  return (
+    <Modal transparent animationType="fade" visible={visible}>
+      <View style={importOverlayStyles.mask}>
+        <View style={importOverlayStyles.content}>
+          <Animated.View style={[importOverlayStyles.circleWrapper, { transform: [{ rotate: rotateInterpolate }, { scale: pulse }] }]}>
+            <View style={importOverlayStyles.dashedCircle} />
+          </Animated.View>
+          <Text style={importOverlayStyles.text}>{stage || "导入中"}</Text>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const importOverlayStyles = StyleSheet.create({
+  mask: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  content: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  circleWrapper: {
+    width: 64,
+    height: 64,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  dashedCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+    borderStyle: "dashed",
+  },
+  text: {
+    position: "absolute",
+    fontSize: 14,
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+});
 
 export default function WalletImportScreen() {
   const alert = useAlert();
@@ -74,6 +167,7 @@ export default function WalletImportScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordHint, setPasswordHint] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState("导入中");
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const strength = useMemo(() => getPasswordStrength(password), [password]);
@@ -144,10 +238,18 @@ export default function WalletImportScreen() {
     }
 
     setLoading(true);
+    setLoadingStage("正在加密密码...");
+    const stageTimer1 = setTimeout(() => setLoadingStage("正在注册钱包..."), 800);
+    const stageTimer2 = setTimeout(() => setLoadingStage("正在跳转..."), 1600);
     try {
       const walletId = await importWallet(validatedMnemonic, alias.trim(), password, passwordHint.trim() || undefined);
+      clearTimeout(stageTimer1);
+      clearTimeout(stageTimer2);
+      setLoadingStage("正在跳转...");
       navigation.replace("WalletAddAccount", { walletId });
     } catch (err: unknown) {
+      clearTimeout(stageTimer1);
+      clearTimeout(stageTimer2);
       alert("导入失败", getErrorMessage(err, "请稍后重试"));
     } finally {
       setLoading(false);
@@ -222,10 +324,13 @@ export default function WalletImportScreen() {
 
   // ─── Step 2: Wallet Settings (white background) ───
   return (
-    <KeyboardAvoidingView
-      style={s2.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
+    <>
+      {/* 导入加载遮罩 */}
+      <ImportOverlay visible={loading} stage={loadingStage} />
+      <KeyboardAvoidingView
+        style={s2.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
       <ScrollView
         contentContainerStyle={s2.scroll}
         keyboardShouldPersistTaps="handled"
@@ -328,6 +433,7 @@ export default function WalletImportScreen() {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </>
   );
 }
 

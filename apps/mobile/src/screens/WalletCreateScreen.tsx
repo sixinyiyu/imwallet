@@ -10,6 +10,7 @@ import {
   ScrollView,
   Animated,
   Modal,
+  Easing,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -36,21 +37,43 @@ function getPasswordStrength(pwd: string): { level: number; label: string } {
   return { level: 4, label: "很好" };
 }
 
-/** Rotating dashed circle loading indicator with "创建中" text */
-function CreatingOverlay({ visible }: { visible: boolean }) {
+/** Rotating dashed circle loading indicator with stage text */
+function CreatingOverlay({ visible, stage }: { visible: boolean; stage: string }) {
   const rotation = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (!visible) return;
-    const animate = Animated.loop(
+    const rotate = Animated.loop(
       Animated.timing(rotation, {
         toValue: 1,
         duration: 1500,
+        easing: Easing.linear,
         useNativeDriver: true,
       })
     );
-    animate.start();
-    return () => animate.stop();
+    const pulseAnim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1.15,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    rotate.start();
+    pulseAnim.start();
+    return () => {
+      rotate.stop();
+      pulseAnim.stop();
+    };
   }, [visible]);
 
   const rotateInterpolate = rotation.interpolate({
@@ -62,10 +85,10 @@ function CreatingOverlay({ visible }: { visible: boolean }) {
     <Modal transparent animationType="fade" visible={visible}>
       <View style={overlayStyles.mask}>
         <View style={overlayStyles.content}>
-          <Animated.View style={[overlayStyles.circleWrapper, { transform: [{ rotate: rotateInterpolate }] }]}>
+          <Animated.View style={[overlayStyles.circleWrapper, { transform: [{ rotate: rotateInterpolate }, { scale: pulse }] }]}>
             <View style={overlayStyles.dashedCircle} />
           </Animated.View>
-          <Text style={overlayStyles.text}>创建中</Text>
+          <Text style={overlayStyles.text}>{stage || "创建中"}</Text>
         </View>
       </View>
     </Modal>
@@ -115,6 +138,7 @@ export default function WalletCreateScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordHint, setPasswordHint] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState("创建中");
   const [showPasswords, setShowPasswords] = useState(false);
 
   const strength = useMemo(() => getPasswordStrength(password), [password]);
@@ -130,10 +154,19 @@ export default function WalletCreateScreen() {
     if (password !== confirmPassword) { alert("提示", "两次输入的密码不一致"); return; }
 
     setLoading(true);
+    setLoadingStage("正在生成助记词...");
+    // 阶段提示：模拟创建流程的各步骤
+    const stageTimer1 = setTimeout(() => setLoadingStage("正在加密密码..."), 800);
+    const stageTimer2 = setTimeout(() => setLoadingStage("正在注册钱包..."), 1600);
     try {
       const id = await createWallet(alias.trim(), password, passwordHint.trim() || undefined);
+      clearTimeout(stageTimer1);
+      clearTimeout(stageTimer2);
+      setLoadingStage("正在跳转...");
       navigation.replace("WalletAddAccount", { walletId: id });
     } catch (err: unknown) {
+      clearTimeout(stageTimer1);
+      clearTimeout(stageTimer2);
       alert("创建失败", getErrorMessage(err, "请稍后重试"));
     } finally {
       setLoading(false);
@@ -143,7 +176,7 @@ export default function WalletCreateScreen() {
   return (
     <>
       {/* 遮罩层加载效果 */}
-      <CreatingOverlay visible={loading} />
+      <CreatingOverlay visible={loading} stage={loadingStage} />
 
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">

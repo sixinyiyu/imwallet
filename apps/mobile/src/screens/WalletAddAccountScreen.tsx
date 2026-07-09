@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Dimensions,
   Modal,
   TouchableWithoutFeedback,
+  Animated,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -44,6 +45,16 @@ export default function WalletAddAccountScreen() {
   const { addAccount, activeWallet } = useWalletStore();
   // 兜底：作为初始路由时无 params，从 store 获取当前钱包 ID
   const effectiveWalletId = walletId || activeWallet?.id;
+
+  // 淡入动画
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedChains, setSelectedChains] = useState<Set<string>>(new Set());
@@ -153,7 +164,7 @@ export default function WalletAddAccountScreen() {
     : [...selectedChains].some((c) => !existingChains.has(c));
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       {/* 上方图片区域 - 占屏幕 3/5 */}
       <View style={styles.imageArea}>
         <Image
@@ -290,7 +301,7 @@ export default function WalletAddAccountScreen() {
           </TouchableOpacity>
         </View>
       </Modal>
-    </View>
+    </Animated.View>
   );
 }
 
