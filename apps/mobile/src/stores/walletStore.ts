@@ -304,14 +304,14 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // 1. 基于助记词确定性生成 walletId
     const walletId = generateIdentifier(mnemonic);
 
-    // 2. 网络注册 + PBKDF2 hash 并行（无依赖关系）
+    // 2. 网络注册 + PBKDF2 hash 真正并行
     trace.mark("开始加密+注册");
-    await trace.markAsync("POST /wallets", syncService.registerWallet("CREATE", walletId, alias));
-    const [passwordHash, mnemonicHash] = await trace.markAsync("加密数据(PBKDF2)", Promise.all([hashPassword(password), hashMnemonic(mnemonic)]));
+    const registerPromise = syncService.registerWallet("CREATE", walletId, alias);
+    const hashPromise = Promise.all([hashPassword(password), hashMnemonic(mnemonic)]);
+    const [, [passwordHash, mnemonicHash]] = await trace.markAsync("并行: 注册+加密", Promise.all([registerPromise, hashPromise]));
 
     // 3. SQLite 写入 + SecureStore 存助记词并行
-    trace.mark("本地写入");
-    await Promise.all([
+    await trace.markAsync("本地写入", Promise.all([
       localWalletService.createWallet({
         id: walletId,
         name: alias,
@@ -321,7 +321,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         mnemonic_hash: mnemonicHash,
       }),
       SecureStore.setItemAsync(mnemonicKey(walletId), mnemonic),
-    ]);
+    ]));
 
     set({ mnemonic, hasWallets: true });
     // fetchWallets 后台执行，不阻塞导航
@@ -338,14 +338,14 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // 1. 基于助记词确定性生成 walletId
     const walletId = generateIdentifier(cleaned);
 
-    // 2. 网络注册 + PBKDF2 hash 并行（无依赖关系）
+    // 2. 网络注册 + PBKDF2 hash 真正并行
     trace.mark("开始加密+注册");
-    await trace.markAsync("POST /wallets", syncService.registerWallet("IMPORT", walletId, alias));
-    const [passwordHash, mnemonicHash] = await trace.markAsync("加密数据(PBKDF2)", Promise.all([hashPassword(password), hashMnemonic(cleaned)]));
+    const registerPromise = syncService.registerWallet("IMPORT", walletId, alias);
+    const hashPromise = Promise.all([hashPassword(password), hashMnemonic(cleaned)]);
+    const [, [passwordHash, mnemonicHash]] = await trace.markAsync("并行: 注册+加密", Promise.all([registerPromise, hashPromise]));
 
     // 3. SQLite 写入 + SecureStore 存助记词并行
-    trace.mark("本地写入");
-    await Promise.all([
+    await trace.markAsync("本地写入", Promise.all([
       localWalletService.createWallet({
         id: walletId,
         name: alias,
@@ -355,10 +355,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         mnemonic_hash: mnemonicHash,
       }),
       SecureStore.setItemAsync(mnemonicKey(walletId), cleaned),
-    ]);
+    ]));
 
     // 4. 导入钱包 = 用户已持有助记词，直接标记为已备份
-    await get().backupWallet(walletId);
+    await trace.markAsync("标记已备份", get().backupWallet(walletId));
 
     set({ mnemonic: mnemonicInput, hasWallets: true });
     // fetchWallets 后台执行，不阻塞导航
@@ -461,32 +461,29 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // 同步地址到服务端，获取 serverAddressId
       const serverAddress = await trace.markAsync("POST /wallets/{id}/addresses", syncService.syncAddress(walletId, network, address));
 
-      // 保存到本地 SQLite
-      trace.mark("本地写入");
-      await localAccountService.createAccount({
-        id: accountId,
-        wallet_id: walletId,
-        chain: network,
-        derivation_path: derivationPath,
-        address: address,
-        extended_pubkey: "",
-        account_index: accountIndex,
-        name: accountName,
-        server_address_id: serverAddress.id,
-      });
-
-      // 同步写入 addresses 表（type=internalWallet, status=verified）
-      // 用于交易列表显示钱包名称、转账确认页识别本钱包地址
-      await localAddressService.upsertAddress({
-        chain: network,
-        address: address,
-        walletId: walletId,
-        name: accountName,
-        type: "internalWallet",
-        status: "verified",
-      });
-
-      await get().fetchAccounts(walletId);
+      // 保存到本地 SQLite + addresses 表 + 刷新账户列表
+      await trace.markAsync("本地写入+刷新", Promise.all([
+        localAccountService.createAccount({
+          id: accountId,
+          wallet_id: walletId,
+          chain: network,
+          derivation_path: derivationPath,
+          address: address,
+          extended_pubkey: "",
+          account_index: accountIndex,
+          name: accountName,
+          server_address_id: serverAddress.id,
+        }),
+        localAddressService.upsertAddress({
+          chain: network,
+          address: address,
+          walletId: walletId,
+          name: accountName,
+          type: "internalWallet",
+          status: "verified",
+        }),
+      ]));
+      await trace.markAsync("刷新账户列表", get().fetchAccounts(walletId));
     } catch (err: unknown) {
       perfProbe.endTrace(trace);
       throw err;
