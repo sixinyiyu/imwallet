@@ -66,12 +66,12 @@ pub async fn execute_transfer(
     }
     let from_info: Vec<FromInfo> = crate::db::query::query(
         &rb,
-        "SELECT wa.id as address_id, wa.address as from_address, a.id as asset_id, aa.balance \
-         FROM wallet_subscriptions ws \
-         JOIN wallets_addresses wa ON wa.id = ws.address_id \
-         JOIN assets a ON a.symbol = $2 AND a.chain = $3 \
-         JOIN assets_addresses aa ON aa.address_id = wa.id AND aa.asset_id = a.id \
-         WHERE ws.wallet_id = $1 AND ws.device_id = $4 AND wa.chain = $3 AND ws.address_id != '' \
+        "SELECT wa.id as address_id, wa.address as from_address, a.id as asset_id, aa.balance
+         FROM wallet_subscriptions ws
+         JOIN wallets_addresses wa ON wa.id = ws.address_id
+         JOIN assets a ON a.symbol = $2 AND a.chain = $3
+         JOIN assets_addresses aa ON aa.address_id = wa.id AND aa.asset_id = a.id
+         WHERE ws.wallet_id = $1 AND ws.device_id = $4 AND wa.chain = $3 AND ws.address_id != ''
          LIMIT 1",
         vals![
             &input.from_wallet_id,
@@ -133,8 +133,8 @@ pub async fn execute_transfer(
     if let Some(to) = to_addr.first() {
         crate::db::query::tx_exec(
             &tx,
-            "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance, created_at, updated_at) \
-             VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) \
+            "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
              ON CONFLICT (address_id, asset_id) DO UPDATE SET balance = assets_addresses.balance + $5, updated_at = NOW()",
             vals![uuid::Uuid::new_v4().to_string(), &to.id, &from.asset_id, &input.network, rbdc::Decimal::new(&received.to_string()).unwrap()],
         )

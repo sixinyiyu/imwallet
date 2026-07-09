@@ -38,16 +38,16 @@ pub async fn get_notifications_by_device(
     }
 
     let sql = if since.is_some() {
-        "SELECT n.id, n.wallet_id, n.title, n.content, n.type as \"type\", n.metadata, n.created_at \
-         FROM notifications n \
-         JOIN wallet_subscriptions ws ON ws.wallet_id = n.wallet_id \
-         WHERE ws.device_id = $1 AND n.created_at >= $2 \
+        "SELECT n.id, n.wallet_id, n.title, n.content, n.type as \"type\", n.metadata, n.created_at
+         FROM notifications n
+         JOIN wallet_subscriptions ws ON ws.wallet_id = n.wallet_id
+         WHERE ws.device_id = $1 AND n.created_at >= $2
          ORDER BY n.created_at DESC LIMIT 100"
     } else {
-        "SELECT n.id, n.wallet_id, n.title, n.content, n.type as \"type\", n.metadata, n.created_at \
-         FROM notifications n \
-         JOIN wallet_subscriptions ws ON ws.wallet_id = n.wallet_id \
-         WHERE ws.device_id = $1 \
+        "SELECT n.id, n.wallet_id, n.title, n.content, n.type as \"type\", n.metadata, n.created_at
+         FROM notifications n
+         JOIN wallet_subscriptions ws ON ws.wallet_id = n.wallet_id
+         WHERE ws.device_id = $1
          ORDER BY n.created_at DESC LIMIT 100"
     };
 

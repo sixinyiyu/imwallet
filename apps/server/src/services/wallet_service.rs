@@ -256,15 +256,15 @@ pub async fn get_wallet_balance(
     // 不再 JOIN assets 表，资产元数据从内存缓存合并（启动时已预热）
     let rows: Vec<R> = query(
         &rb,
-        "WITH wallet_addr_ids AS ( \
-            SELECT DISTINCT wa.id \
-            FROM wallets_addresses wa \
-            JOIN wallet_subscriptions ws ON wa.id = ws.address_id \
-            WHERE ws.wallet_id = $1 AND ws.address_id != '' \
-        ) \
-        SELECT aa.asset_id, aa.chain, SUM(aa.balance) as total_balance \
-        FROM assets_addresses aa \
-        JOIN wallet_addr_ids wai ON aa.address_id = wai.id \
+        "WITH wallet_addr_ids AS (
+            SELECT DISTINCT wa.id
+            FROM wallets_addresses wa
+            JOIN wallet_subscriptions ws ON wa.id = ws.address_id
+            WHERE ws.wallet_id = $1 AND ws.address_id != ''
+        )
+        SELECT aa.asset_id, aa.chain, SUM(aa.balance) as total_balance
+        FROM assets_addresses aa
+        JOIN wallet_addr_ids wai ON aa.address_id = wai.id
         GROUP BY aa.asset_id, aa.chain",
         vals![wallet_id],
     )
@@ -629,9 +629,9 @@ pub async fn cleanup_orphan_wallets(rb: Arc<RBatis>) -> Result<u64, AppError> {
     }
     let orphans: Vec<OrphanWallet> = query(
         &rb,
-        "SELECT w.id, w.alias FROM wallets w \
-        WHERE NOT EXISTS (SELECT 1 FROM wallet_subscriptions ws WHERE ws.wallet_id = w.id AND ws.address_id != '') \
-        AND w.updated_at < NOW() - ($1 || ' days')::interval \
+        "SELECT w.id, w.alias FROM wallets w
+        WHERE NOT EXISTS (SELECT 1 FROM wallet_subscriptions ws WHERE ws.wallet_id = w.id AND ws.address_id != '')
+        AND w.updated_at < NOW() - ($1 || ' days')::interval
         ORDER BY w.updated_at ASC",
         vals![days.to_string()],
     )
