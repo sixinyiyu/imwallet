@@ -379,17 +379,17 @@ pub async fn get_transactions(
     };
 
     let sql = format!(
-        "WITH combined AS (\\
-            SELECT t.id, t.from_address, t.to_address, t.token_symbol, t.amount, t.fee, t.memo, t.platform, t.created_at\\
-            FROM transactions t WHERE t.from_address IN {in_ph}{token_cond}\\
-            UNION ALL\\
-            SELECT t.id, t.from_address, t.to_address, t.token_symbol, t.amount, t.fee, t.memo, t.platform, t.created_at\\
-            FROM transactions t WHERE t.to_address IN {in_ph}{token_cond}\\
-        )\\
-        SELECT DISTINCT id, from_address, to_address, token_symbol, amount, fee, memo, platform, created_at,\\
-            COUNT(*) OVER() as total_count\\
-        FROM combined\\
-        ORDER BY created_at DESC\\
+        "WITH combined AS (
+            SELECT t.id, t.from_address, t.to_address, t.token_symbol, t.amount, t.fee, t.memo, t.platform, t.created_at
+            FROM transactions t WHERE t.from_address IN {in_ph}{token_cond}
+            UNION ALL
+            SELECT t.id, t.from_address, t.to_address, t.token_symbol, t.amount, t.fee, t.memo, t.platform, t.created_at
+            FROM transactions t WHERE t.to_address IN {in_ph}{token_cond}
+        )
+        SELECT DISTINCT id, from_address, to_address, token_symbol, amount, fee, memo, platform, created_at,
+            COUNT(*) OVER() as total_count
+        FROM combined
+        ORDER BY created_at DESC
         LIMIT {limit_ph} OFFSET {offset_ph}",
         in_ph = in_ph,
         token_cond = token_cond,

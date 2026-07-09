@@ -1,6 +1,19 @@
 import api from "./api";
 import type { Transaction } from "../types";
 
+/** 转账结果（来自后端 TransferResult，不同于 Transaction） */
+export interface TransferResult {
+  id: string;
+  txHash: string;
+  fromAddress: string;
+  toAddress: string;
+  amount: string;
+  fee: string;
+  receivedAmount: string;
+  feeMode: string;
+  status: string;
+}
+
 export interface TransactionFilter {
   walletId: string;
   page?: number;
@@ -19,7 +32,7 @@ export const transactionService = {
     tokenSymbol: string;
     network: string;
     memo?: string;
-  }): Promise<Transaction> {
+  }): Promise<TransferResult> {
     const { data } = await api.post("/transactions/transfer", input);
     return data;
   },
