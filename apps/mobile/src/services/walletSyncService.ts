@@ -25,7 +25,7 @@ export async function syncWalletsWithServer(): Promise<void> {
 
     // 一次性查询所有账户，内存中按 wallet_id 分组（消除 N+1 查询）
     trace.mark("本地数据读取");
-    const allAccounts = await localAccountService.getAllAccounts();
+    const allAccounts = await trace.markAsync("查询账户", localAccountService.getAllAccounts());
     const accountsByWallet = new Map<string, Account[]>();
     for (const acc of allAccounts) {
       const list = accountsByWallet.get(acc.walletId) || [];
@@ -53,16 +53,17 @@ export async function syncWalletsWithServer(): Promise<void> {
 
     // 更新本地 server_address_id（如果服务端重置导致 ID 变化）
     trace.mark("更新本地ID");
-    for (const r of results) {
-      for (const a of r.addresses) {
+    const updatePromises = results.flatMap((r) =>
+      r.addresses.map(async (a) => {
         const localAccount = await localAccountService.getAccountByAddress(a.address);
         if (localAccount && localAccount.serverAddressId !== a.serverAddressId) {
           await localAccountService.updateAccount(localAccount.id, {
             server_address_id: a.serverAddressId,
           });
         }
-      }
-    }
+      })
+    );
+    await trace.markAsync("更新本地ID", Promise.all(updatePromises));
   } catch {
     // silent — 同步失败不应阻塞应用启动
   }

@@ -288,13 +288,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const trace = await perfProbe.startTrace("创建钱包");
     let mnemonic: string;
     try {
-      mnemonic = await generateMnemonic();
+      mnemonic = await trace.markAsync("生成助记词", generateMnemonic());
     } catch (err: unknown) {
       saveLogToLocal("crash", `[createWallet] generateMnemonic FAILED: error=${getErrorMessage(err, "未知错误")}`);
       perfProbe.endTrace(trace);
       throw new Error("助记词生成失败，请重试");
     }
-    trace.mark("生成助记词");
     if (!mnemonic || mnemonic.trim().split(/\s+/).length !== 12) {
       saveLogToLocal("crash", `[createWallet] generateMnemonic invalid: wordCount=${mnemonic?.trim().split(/\s+/).length || 0}`);
       perfProbe.endTrace(trace);
@@ -426,21 +425,21 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const trace = await perfProbe.startTrace("添加账户");
     try {
       // 只读钱包无法添加账户
-      const localWallet = await localWalletService.getWalletById(walletId);
+      const localWallet = await trace.markAsync("读取钱包信息", localWalletService.getWalletById(walletId));
       if (localWallet?.source === "SUBSCRIBE") {
         perfProbe.endTrace(trace);
         throw new Error("只读钱包无法添加账户");
       }
 
       // 读取助记词用于地址派生
-      const mnemonic = await SecureStore.getItemAsync(mnemonicKey(walletId));
+      const mnemonic = await trace.markAsync("读取助记词", SecureStore.getItemAsync(mnemonicKey(walletId)));
       if (!mnemonic) {
         perfProbe.endTrace(trace);
         throw new Error("无法获取助记词，请重新导入钱包");
       }
 
       // 获取当前链上的最大账户索引
-      const maxIndex = await localAccountService.getMaxAccountIndex(walletId, network);
+      const maxIndex = await trace.markAsync("查询账户索引", localAccountService.getMaxAccountIndex(walletId, network));
       const accountIndex = maxIndex + 1;
 
       // 检查是否已存在账户
@@ -616,9 +615,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       await trace.markAsync("DELETE /subscribe", syncService.unsubscribeWalletReadonly(walletId));
 
       // 2. 删除本地数据（钱包+账户+地址+通知）
-      trace.mark("本地删除开始");
-      await localWalletService.deleteWallet(walletId);
-      await localNotificationService.deleteWalletNotifications(walletId);
+      await trace.markAsync("本地删除", Promise.all([
+        localWalletService.deleteWallet(walletId),
+        localNotificationService.deleteWalletNotifications(walletId),
+      ]));
 
       // 3. 刷新钱包列表
       await trace.markAsync("刷新钱包列表", get().fetchWallets());
