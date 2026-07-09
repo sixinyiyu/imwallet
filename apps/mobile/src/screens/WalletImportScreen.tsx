@@ -138,6 +138,17 @@ export default function WalletImportScreen() {
   const navigation = useNavigation<Nav>();
   const { importWallet, wallets } = useWalletStore();
 
+  // 监听键盘状态，动态调整底部 padding
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   // Step state: 1 = mnemonic input, 2 = wallet settings
   const [step, setStep] = useState(1);
   const [validatedMnemonic, setValidatedMnemonic] = useState("");
@@ -259,7 +270,7 @@ export default function WalletImportScreen() {
   // ─── Step 1: Mnemonic Input (white background) ───
   if (step === 1) {
     return (
-      <KeyboardAvoidingView style={s1.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={s1.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView contentContainerStyle={s1.scrollContent} keyboardShouldPersistTaps="handled">
           {/* 点击空白区域收起键盘 */}
           <Pressable style={s1.inner} onPress={Keyboard.dismiss}>
@@ -332,7 +343,7 @@ export default function WalletImportScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
       <ScrollView
-        contentContainerStyle={s2.scroll}
+        contentContainerStyle={[s2.scroll, { paddingBottom: keyboardVisible ? 120 : 40 }]}
         keyboardShouldPersistTaps="handled"
       >
         <View style={s2.header}>
@@ -532,7 +543,7 @@ const s1 = StyleSheet.create({
 // ─── Step 2 Styles (white background) ───
 const s2 = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F8" },
-  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 120 },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24 },
   header: { marginBottom: 24 },
   title: {
     fontSize: 22,

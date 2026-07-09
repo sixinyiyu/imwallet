@@ -11,6 +11,7 @@ import {
   Animated,
   Modal,
   Easing,
+  Keyboard,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -141,6 +142,17 @@ export default function WalletCreateScreen() {
   const [loadingStage, setLoadingStage] = useState("创建中");
   const [showPasswords, setShowPasswords] = useState(false);
 
+  // 监听键盘状态，动态调整底部 padding
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   const strength = useMemo(() => getPasswordStrength(password), [password]);
 
   const isFormValid =
@@ -178,8 +190,8 @@ export default function WalletCreateScreen() {
       {/* 遮罩层加载效果 */}
       <CreatingOverlay visible={loading} stage={loadingStage} />
 
-      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: keyboardVisible ? 120 : 40 }]} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>创建钱包</Text>
           <Text style={styles.desc}>为你的多账户钱包命名并设置密码保护。你也可以稍后添加更多钱包。</Text>
 
@@ -276,7 +288,7 @@ export default function WalletCreateScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F8" },
-  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 120 },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24 },
 
   title: { fontSize: 22, fontWeight: "700", color: "#1F2937", marginBottom: 8 },
   desc: { fontSize: 14, color: "#6B7280", lineHeight: 22, marginBottom: 24 },
