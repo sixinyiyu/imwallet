@@ -2,7 +2,7 @@
   "expo": {
     "name": "AquaD",
     "slug": "aquad",
-    "version": "1.2.18",
+    "version": "1.2.19",
     "orientation": "portrait",
     "icon": "./assets/app_logo.png",
     "userInterfaceStyle": "light",
@@ -17,7 +17,7 @@
     },
     "android": {
       "package": "com.aquad.app",
-      "versionCode": 125,
+      "versionCode": 126,
       "adaptiveIcon": {
         "backgroundColor": "#0A1628",
         "foregroundImage": "./assets/android-icon-foreground.png",
