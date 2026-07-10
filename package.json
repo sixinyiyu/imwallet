@@ -1,6 +1,6 @@
 {
   "name": "imwallet",
-  "version": "0.2.0",
+  "version": "1.2.17",
   "private": true,
   "description": "多链去中心化钱包 - 私有链钱包应用",
   "workspaces": [
