@@ -109,10 +109,11 @@ export const perfProbe = {
   /** 结束追踪，组装 PerfReport 并上报 */
   async endTrace(handle: TraceHandle): Promise<void> {
     if (!handle) return;
+    // 先同步 buildReport，确保 cost 在调用点记录，不受后续 await 延迟影响
+    const report = handle.buildReport();
     const enabled = await checkEnabled();
     if (!enabled) return;
 
-    const report = handle.buildReport();
     // fire-and-forget 上报，不阻塞业务
     uploadLog("perf", JSON.stringify(report)).catch(() => {
       // 上报失败静默处理
