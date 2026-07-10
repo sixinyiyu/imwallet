@@ -34,7 +34,7 @@ export interface PerfReport {
 
 // ── TraceHandle ──
 
-class TraceHandle {
+export class TraceHandle {
   private title: string;
   private items: PerfItem[] = [];
   private lastMarkTime: number;

@@ -60,16 +60,16 @@ function withAndroidPbkdf2(config) {
     // Add import if not already present
     if (!contents.includes("import com.aquad.app.Pbkdf2Package")) {
       config.modResults.contents = contents.replace(
-        /import com\.aquad\.app\.SecureScreenPackage/,
-        "import com.aquad.app.Pbkdf2Package\nimport com.aquad.app.SecureScreenPackage"
+        /import android\.app\.Application/,
+        "import com.aquad.app.Pbkdf2Package\nimport android.app.Application"
       );
     }
 
     // Add package to the packages.apply block
     if (!contents.includes("Pbkdf2Package()")) {
       config.modResults.contents = config.modResults.contents.replace(
-        /add\(SecureScreenPackage\(\)\)/,
-        "add(Pbkdf2Package())\n        add(SecureScreenPackage())"
+        /\.apply \{\n(\s*)\/\/ Packages/,
+        ".apply {\n$1add(Pbkdf2Package())\n$1// Packages"
       );
     }
 
