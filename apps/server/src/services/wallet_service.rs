@@ -74,9 +74,9 @@ pub async fn create_wallet_and_subscribe(
 
     log::info!(
         "[钱包] 创建成功 — ID={}, 别名={}, 来源={}, 设备={}, 总耗时 {:.2}ms",
-        &wallet.id,
-        &wallet.alias,
-        &wallet.source,
+        wallet.id,
+        wallet.alias,
+        wallet.source,
         device_id,
         t0.elapsed().as_millis() as f64
     );
@@ -528,7 +528,7 @@ pub async fn batch_sync_wallets(
             if !v.is_valid {
                 log::warn!(
                     "[批量同步] 地址验证失败 — 链={}, 地址前8={}, 错误={}",
-                    &a.chain,
+                    a.chain,
                     &a.address[..8.min(a.address.len())],
                     v.error.unwrap_or_default()
                 );

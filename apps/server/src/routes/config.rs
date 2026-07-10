@@ -182,8 +182,9 @@ async fn update_config(
     if PROTECTED_KEYS.contains(&body.key.as_str()) {
         log::warn!(
             "[配置更新] 命中黑名单 — key='{}'，跳过更新，直接返回",
-            &body.key
+            body.key
         );
+
         return Ok(Json(UpdateConfigResponse {
             key: body.key,
             value: body.value,

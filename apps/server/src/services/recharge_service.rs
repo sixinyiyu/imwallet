@@ -119,11 +119,11 @@ pub async fn execute_recharge(
 
     log::info!(
         "[充值] 完成 — 充值ID={}, 钱包{}(ID{}), 代币{}({}), 充值金额 {}, 设备{}, 总耗时 {:.2}ms",
-        &rid,
-        &input.wallet_alias,
-        &input.wallet_id,
-        &input.token_symbol,
-        &input.network,
+        rid,
+        input.wallet_alias,
+        input.wallet_id,
+        input.token_symbol,
+        input.network,
         input.amount,
         short_addr(device_id),
         t0.elapsed().as_millis() as f64

@@ -21,11 +21,7 @@ pub async fn register_device(
     )
     .await?;
     if let Some(d) = inserted {
-        log::info!(
-            "[设备] 注册成功 — ID={}, 平台={}, 新设备",
-            &d.id,
-            &d.platform
-        );
+        log::info!("[设备] 注册成功 — ID={}, 平台={}, 新设备", d.id, d.platform);
         return Ok((d, true));
     }
     // ON CONFLICT 触发，设备已存在

@@ -182,17 +182,17 @@ pub async fn execute_transfer(
 
     log::info!(
         "[转账] 完成 — 交易ID={}, 发送方(地址{}) -- {}({}) --> 接收方(地址{}), 转账金额 {} {}, 手续费 {}, 实到 {}, 手续费模式{}, 转账结果：已确认, 交易哈希{}, 总耗时 {:.2}ms",
-        &tx_id,
+        tx_id,
         short_addr(&from.from_address),
-        &input.token_symbol,
-        &input.network,
+        input.token_symbol,
+        input.network,
         short_addr(&input.to_address),
         input.amount,
-        &input.token_symbol,
+        input.token_symbol,
         fee,
         received,
-        &cfg.fee_mode,
-        &tx_hash,
+        cfg.fee_mode.clone(),
+        tx_hash,
         t0.elapsed().as_millis() as f64
     );
 
@@ -218,7 +218,7 @@ pub async fn execute_transfer(
         )
         .await
         {
-            log::warn!("[转账] 通知插入失败 — 交易ID={}, 错误={}", &tx_id, e);
+            log::warn!("[转账] 通知插入失败 — 交易ID={}, 错误={}", tx_id, e);
         }
     });
 
