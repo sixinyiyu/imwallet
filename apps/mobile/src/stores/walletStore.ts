@@ -79,6 +79,7 @@ interface WalletState {
   backupWallet: (walletId: string) => Promise<void>;
   isWalletBackedUp: (walletId: string) => boolean;
   addAccount: (walletId: string, network: string, name?: string, allowMultiAccount?: boolean, onStage?: (stage: string) => void) => Promise<void>;
+  addAccounts: (walletId: string, networks: string[], allowMultiAccount?: boolean, onStage?: (stage: string) => void) => Promise<void>;
   deleteAccount: (accountId: string) => Promise<void>;
   fetchBalance: (walletId: string) => Promise<void>;
   verifyPassword: (walletId: string, password: string) => Promise<boolean>;
@@ -566,9 +567,120 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     perfProbe.endTrace(trace);
   },
 
+  /** Add accounts (batch) — derive addresses locally, batch sync to server, batch write to SQLite */
+  addAccounts: async (walletId: string, networks: string[], allowMultiAccount?: boolean, onStage?: (stage: string) => void) => {
+    const trace = await perfProbe.startTrace("批量添加账户");
+    try {
+      onStage?.("正在添加账户...");
+      // 只读钱包无法添加账户
+      const localWallet = await trace.markAsync("读取钱包信息", localWalletService.getWalletById(walletId));
+      if (localWallet?.source === "SUBSCRIBE") {
+        perfProbe.endTrace(trace);
+        throw new Error("只读钱包无法添加账户");
+      }
+
+      onStage?.("正在同步到钱包...");
+      // 读取助记词（一次读取，所有链共用）
+      const mnemonic = await trace.markAsync("读取助记词", SecureStore.getItemAsync(mnemonicKey(walletId)));
+      if (!mnemonic) {
+        perfProbe.endTrace(trace);
+        throw new Error("无法获取助记词，请重新导入钱包");
+      }
+
+      onStage?.("正在打包数据...");
+      // 为每条链派生地址（本地计算，一次 mnemonicToSeedSync）
+      const { generateUUID } = await import("../db/database");
+      const derivedAccounts: { chain: string; address: string; derivationPath: string; accountId: string; accountName: string; accountIndex: number }[] = [];
+      for (const network of networks) {
+        const maxIndex = await localAccountService.getMaxAccountIndex(walletId, network);
+        const accountIndex = maxIndex + 1;
+        if (!allowMultiAccount && maxIndex >= 0) continue; // 跳过全部已有的链
+        const address = deriveAddressFromMnemonic(mnemonic, network, accountIndex);
+        const derivationPath = getDerivationPath(network, accountIndex);
+        const accountId = generateUUID();
+        const accountName = `${network} Account`;
+        derivedAccounts.push({ chain: network, address, derivationPath, accountId, accountName, accountIndex });
+      }
+
+      if (derivedAccounts.length === 0) {
+        perfProbe.endTrace(trace);
+        return; // 所有链都已存在，无需添加
+      }
+
+      onStage?.("正在同步远端...");
+      // 一次 HTTP 请求完成所有链的服务端同步（替代逐链 POST /wallets/{id}/addresses）
+      const walletAlias = localWallet!.name;
+      const walletSource = localWallet!.source === "IMPORT" ? "IMPORT" : "CREATE";
+      const syncInput = {
+        walletId,
+        source: walletSource,
+        alias: walletAlias,
+        addresses: derivedAccounts.map((d) => ({ chain: d.chain, address: d.address })),
+      };
+      const syncResults = await trace.markAsync("POST /wallets/sync", walletService.batchSyncWallets([syncInput]));
+
+      onStage?.("正在写入数据...");
+      // 批量写入本地 SQLite + 更新内存
+      const writePromises = derivedAccounts.map((d) => {
+        // 从 syncResults 中找到对应链的 serverAddressId
+        const syncAddr = syncResults[0]?.addresses.find((a) => a.chain === d.chain && a.address === d.address);
+        const serverAddressId = syncAddr?.serverAddressId || "";
+        return Promise.all([
+          localAccountService.createAccount({
+            id: d.accountId,
+            wallet_id: walletId,
+            chain: d.chain,
+            derivation_path: d.derivationPath,
+            address: d.address,
+            extended_pubkey: "",
+            account_index: d.accountIndex,
+            name: d.accountName,
+            server_address_id: serverAddressId,
+          }),
+          localAddressService.upsertAddress({
+            chain: d.chain,
+            address: d.address,
+            walletId,
+            name: d.accountName,
+            type: "internalWallet",
+            status: "verified",
+          }),
+        ]);
+      });
+      await Promise.all(writePromises);
+
+      // 更新内存：批量追加 accounts
+      const newAccounts: Account[] = derivedAccounts.map((d) => {
+        const syncAddr = syncResults[0]?.addresses.find((a) => a.chain === d.chain && a.address === d.address);
+        return {
+          id: d.accountId,
+          walletId,
+          chain: d.chain,
+          derivationPath: d.derivationPath,
+          address: d.address,
+          extendedPubkey: "",
+          accountIndex: d.accountIndex,
+          name: d.accountName,
+          serverAddressId: syncAddr?.serverAddressId || "",
+          createdAt: new Date().toISOString(),
+        };
+      });
+      const currentAccounts = get().accounts;
+      const isActiveWallet = get().activeWallet?.id === walletId;
+      if (isActiveWallet) {
+        set({ accounts: [...currentAccounts, ...newAccounts], accountCount: currentAccounts.length + newAccounts.length });
+      }
+    } catch (err: unknown) {
+      perfProbe.endTrace(trace);
+      throw err;
+    }
+    perfProbe.endTrace(trace);
+  },
+
   /** Delete account — delete local + server */
   deleteAccount: async (accountId: string) => {
     try {
+
       const account = await localAccountService.getAccountById(accountId);
       if (!account) return;
 

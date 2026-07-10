@@ -43,7 +43,7 @@ export default function WalletAddAccountScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const walletId = route.params?.walletId;
-  const { addAccount, activeWallet } = useWalletStore();
+  const { addAccounts, activeWallet } = useWalletStore();
   // 兜底：作为初始路由时无 params，从 store 获取当前钱包 ID
   const effectiveWalletId = walletId || activeWallet?.id;
 
@@ -138,14 +138,10 @@ export default function WalletAddAccountScreen() {
     setCreating(true);
     setCreatingStage("正在添加账户...");
     try {
-      // 逐个添加选中的链账户，单个失败不阻塞后续
-      for (const chainName of selectedChains) {
-        if (!multiAccountEnabled && existingChains.has(chainName)) continue; // 跳过全部已有的链
-        try {
-          await addAccount(effectiveWalletId, chainName, `${chainName} Account`, multiAccountEnabled, (stage) => setCreatingStage(stage));
-        } catch {
-          // 单个账户添加失败不阻塞流程
-        }
+      // 批量添加选中的链账户，一次 HTTP 请求完成所有链的服务端同步
+      const chains = [...selectedChains].filter((c) => multiAccountEnabled || !existingChains.has(c));
+      if (chains.length > 0) {
+        await addAccounts(effectiveWalletId, chains, multiAccountEnabled, (stage) => setCreatingStage(stage));
       }
     } catch {
       // 整体异常也不阻塞

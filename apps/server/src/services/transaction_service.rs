@@ -57,30 +57,31 @@ pub async fn execute_transfer(
 
     // ── 事务外：查询阶段（缩小事务持有时间） ──
 
-    // 合并查询 from_addr + asset + balance（单次 DB 往返）
+    // 从内存缓存获取 asset_id（启动时已预热，无需 DB 往返），去掉 JOIN assets
+    let asset_map = crate::services::asset_service::get_cached_assets_map();
+    let asset = asset_map
+        .values()
+        .find(|a| a.symbol == input.token_symbol && a.chain == input.network)
+        .cloned()
+        .ok_or_else(|| AppError::NotFound("代币类型不存在".into()))?;
+
+    // 合并查询 from_addr + balance（去掉 JOIN assets，改用内存缓存的 asset_id）
     let t1 = std::time::Instant::now();
     #[derive(serde::Deserialize)]
     struct FromInfo {
         address_id: String,
         from_address: String,
-        asset_id: String,
         balance: Decimal,
     }
     let from_info: Vec<FromInfo> = crate::db::query::query(
         &rb,
-        "SELECT wa.id as address_id, wa.address as from_address, a.id as asset_id, aa.balance
+        "SELECT wa.id as address_id, wa.address as from_address, aa.balance
          FROM wallet_subscriptions ws
          JOIN wallets_addresses wa ON wa.id = ws.address_id
-         JOIN assets a ON a.symbol = $2 AND a.chain = $3
-         JOIN assets_addresses aa ON aa.address_id = wa.id AND aa.asset_id = a.id
-         WHERE ws.wallet_id = $1 AND ws.device_id = $4 AND wa.chain = $3 AND ws.address_id != ''
+         JOIN assets_addresses aa ON aa.address_id = wa.id AND aa.asset_id = $2
+         WHERE ws.wallet_id = $1 AND ws.device_id = $3 AND wa.chain = $4 AND ws.address_id != ''
          LIMIT 1",
-        vals![
-            &input.from_wallet_id,
-            &input.token_symbol,
-            &input.network,
-            device_id
-        ],
+        vals![&input.from_wallet_id, &asset.id, device_id, &input.network],
     )
     .await?;
     log::debug!(
@@ -138,8 +139,7 @@ pub async fn execute_transfer(
     let deducted: Option<DeductResult> = crate::db::query::tx_query_one(
         &tx,
         "UPDATE assets_addresses SET balance = balance - $1, updated_at = NOW() WHERE address_id = $2 AND asset_id = $3 AND balance >= $1 RETURNING id",
-        vals![rbdc::Decimal::new(&total_debit.to_string()).unwrap(), &from.address_id, &from.asset_id],
-    )
+         vals![rbdc::Decimal::new(&total_debit.to_string()).unwrap(), &from.address_id, &asset.id],    )
     .await?;
     if deducted.is_none() {
         return Err(AppError::BadRequest("余额不足（并发冲突）".into()));
@@ -152,8 +152,7 @@ pub async fn execute_transfer(
             "INSERT INTO assets_addresses (id, address_id, asset_id, chain, balance, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
              ON CONFLICT (address_id, asset_id) DO UPDATE SET balance = assets_addresses.balance + $5, updated_at = NOW()",
-            vals![uuid::Uuid::new_v4().to_string(), &to.id, &from.asset_id, &input.network, rbdc::Decimal::new(&received.to_string()).unwrap()],
-        )
+             vals![uuid::Uuid::new_v4().to_string(), &to.id, &asset.id, &input.network, rbdc::Decimal::new(&received.to_string()).unwrap()],        )
         .await?;
     }
 
