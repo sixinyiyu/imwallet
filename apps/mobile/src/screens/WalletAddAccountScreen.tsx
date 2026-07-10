@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Dimensions,
   Modal,
   TouchableWithoutFeedback,
+  Animated,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -18,6 +19,7 @@ import { accountService } from "../services/accountService";
 import { localAccountService } from "../services/localAccountService";
 import { LinearGradient } from "expo-linear-gradient";
 import { TOKEN_ICONS, TronIcon, EthIcon, BtcIcon } from "../components/icons";
+import { LoadingOverlay } from "../components/LoadingOverlay";
 import type { ChainInfo } from "../types";
 import { useAlert } from "../hooks/useAlert";
 import { configService } from "../services/configService";
@@ -41,13 +43,24 @@ export default function WalletAddAccountScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const walletId = route.params?.walletId;
-  const { addAccount, activeWallet } = useWalletStore();
+  const { addAccounts, activeWallet } = useWalletStore();
   // 兜底：作为初始路由时无 params，从 store 获取当前钱包 ID
   const effectiveWalletId = walletId || activeWallet?.id;
+
+  // 淡入动画
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedChains, setSelectedChains] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
+  const [creatingStage, setCreatingStage] = useState("添加中");
   const [chains, setChains] = useState<ChainInfo[]>([]);
   const [chainsLoaded, setChainsLoaded] = useState(false);
   /** 已有账户的链集合（该链下所有代币账户都已存在） */
@@ -123,15 +136,12 @@ export default function WalletAddAccountScreen() {
       return;
     }
     setCreating(true);
+    setCreatingStage("正在添加账户...");
     try {
-      // 逐个添加选中的链账户，单个失败不阻塞后续
-      for (const chainName of selectedChains) {
-        if (!multiAccountEnabled && existingChains.has(chainName)) continue; // 跳过全部已有的链
-        try {
-          await addAccount(effectiveWalletId, chainName, `${chainName} Account`, multiAccountEnabled);
-        } catch {
-          // 单个账户添加失败不阻塞流程
-        }
+      // 批量添加选中的链账户，一次 HTTP 请求完成所有链的服务端同步
+      const chains = [...selectedChains].filter((c) => multiAccountEnabled || !existingChains.has(c));
+      if (chains.length > 0) {
+        await addAccounts(effectiveWalletId, chains, multiAccountEnabled, (stage) => setCreatingStage(stage));
       }
     } catch {
       // 整体异常也不阻塞
@@ -153,7 +163,10 @@ export default function WalletAddAccountScreen() {
     : [...selectedChains].some((c) => !existingChains.has(c));
 
   return (
-    <View style={styles.container}>
+    <>
+      {/* 添加账户加载遮罩 */}
+      <LoadingOverlay visible={creating} stage={creatingStage} />
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       {/* 上方图片区域 - 占屏幕 3/5 */}
       <View style={styles.imageArea}>
         <Image
@@ -290,7 +303,8 @@ export default function WalletAddAccountScreen() {
           </TouchableOpacity>
         </View>
       </Modal>
-    </View>
+    </Animated.View>
+    </>
   );
 }
 

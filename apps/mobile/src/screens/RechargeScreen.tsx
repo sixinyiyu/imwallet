@@ -25,6 +25,7 @@ import EmptyState from "../components/EmptyState";
 import { formatTime as formatDate } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";
 import { getErrorMessage, trimAmount } from "../utils/format";
+import { perfProbe } from "../utils/perfProbe";
 
 // ── 筛选类型定义 ──
 type TimeFilter = "today" | "7d" | "30d" | "90d";
@@ -291,10 +292,12 @@ export default function RechargeScreen() {
     const numVal = parseFloat(trimmed);
     if (isNaN(numVal) || numVal <= 0) { showToast("充值金额必须大于 0"); return; }
     setSubmitting(true);
+    const trace = await perfProbe.startTrace("充值");
     try {
       const accountAddress = getAssetAddress(selectedToken);
-      if (!accountAddress) { showToast("该钱包在此网络下无地址"); setSubmitting(false); return; }
-      await rechargeService.recharge({
+      if (!accountAddress) { showToast("该钱包在此网络下无地址"); setSubmitting(false); perfProbe.endTrace(trace); return; }
+      trace.mark("获取地址");
+      await trace.markAsync("POST 充值", rechargeService.recharge({
         walletId: selectedWallet.id,
         walletAlias: selectedWallet.name,
         tokenSymbol: selectedToken.symbol,
@@ -302,14 +305,15 @@ export default function RechargeScreen() {
         accountAddress,
         amount: trimmed,
         memo: memo.trim() || undefined,
-      });
+      }));
       showToast("充值成功");
       setAmount("");
       setMemo("");
-      await loadRecords(1);
+      await trace.markAsync("刷新记录", loadRecords(1));
     } catch (err: unknown) {
       showToast(getErrorMessage(err, "充值失败，请重试"));
     }
+    perfProbe.endTrace(trace);
     setSubmitting(false);
   };
 

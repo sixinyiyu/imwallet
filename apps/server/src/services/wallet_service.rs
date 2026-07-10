@@ -5,6 +5,7 @@ use crate::chain::address_validator;
 use crate::db::query::{exec, query, query_one, vals};
 use crate::errors::AppError;
 use crate::models::{Wallet, WalletAddress};
+use crate::utils::short_addr;
 use rbatis::RBatis;
 use rust_decimal::Decimal;
 use serde::Serialize;
@@ -18,14 +19,20 @@ pub async fn create_wallet_and_subscribe(
     alias: &str,
     device_id: &str,
 ) -> Result<Wallet, AppError> {
+    let t0 = std::time::Instant::now();
     let src = if source == "IMPORT" {
         "IMPORT"
     } else {
         "CREATE"
     };
     let tx = rb.acquire_begin().await?;
+    log::debug!(
+        "[耗时] create_wallet acquire_tx {:.2}ms",
+        t0.elapsed().as_millis() as f64
+    );
 
     // 1. 创建钱包
+    let t1 = std::time::Instant::now();
     let inserted: Option<Wallet> = crate::db::query::tx_query_one(
         &tx,
         "INSERT INTO wallets (id, alias, source) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING RETURNING *",
@@ -40,22 +47,38 @@ pub async fn create_wallet_and_subscribe(
             .await?
             .ok_or_else(|| AppError::Conflict("钱包已存在".into()))?
     };
+    log::debug!(
+        "[耗时] create_wallet INSERT wallets {:.2}ms",
+        t1.elapsed().as_millis() as f64
+    );
 
     // 2. 创建设备订阅
+    let t2 = std::time::Instant::now();
     crate::db::query::tx_exec(
         &tx,
         "INSERT INTO wallet_subscriptions (wallet_id, device_id, chain, address_id) VALUES ($1, $2, '', '') ON CONFLICT (wallet_id, device_id, chain, address_id) DO NOTHING",
         vals![&wallet.id, device_id, "", ""],
     )
     .await?;
+    log::debug!(
+        "[耗时] create_wallet INSERT subscription {:.2}ms",
+        t2.elapsed().as_millis() as f64
+    );
 
+    let t3 = std::time::Instant::now();
     tx.commit().await?;
+    log::debug!(
+        "[耗时] create_wallet commit {:.2}ms",
+        t3.elapsed().as_millis() as f64
+    );
+
     log::info!(
-        "[钱包] 创建成功 — ID={}, 别名={}, 来源={}, 设备={}",
-        &wallet.id,
-        &wallet.alias,
-        &wallet.source,
-        device_id
+        "[钱包] 创建成功 — ID={}, 别名={}, 来源={}, 设备={}, 总耗时 {:.2}ms",
+        wallet.id,
+        wallet.alias,
+        wallet.source,
+        device_id,
+        t0.elapsed().as_millis() as f64
     );
     Ok(wallet)
 }
@@ -91,13 +114,19 @@ pub async fn delete_wallet_subscription(
     wallet_id: &str,
     device_id: &str,
 ) -> Result<(), AppError> {
+    let t0 = std::time::Instant::now();
     crate::db::query::exec(
         &rb,
         "DELETE FROM wallet_subscriptions WHERE wallet_id = $1 AND device_id = $2",
         vals![wallet_id, device_id],
     )
     .await?;
-    log::info!("[钱包] 删除订阅 — 钱包={}, 设备={}", wallet_id, device_id);
+    log::info!(
+        "[钱包] 删除订阅 — 钱包={}, 设备={}, 耗时 {:.2}ms",
+        wallet_id,
+        device_id,
+        t0.elapsed().as_millis() as f64
+    );
     Ok(())
 }
 
@@ -109,6 +138,7 @@ pub async fn subscribe_chain(
     chain: &str,
     address: &str,
 ) -> Result<WalletAddress, AppError> {
+    let t0 = std::time::Instant::now();
     let v = address_validator::validate_address_for_chain(address, chain);
     if !v.is_valid {
         return Err(AppError::BadRequest(
@@ -125,7 +155,12 @@ pub async fn subscribe_chain(
 
     let wa = if let Some(w) = inserted {
         // 新地址：初始化该链的默认代币余额（balance=0）
+        let t1 = std::time::Instant::now();
         ensure_asset_balances(&rb, &w.id, chain).await?;
+        log::debug!(
+            "[耗时] subscribe_chain ensure_asset_balances {:.2}ms",
+            t1.elapsed().as_millis() as f64
+        );
         w
     } else {
         // ON CONFLICT 触发，地址已存在，检查是否缺少 assets_addresses 记录
@@ -136,10 +171,21 @@ pub async fn subscribe_chain(
         )
         .await?
         .ok_or_else(|| AppError::Internal("地址同步失败".into()))?;
+        let t1 = std::time::Instant::now();
         ensure_asset_balances(&rb, &existing.id, chain).await?;
+        log::debug!(
+            "[耗时] subscribe_chain ensure_asset_balances {:.2}ms",
+            t1.elapsed().as_millis() as f64
+        );
         existing
     };
 
+    log::info!(
+        "[订阅链] 成功 — 链={}, 地址={}, 耗时 {:.2}ms",
+        chain,
+        short_addr(address),
+        t0.elapsed().as_millis() as f64
+    );
     Ok(wa)
 }
 
@@ -245,6 +291,7 @@ pub async fn get_wallet_balance(
     wallet_id: &str,
     cny_rate: Decimal,
 ) -> Result<WalletBalance, AppError> {
+    let t0 = std::time::Instant::now();
     #[derive(serde::Deserialize)]
     struct R {
         asset_id: String,
@@ -256,19 +303,23 @@ pub async fn get_wallet_balance(
     // 不再 JOIN assets 表，资产元数据从内存缓存合并（启动时已预热）
     let rows: Vec<R> = query(
         &rb,
-        "WITH wallet_addr_ids AS ( \
-            SELECT DISTINCT wa.id \
-            FROM wallets_addresses wa \
-            JOIN wallet_subscriptions ws ON wa.id = ws.address_id \
-            WHERE ws.wallet_id = $1 AND ws.address_id != '' \
-        ) \
-        SELECT aa.asset_id, aa.chain, SUM(aa.balance) as total_balance \
-        FROM assets_addresses aa \
-        JOIN wallet_addr_ids wai ON aa.address_id = wai.id \
+        "WITH wallet_addr_ids AS (
+            SELECT DISTINCT wa.id
+            FROM wallets_addresses wa
+            JOIN wallet_subscriptions ws ON wa.id = ws.address_id
+            WHERE ws.wallet_id = $1 AND ws.address_id != ''
+        )
+        SELECT aa.asset_id, aa.chain, SUM(aa.balance) as total_balance
+        FROM assets_addresses aa
+        JOIN wallet_addr_ids wai ON aa.address_id = wai.id
         GROUP BY aa.asset_id, aa.chain",
         vals![wallet_id],
     )
     .await?;
+    log::debug!(
+        "[耗时] get_wallet_balance DB查询 {:.2}ms",
+        t0.elapsed().as_millis() as f64
+    );
 
     // 从内存缓存获取资产元数据（启动时已预热，无需 DB 往返）
     let asset_map = crate::services::asset_service::get_cached_assets_map();
@@ -290,6 +341,11 @@ pub async fn get_wallet_balance(
             })
         })
         .collect();
+    log::info!(
+        "[耗时] get_wallet_balance 总耗时 {:.2}ms, 钱包={}",
+        t0.elapsed().as_millis() as f64,
+        wallet_id
+    );
     Ok(WalletBalance {
         total_balance_usd: assets.iter().map(|a| a.usd_value).sum(),
         total_balance_cny: assets.iter().map(|a| a.cny_value).sum(),
@@ -309,13 +365,23 @@ pub async fn subscribe_wallet_readonly(
     wallet_id: &str,
     device_id: &str,
 ) -> Result<(Wallet, Vec<WalletAddress>), AppError> {
+    let t0 = std::time::Instant::now();
     // 1. 查询钱包是否存在
     let wallet = get_wallet(rb.clone(), wallet_id)
         .await?
         .ok_or_else(|| AppError::NotFound("钱包不存在".into()))?;
+    log::debug!(
+        "[耗时] subscribe_readonly 查询钱包 {:.2}ms",
+        t0.elapsed().as_millis() as f64
+    );
 
     // 2. 获取该钱包的所有链上地址（跳过 COUNT 检查，INSERT ON CONFLICT 保证幂等）
+    let t1 = std::time::Instant::now();
     let addresses = get_wallet_addresses(rb.clone(), wallet_id).await?;
+    log::debug!(
+        "[耗时] subscribe_readonly 查询地址 {:.2}ms",
+        t1.elapsed().as_millis() as f64
+    );
 
     // 3. 批量插入订阅记录（单条 SQL，ON CONFLICT 保证幂等）
     if addresses.is_empty() {
@@ -349,10 +415,11 @@ pub async fn subscribe_wallet_readonly(
     }
 
     log::info!(
-        "[订阅] 成功 — 钱包={}, 设备={}, 地址数={}",
+        "[订阅] 成功 — 钱包={}, 设备={}, 地址数={}, 总耗时 {:.2}ms",
         wallet_id,
         device_id,
-        addresses.len()
+        addresses.len(),
+        t0.elapsed().as_millis() as f64
     );
     Ok((wallet, addresses))
 }
@@ -364,6 +431,7 @@ pub async fn unsubscribe_wallet_readonly(
     wallet_id: &str,
     device_id: &str,
 ) -> Result<(), AppError> {
+    let t0 = std::time::Instant::now();
     crate::db::query::exec(
         &rb,
         "DELETE FROM wallet_subscriptions WHERE wallet_id = $1 AND device_id = $2",
@@ -371,7 +439,12 @@ pub async fn unsubscribe_wallet_readonly(
     )
     .await?;
 
-    log::info!("[只读订阅] 取消 — 钱包={}, 设备={}", wallet_id, device_id);
+    log::info!(
+        "[只读订阅] 取消 — 钱包={}, 设备={}, 耗时 {:.2}ms",
+        wallet_id,
+        device_id,
+        t0.elapsed().as_millis() as f64
+    );
     Ok(())
 }
 
@@ -455,7 +528,7 @@ pub async fn batch_sync_wallets(
             if !v.is_valid {
                 log::warn!(
                     "[批量同步] 地址验证失败 — 链={}, 地址前8={}, 错误={}",
-                    &a.chain,
+                    a.chain,
                     &a.address[..8.min(a.address.len())],
                     v.error.unwrap_or_default()
                 );
@@ -629,9 +702,9 @@ pub async fn cleanup_orphan_wallets(rb: Arc<RBatis>) -> Result<u64, AppError> {
     }
     let orphans: Vec<OrphanWallet> = query(
         &rb,
-        "SELECT w.id, w.alias FROM wallets w \
-        WHERE NOT EXISTS (SELECT 1 FROM wallet_subscriptions ws WHERE ws.wallet_id = w.id AND ws.address_id != '') \
-        AND w.updated_at < NOW() - ($1 || ' days')::interval \
+        "SELECT w.id, w.alias FROM wallets w
+        WHERE NOT EXISTS (SELECT 1 FROM wallet_subscriptions ws WHERE ws.wallet_id = w.id AND ws.address_id != '')
+        AND w.updated_at < NOW() - ($1 || ' days')::interval
         ORDER BY w.updated_at ASC",
         vals![days.to_string()],
     )

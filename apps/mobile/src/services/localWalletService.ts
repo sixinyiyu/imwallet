@@ -7,7 +7,9 @@ import {
   PBKDF2_ITERATIONS,
   PBKDF2_SALT_PASSWORD,
   PBKDF2_SALT_MNEMONIC,
+  pbkdf2Impl,
 } from "../utils/crypto";
+import type { TraceHandle } from "../utils/perfProbe";
 
 // ── 哈希版本 ──
 // v1: SHA-256（旧版，兼容已创建钱包的密码和助记词哈希）
@@ -131,18 +133,25 @@ export const localWalletService = {
     await db.update("wallets", updateData, { id });
   },
 
-  async deleteWallet(id: string): Promise<void> {
+  async deleteWallet(id: string, trace?: TraceHandle): Promise<void> {
     const db = await getDatabase();
-    await db.remove("accounts", { wallet_id: id });
-    await db.remove("addresses", { wallet_id: id });
-    await db.remove("wallets", { id });
+    if (trace) {
+      await trace.markAsync("SQLite删除accounts", db.remove("accounts", { wallet_id: id }));
+      await trace.markAsync("SQLite删除addresses", db.remove("addresses", { wallet_id: id }));
+      await trace.markAsync("SQLite删除wallets", db.remove("wallets", { id }));
+    } else {
+      await db.remove("accounts", { wallet_id: id });
+      await db.remove("addresses", { wallet_id: id });
+      await db.remove("wallets", { id });
+    }
   },
 
   /**
    * 验证密码 — 支持 v1/v2 双版本哈希，v1 匹配时自动升级为 v2
    */
-  async verifyPassword(id: string, password: string): Promise<boolean> {
+  async verifyPassword(id: string, password: string, trace?: TraceHandle): Promise<boolean> {
     const db = await getDatabase();
+    trace?.mark("SQLite查询钱包");
     const row = await db.selectOne<LocalWallet>("wallets", {
       where: { id },
     });
@@ -152,14 +161,15 @@ export const localWalletService = {
     if (!wallet.password_hash) return false;
 
     // 先尝试 PBKDF2 v2 哈希
-    const v2Hash = await hashPassword(password);
+    const v2Hash = trace ? await trace.markAsync("PBKDF2 v2 hash", hashPassword(password), pbkdf2Impl()) : await hashPassword(password);
     if (v2Hash === wallet.password_hash) return true;
 
     // 兼容旧版 SHA-256 v1 哈希
-    const v1Hash = await hashLegacy(password);
+    const v1Hash = trace ? await trace.markAsync("SHA-256 v1 hash", Promise.resolve(hashLegacy(password))) : await hashLegacy(password);
     if (v1Hash === wallet.password_hash) {
       // 自动升级：旧哈希验证成功后，更新为 PBKDF2 v2 哈希
-      await this.updatePassword(id, v2Hash);
+      if (trace) { await trace.markAsync("升级密码哈希", this.updatePassword(id, v2Hash)); }
+      else { await this.updatePassword(id, v2Hash); }
       return true;
     }
 

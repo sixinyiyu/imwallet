@@ -25,6 +25,8 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { ripemd160 } from "@noble/hashes/legacy.js";
 import { base58 } from "@scure/base";
+import { pbkdf2Hex } from "../utils/crypto";
+import { Platform } from "react-native";
 
 // ─── BIP44 Derivation Path Constants ───
 
@@ -33,6 +35,36 @@ const BIP44_PATHS: Record<string, string> = {
   Tron: "m/44'/195'/0'/0",
   Bitcoin: "m/44'/0'/0'/0",
 };
+
+// ─── BIP39 Seed Derivation (Native PBKDF2-SHA512) ───
+
+/**
+ * BIP39: mnemonic → seed (64 bytes)
+ *
+ * Uses native PBKDF2-SHA512 (2048 iterations) when available,
+ * falls back to @scure/bip39 JS implementation on web.
+ *
+ * IMPORTANT: This is async on native! Callers must use `await`.
+ */
+async function mnemonicToSeed(mnemonic: string, passphrase = ""): Promise<Uint8Array> {
+  // BIP39 spec: password = NFKD(mnemonic), salt = NFKD("mnemonic" + passphrase)
+  const password = mnemonic.normalize("NFKD");
+  const salt = `mnemonic${passphrase}`.normalize("NFKD");
+
+  if (Platform.OS === "web") {
+    // Web: use @scure/bip39 (crypto.subtle based)
+    return mnemonicToSeedSync(mnemonic, passphrase);
+  }
+
+  // Native: use Pbkdf2Module (javax.crypto / CommonCrypto)
+  const hexSeed = await pbkdf2Hex(password, salt, 2048, 64, "sha512");
+  // hex string → Uint8Array
+  const seed = new Uint8Array(64);
+  for (let i = 0; i < 64; i++) {
+    seed[i] = parseInt(hexSeed.substring(i * 2, i * 2 + 2), 16);
+  }
+  return seed;
+}
 
 // ─── Helpers ───
 
@@ -124,12 +156,12 @@ function deriveBitcoinAddress(seed: Uint8Array, index: number): string {
  * @param index - Account index (default 0)
  * @returns Deterministic address for the specified network
  */
-export function deriveAddressFromMnemonic(
+export async function deriveAddressFromMnemonic(
   mnemonic: string,
   network: string,
   index: number = 0
-): string {
-  const seed = mnemonicToSeedSync(mnemonic);
+): Promise<string> {
+  const seed = await mnemonicToSeed(mnemonic);
 
   switch (network) {
     case "Ethereum":

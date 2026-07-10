@@ -307,9 +307,14 @@ pub async fn device_auth(
     let uri = parts.uri.clone();
 
     // 缓冲 body
+    let t_body = std::time::Instant::now();
     let body_bytes = axum::body::to_bytes(body, 64 * 1024)
         .await
         .map_err(|e| AppError::BadRequest(format!("Cannot read body: {}", e)))?;
+    log::debug!(
+        "[耗时] auth read_body {:.2}ms",
+        t_body.elapsed().as_millis() as f64
+    );
 
     // 提取 headers
     let device_id = headers
@@ -340,9 +345,14 @@ pub async fn device_auth(
     }
 
     // 防重放：对所有请求检查（GET 请求虽幂等，但 /config/all 等返回敏感数据，需防重放）
+    let t_replay = std::time::Instant::now();
     if !state.replay_cache.check_and_insert(sig_hex).await {
         return Err(AppError::Unauthorized("duplicate request".into()));
     }
+    log::debug!(
+        "[耗时] auth replay_check {:.2}ms",
+        t_replay.elapsed().as_millis() as f64
+    );
 
     // 构造签名消息：timestamp + method + path + nonce + bodyHash
     let path = uri.path();
@@ -374,6 +384,7 @@ pub async fn device_auth(
     );
 
     // Ed25519 签名验证
+    let t_verify = std::time::Instant::now();
     let pkb = hex::decode(device_id)
         .map_err(|_| AppError::Unauthorized("invalid device id format".into()))?;
     let key: &[u8; 32] = pkb[..32]
@@ -387,8 +398,13 @@ pub async fn device_auth(
         .map_err(|_| AppError::Unauthorized("invalid signature format".into()))?;
     vk.verify(message.as_bytes(), &signature)
         .map_err(|_| AppError::Unauthorized("signature verification failed".into()))?;
+    log::debug!(
+        "[耗时] auth ed25519_verify {:.2}ms",
+        t_verify.elapsed().as_millis() as f64
+    );
 
     // 设备查询/自动注册 — 先查缓存，命中则跳过 DB；未命中则查 DB + 写缓存
+    let t_device = std::time::Instant::now();
     let platform_from_header = headers
         .get("x-platform")
         .and_then(|v| v.to_str().ok())
@@ -434,6 +450,10 @@ pub async fn device_auth(
     // 仅在距上次更新超过 5 分钟时才写入 last_active_at，避免每个请求都写 DB
     // fire-and-forget：此操作不影响任何业务逻辑，写入失败也无害，不应阻塞请求
     // 写入成功后更新缓存中的 last_db_update_ts，避免重复触发
+    log::debug!(
+        "[耗时] auth device_query {:.2}ms",
+        t_device.elapsed().as_millis() as f64
+    );
     if should_update {
         let db = state.db.clone();
         let did = device_id.to_string();

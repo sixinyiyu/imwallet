@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { useWalletStore } from "../stores/walletStore";
 import { validateMnemonic, cleanMnemonic, validateMnemonicWords, generateIdentifier } from "../utils/mnemonic";
 import { useAlert } from "../hooks/useAlert";
 import { EyeIcon, EyeOffIcon } from "../components/icons";
+import { LoadingOverlay } from "../components/LoadingOverlay";
 import { getErrorMessage } from "../utils/format";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "WalletImport">;
@@ -44,6 +45,17 @@ export default function WalletImportScreen() {
   const alert = useAlert();
   const navigation = useNavigation<Nav>();
   const { importWallet, wallets } = useWalletStore();
+
+  // 监听键盘状态，动态调整底部 padding
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Step state: 1 = mnemonic input, 2 = wallet settings
   const [step, setStep] = useState(1);
@@ -74,6 +86,7 @@ export default function WalletImportScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordHint, setPasswordHint] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState("导入中");
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const strength = useMemo(() => getPasswordStrength(password), [password]);
@@ -144,8 +157,10 @@ export default function WalletImportScreen() {
     }
 
     setLoading(true);
+    setLoadingStage("正在加密数据...");
     try {
-      const walletId = await importWallet(validatedMnemonic, alias.trim(), password, passwordHint.trim() || undefined);
+      const walletId = await importWallet(validatedMnemonic, alias.trim(), password, passwordHint.trim() || undefined, (stage) => setLoadingStage(stage));
+      setLoadingStage("正在跳转...");
       navigation.replace("WalletAddAccount", { walletId });
     } catch (err: unknown) {
       alert("导入失败", getErrorMessage(err, "请稍后重试"));
@@ -157,7 +172,7 @@ export default function WalletImportScreen() {
   // ─── Step 1: Mnemonic Input (white background) ───
   if (step === 1) {
     return (
-      <KeyboardAvoidingView style={s1.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={s1.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView contentContainerStyle={s1.scrollContent} keyboardShouldPersistTaps="handled">
           {/* 点击空白区域收起键盘 */}
           <Pressable style={s1.inner} onPress={Keyboard.dismiss}>
@@ -222,12 +237,15 @@ export default function WalletImportScreen() {
 
   // ─── Step 2: Wallet Settings (white background) ───
   return (
-    <KeyboardAvoidingView
-      style={s2.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
+    <>
+      {/* 导入加载遮罩 */}
+      <LoadingOverlay visible={loading} stage={loadingStage} />
+      <KeyboardAvoidingView
+        style={s2.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
       <ScrollView
-        contentContainerStyle={s2.scroll}
+        contentContainerStyle={[s2.scroll, { paddingBottom: keyboardVisible ? 120 : 40 }]}
         keyboardShouldPersistTaps="handled"
       >
         <View style={s2.header}>
@@ -298,6 +316,9 @@ export default function WalletImportScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          {password.length > 0 && password.length < 8 && (
+            <Text style={s2.errorHint}>密码至少需要8个字符</Text>
+          )}
           {confirmPassword.length > 0 && password !== confirmPassword && (
             <Text style={s2.errorHint}>两次输入的密码不一致</Text>
           )}
@@ -325,6 +346,7 @@ export default function WalletImportScreen() {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </>
   );
 }
 
@@ -423,7 +445,7 @@ const s1 = StyleSheet.create({
 // ─── Step 2 Styles (white background) ───
 const s2 = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F8" },
-  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 120 },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24 },
   header: { marginBottom: 24 },
   title: {
     fontSize: 22,

@@ -40,6 +40,7 @@ import type { Wallet, SimpleWallet } from "../types";
 import { formatDate } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";
 import { getErrorMessage } from "../utils/format";
+import { perfProbe } from "../utils/perfProbe";
 
 /** 根据网络名获取对应图标组件（PascalCase） */
 function getNetworkIcon(network: string): React.FC<{ size?: number; color?: string }> | null {
@@ -62,7 +63,7 @@ export default function WalletDetailScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const walletId = route.params?.walletId;
-  const { wallets, accounts, fetchAccounts, deleteWallet, fetchWallets, verifyPassword } = useWalletStore();
+  const { wallets, accounts, fetchAccounts, deleteWallet, verifyPassword } = useWalletStore();
 
   const [detail, setDetail] = useState<SimpleWallet | null>(null);
   const [loading, setLoading] = useState(true);
@@ -188,8 +189,17 @@ export default function WalletDetailScreen() {
     setSavingAlias(true);
     try {
       await localWalletService.updateWallet(walletId, { name: editAlias.trim() });
+      // 写库成功后直接更新内存，不再 fetchWallets 查库
+      const currentWallets = useWalletStore.getState().wallets;
+      const updatedWallets = currentWallets.map((w) =>
+        w.id === walletId ? { ...w, name: editAlias.trim() } : w
+      );
+      const currentActive = useWalletStore.getState().activeWallet;
+      const updatedActive = currentActive?.id === walletId
+        ? { ...currentActive, name: editAlias.trim() }
+        : currentActive;
+      useWalletStore.setState({ wallets: updatedWallets, activeWallet: updatedActive });
       setDetail(null);
-      await fetchWallets();
       setShowEditModal(false);
     } catch (err: unknown) {
       alert("提示", getErrorMessage(err, "修改失败"));
@@ -201,10 +211,12 @@ export default function WalletDetailScreen() {
     if (!wallet || !walletId || !removePassword.trim()) return;
     setRemoving(true);
     setRemovePasswordError("");
+    const trace = await perfProbe.startTrace("删除钱包(全流程)");
     try {
-      const verified = await verifyPassword(walletId, removePassword.trim());
+      const verified = await verifyPassword(walletId, removePassword.trim(), trace);
       if (verified) {
-        await deleteWallet(wallet.id);
+        await deleteWallet(wallet.id, trace);
+        trace.mark("界面切换准备");
         setShowRemoveDrawer(false);
         // 删除最后一个钱包后跳转到 Start 导航页
         const remaining = useWalletStore.getState().wallets;
@@ -213,6 +225,7 @@ export default function WalletDetailScreen() {
         } else {
           navigation.goBack();
         }
+        trace.mark("界面切换完成");
       } else {
         setShowRemoveDrawer(false);
         setPasswordErrorContext("remove");
@@ -223,6 +236,7 @@ export default function WalletDetailScreen() {
       setPasswordErrorContext("remove");
       setShowPasswordErrorDialog(true);
     }
+    perfProbe.endTrace(trace);
     setRemoving(false);
   };
 

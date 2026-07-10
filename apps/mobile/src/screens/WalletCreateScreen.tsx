@@ -10,6 +10,8 @@ import {
   ScrollView,
   Animated,
   Modal,
+  Easing,
+  Keyboard,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -36,21 +38,43 @@ function getPasswordStrength(pwd: string): { level: number; label: string } {
   return { level: 4, label: "很好" };
 }
 
-/** Rotating dashed circle loading indicator with "创建中" text */
-function CreatingOverlay({ visible }: { visible: boolean }) {
+/** Rotating dashed circle loading indicator with stage text */
+function CreatingOverlay({ visible, stage }: { visible: boolean; stage: string }) {
   const rotation = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (!visible) return;
-    const animate = Animated.loop(
+    const rotate = Animated.loop(
       Animated.timing(rotation, {
         toValue: 1,
         duration: 1500,
+        easing: Easing.linear,
         useNativeDriver: true,
       })
     );
-    animate.start();
-    return () => animate.stop();
+    const pulseAnim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1.15,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    rotate.start();
+    pulseAnim.start();
+    return () => {
+      rotate.stop();
+      pulseAnim.stop();
+    };
   }, [visible]);
 
   const rotateInterpolate = rotation.interpolate({
@@ -62,10 +86,10 @@ function CreatingOverlay({ visible }: { visible: boolean }) {
     <Modal transparent animationType="fade" visible={visible}>
       <View style={overlayStyles.mask}>
         <View style={overlayStyles.content}>
-          <Animated.View style={[overlayStyles.circleWrapper, { transform: [{ rotate: rotateInterpolate }] }]}>
+          <Animated.View style={[overlayStyles.circleWrapper, { transform: [{ rotate: rotateInterpolate }, { scale: pulse }] }]}>
             <View style={overlayStyles.dashedCircle} />
           </Animated.View>
-          <Text style={overlayStyles.text}>创建中</Text>
+          <Text style={overlayStyles.text}>{stage || "创建中"}</Text>
         </View>
       </View>
     </Modal>
@@ -115,7 +139,19 @@ export default function WalletCreateScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordHint, setPasswordHint] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState("创建中");
   const [showPasswords, setShowPasswords] = useState(false);
+
+  // 监听键盘状态，动态调整底部 padding
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const strength = useMemo(() => getPasswordStrength(password), [password]);
 
@@ -130,8 +166,10 @@ export default function WalletCreateScreen() {
     if (password !== confirmPassword) { alert("提示", "两次输入的密码不一致"); return; }
 
     setLoading(true);
+    setLoadingStage("正在生成助记词...");
     try {
-      const id = await createWallet(alias.trim(), password, passwordHint.trim() || undefined);
+      const id = await createWallet(alias.trim(), password, passwordHint.trim() || undefined, (stage) => setLoadingStage(stage));
+      setLoadingStage("正在跳转...");
       navigation.replace("WalletAddAccount", { walletId: id });
     } catch (err: unknown) {
       alert("创建失败", getErrorMessage(err, "请稍后重试"));
@@ -143,10 +181,10 @@ export default function WalletCreateScreen() {
   return (
     <>
       {/* 遮罩层加载效果 */}
-      <CreatingOverlay visible={loading} />
+      <CreatingOverlay visible={loading} stage={loadingStage} />
 
-      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: keyboardVisible ? 120 : 40 }]} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>创建钱包</Text>
           <Text style={styles.desc}>为你的多账户钱包命名并设置密码保护。你也可以稍后添加更多钱包。</Text>
 
@@ -208,6 +246,9 @@ export default function WalletCreateScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          {password.length > 0 && password.length < 8 && (
+            <Text style={styles.errorHint}>密码至少需要8个字符</Text>
+          )}
           {confirmPassword.length > 0 && password !== confirmPassword && (
             <Text style={styles.errorHint}>两次输入的密码不一致</Text>
           )}
@@ -240,7 +281,7 @@ export default function WalletCreateScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F8" },
-  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 120 },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24 },
 
   title: { fontSize: 22, fontWeight: "700", color: "#1F2937", marginBottom: 8 },
   desc: { fontSize: 14, color: "#6B7280", lineHeight: 22, marginBottom: 24 },

@@ -3,6 +3,7 @@ import * as SecureStore from "../utils/secureStorage";
 import { walletService } from "../services/walletService";
 import { syncService } from "../services/syncService";
 import { localWalletService, hashPassword, hashMnemonic } from "../services/localWalletService";
+import { pbkdf2Impl } from "../utils/crypto";
 import { localAccountService } from "../services/localAccountService";
 import { localAddressService } from "../services/localAddressService";
 import { notificationSyncService } from "../services/notificationSyncService";
@@ -14,6 +15,7 @@ import { ensureDeviceKeys, ensureDeviceRegistered } from "../services/api";
 import { useAuthStore } from "./authStore";
 import { saveLogToLocal } from "../services/logService";
 import { getErrorMessage } from "../utils/format";
+import { perfProbe, TraceHandle } from "../utils/perfProbe";
 import type { SimpleWallet, Account, AssetBalance, LocalWallet } from "../types";
 
 const MNEMONIC_KEY_PREFIX = "aquad_mnemonic_";
@@ -71,16 +73,17 @@ interface WalletState {
   fetchAccounts: (walletId: string) => Promise<void>;
   setActiveWallet: (wallet: SimpleWallet) => void;
   setActiveAccount: (account: Account) => void;
-  createWallet: (alias: string, password: string, passwordHint?: string) => Promise<string>;
-  importWallet: (mnemonic: string, alias: string, password: string, passwordHint?: string) => Promise<string>;
+  createWallet: (alias: string, password: string, passwordHint?: string, onStage?: (stage: string) => void) => Promise<string>;
+  importWallet: (mnemonic: string, alias: string, password: string, passwordHint?: string, onStage?: (stage: string) => void) => Promise<string>;
   resetPassword: (walletId: string, mnemonic: string, password: string, passwordHint?: string) => Promise<void>;
-  deleteWallet: (walletId: string) => Promise<void>;
+  deleteWallet: (walletId: string, trace?: TraceHandle) => Promise<void>;
   backupWallet: (walletId: string) => Promise<void>;
   isWalletBackedUp: (walletId: string) => boolean;
-  addAccount: (walletId: string, network: string, name?: string, allowMultiAccount?: boolean) => Promise<void>;
+  addAccount: (walletId: string, network: string, name?: string, allowMultiAccount?: boolean, onStage?: (stage: string) => void) => Promise<void>;
+  addAccounts: (walletId: string, networks: string[], allowMultiAccount?: boolean, onStage?: (stage: string) => void) => Promise<void>;
   deleteAccount: (accountId: string) => Promise<void>;
   fetchBalance: (walletId: string) => Promise<void>;
-  verifyPassword: (walletId: string, password: string) => Promise<boolean>;
+  verifyPassword: (walletId: string, password: string, trace?: TraceHandle) => Promise<boolean>;
   subscribeWallet: (walletId: string) => Promise<void>;
   unsubscribeWallet: (walletId: string) => Promise<void>;
 }
@@ -283,81 +286,111 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   /** Create wallet — generates mnemonic locally, saves to local SQLite + syncs to server */
-  createWallet: async (alias: string, password: string, passwordHint?: string): Promise<string> => {
+  createWallet: async (alias: string, password: string, passwordHint?: string, onStage?: (stage: string) => void): Promise<string> => {
+    const trace = await perfProbe.startTrace("创建钱包");
     let mnemonic: string;
+    onStage?.("正在生成助记词...");
     try {
-      mnemonic = await generateMnemonic();
+      mnemonic = await trace.markAsync("生成助记词", generateMnemonic());
     } catch (err: unknown) {
       saveLogToLocal("crash", `[createWallet] generateMnemonic FAILED: error=${getErrorMessage(err, "未知错误")}`);
+      perfProbe.endTrace(trace);
       throw new Error("助记词生成失败，请重试");
     }
     if (!mnemonic || mnemonic.trim().split(/\s+/).length !== 12) {
       saveLogToLocal("crash", `[createWallet] generateMnemonic invalid: wordCount=${mnemonic?.trim().split(/\s+/).length || 0}`);
+      perfProbe.endTrace(trace);
       throw new Error("助记词生成失败，请重试");
     }
 
     // 1. 基于助记词确定性生成 walletId
     const walletId = generateIdentifier(mnemonic);
 
-    // 2. 网络注册 + PBKDF2 hash 并行（无依赖关系）
-    const [, passwordHash, mnemonicHash] = await Promise.all([
-      syncService.registerWallet("CREATE", walletId, alias),
-      hashPassword(password),
-      hashMnemonic(mnemonic),
-    ]);
+    onStage?.("正在加密数据...");
+    // 2. 网络注册 + PBKDF2 hash 并行启动，单独计时
+    const registerPromise = trace.markAsync("服务端注册(CREATE)", syncService.registerWallet("CREATE", walletId, alias));
+    const hashPwdPromise = trace.markAsync("hashPassword", hashPassword(password), pbkdf2Impl());
+    const hashMnemonicPromise = trace.markAsync("hashMnemonic", hashMnemonic(mnemonic), pbkdf2Impl());
+    const [, _registerResult, passwordHash, mnemonicHash] = await Promise.all([Promise.resolve(), registerPromise, hashPwdPromise, hashMnemonicPromise]);
 
-    // 3. SQLite 写入 + SecureStore 存助记词并行
-    await Promise.all([
-      localWalletService.createWallet({
-        id: walletId,
-        name: alias,
-        source: "CREATE",
-        password_hash: passwordHash,
-        password_hint: passwordHint || "",
-        mnemonic_hash: mnemonicHash,
-      }),
-      SecureStore.setItemAsync(mnemonicKey(walletId), mnemonic),
-    ]);
+    onStage?.("正在写入本地...");
+    // 3. SQLite 写入 + SecureStore 存助记词并行启动，单独计时
+    const sqliteWritePromise = trace.markAsync("SQLite写入钱包", localWalletService.createWallet({
+      id: walletId,
+      name: alias,
+      source: "CREATE",
+      password_hash: passwordHash,
+      password_hint: passwordHint || "",
+      mnemonic_hash: mnemonicHash,
+    }));
+    const secureStorePromise = trace.markAsync("SecureStore存助记词", SecureStore.setItemAsync(mnemonicKey(walletId), mnemonic));
+    await Promise.all([sqliteWritePromise, secureStorePromise]);
 
-    set({ mnemonic, hasWallets: true });
-    // fetchWallets 后台执行，不阻塞导航
-    get().fetchWallets();
+    // 写库成功后直接更新内存，不再 fetchWallets 查库
+    const newWallet: SimpleWallet = {
+      id: walletId,
+      name: alias,
+      source: "CREATE",
+      type: "",
+      sortOrder: 0,
+      isPinned: false,
+      avatar: "",
+      passwordHint: passwordHint || "",
+      createdAt: new Date().toISOString(),
+      isReadOnly: false,
+    };
+
+    set({ mnemonic, hasWallets: true, wallets: [...get().wallets, newWallet], activeWallet: newWallet, accounts: [], activeAccount: null, accountCount: 0 });
+    perfProbe.endTrace(trace);
     return walletId;
   },
 
   /** Import wallet with mnemonic */
-  importWallet: async (mnemonicInput: string, alias: string, password: string, passwordHint?: string): Promise<string> => {
+  importWallet: async (mnemonicInput: string, alias: string, password: string, passwordHint?: string, onStage?: (stage: string) => void): Promise<string> => {
+    const trace = await perfProbe.startTrace("导入钱包");
     const cleaned = cleanMnemonic(mnemonicInput);
 
     // 1. 基于助记词确定性生成 walletId
     const walletId = generateIdentifier(cleaned);
 
-    // 2. 网络注册 + PBKDF2 hash 并行（无依赖关系）
-    const [, passwordHash, mnemonicHash] = await Promise.all([
-      syncService.registerWallet("IMPORT", walletId, alias),
-      hashPassword(password),
-      hashMnemonic(cleaned),
-    ]);
+    // 2. 网络注册 + PBKDF2 hash 并行启动，单独计时
+    const registerPromise = trace.markAsync("服务端注册(IMPORT)", syncService.registerWallet("IMPORT", walletId, alias));
+    const hashPwdPromise = trace.markAsync("hashPassword", hashPassword(password), pbkdf2Impl());
+    const hashMnemonicPromise = trace.markAsync("hashMnemonic", hashMnemonic(cleaned), pbkdf2Impl());
+    const [, _registerResult, passwordHash, mnemonicHash] = await Promise.all([Promise.resolve(), registerPromise, hashPwdPromise, hashMnemonicPromise]);
 
-    // 3. SQLite 写入 + SecureStore 存助记词并行
-    await Promise.all([
-      localWalletService.createWallet({
-        id: walletId,
-        name: alias,
-        source: "IMPORT",
-        password_hash: passwordHash,
-        password_hint: passwordHint || "",
-        mnemonic_hash: mnemonicHash,
-      }),
-      SecureStore.setItemAsync(mnemonicKey(walletId), cleaned),
-    ]);
+    // 3. SQLite 写入 + SecureStore 存助记词并行启动，单独计时
+    const sqliteWritePromise = trace.markAsync("SQLite写入钱包", localWalletService.createWallet({
+      id: walletId,
+      name: alias,
+      source: "IMPORT",
+      password_hash: passwordHash,
+      password_hint: passwordHint || "",
+      mnemonic_hash: mnemonicHash,
+    }));
+    const secureStorePromise = trace.markAsync("SecureStore存助记词", SecureStore.setItemAsync(mnemonicKey(walletId), cleaned));
+    await Promise.all([sqliteWritePromise, secureStorePromise]);
 
+    onStage?.("正在标记备份...");
     // 4. 导入钱包 = 用户已持有助记词，直接标记为已备份
-    await get().backupWallet(walletId);
+    await trace.markAsync("标记已备份", get().backupWallet(walletId));
 
-    set({ mnemonic: mnemonicInput, hasWallets: true });
-    // fetchWallets 后台执行，不阻塞导航
-    get().fetchWallets();
+    // 写库成功后直接更新内存，不再 fetchWallets 查库
+    const newWallet: SimpleWallet = {
+      id: walletId,
+      name: alias,
+      source: "IMPORT",
+      type: "",
+      sortOrder: 0,
+      isPinned: false,
+      avatar: "",
+      passwordHint: passwordHint || "",
+      createdAt: new Date().toISOString(),
+      isReadOnly: false,
+    };
+
+    set({ mnemonic: mnemonicInput, hasWallets: true, wallets: [...get().wallets, newWallet], activeWallet: newWallet, accounts: [], activeAccount: null, accountCount: 0 });
+    perfProbe.endTrace(trace);
     return walletId;
   },
 
@@ -378,32 +411,66 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // 更新本地助记词存储
     await SecureStore.setItemAsync(mnemonicKey(walletId), cleaned);
 
-    await get().fetchWallets();
+    // 写库成功后直接更新内存，不再 fetchWallets 查库
+    const currentWallets = get().wallets;
+    const updatedWallets = currentWallets.map((w) =>
+      w.id === walletId ? { ...w, passwordHint: passwordHint || "" } : w
+    );
+    const currentActive = get().activeWallet;
+    const updatedActive = currentActive?.id === walletId
+      ? { ...currentActive, passwordHint: passwordHint || "" }
+      : currentActive;
+    set({ wallets: updatedWallets, activeWallet: updatedActive });
   },
 
   /** Delete wallet — delete local + server */
-  deleteWallet: async (walletId: string) => {
+  deleteWallet: async (walletId: string, externalTrace?: TraceHandle) => {
+    const trace = externalTrace || await perfProbe.startTrace("删除钱包");
+    const ownTrace = !externalTrace; // 是否由自己创建的 trace（需要自己 endTrace）
     try {
       // 从内存 Set 中移除备份标记
+      trace.mark("移除备份标记");
       const backedUpSet = new Set(get().backedUpWallets);
       backedUpSet.delete(walletId);
       set({ backedUpWallets: backedUpSet });
 
-      // 本地 SQLite 删除 + SecureStore 删除 + 服务端删除并行
-      await Promise.all([
-        localWalletService.deleteWallet(walletId),
+      // 本地 SQLite 删除（accounts + addresses + wallets 串行）
+      await localWalletService.deleteWallet(walletId, trace);
+
+      // SecureStore 删除（并行）
+      await trace.markAsync("SecureStore删除(mnemonic+backedUp)", Promise.all([
         SecureStore.deleteItemAsync(mnemonicKey(walletId)),
         SecureStore.deleteItemAsync(backedUpKey(walletId)),
-        syncService.deleteWallet(walletId),
-      ]);
+      ]));
+
+      // 服务端 DELETE
+      await trace.markAsync("服务端DELETE", syncService.deleteWallet(walletId));
 
       // 通知清理后台执行，不阻塞
       localNotificationService.deleteWalletNotifications(walletId);
-      // 刷新钱包列表后台执行
-      get().fetchWallets();
+
+      // 写库成功后直接更新内存，不再 fetchWallets 查库
+      trace.mark("更新内存状态");
+      const currentWallets = get().wallets;
+      const remainingWallets = currentWallets.filter((w) => w.id !== walletId);
+      const currentActive = get().activeWallet;
+      const newActive = currentActive?.id === walletId
+        ? remainingWallets[0] || null
+        : currentActive;
+      // 删除钱包后清空该钱包的 accounts
+      const newAccounts = get().activeWallet?.id === walletId ? [] : get().accounts;
+      set({
+        wallets: remainingWallets,
+        activeWallet: newActive,
+        accounts: newAccounts,
+        activeAccount: newAccounts[0] || null,
+        accountCount: newAccounts.length,
+        hasWallets: remainingWallets.length > 0,
+      });
     } catch {
       // silent
     }
+    if (ownTrace) perfProbe.endTrace(trace);
   },
 
   backupWallet: async (walletId: string) => {
@@ -414,42 +481,52 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   /** Add account — derive address locally, save to SQLite + sync to server */
-  addAccount: async (walletId: string, network: string, name?: string, allowMultiAccount?: boolean) => {
+  addAccount: async (walletId: string, network: string, name?: string, allowMultiAccount?: boolean, onStage?: (stage: string) => void) => {
+    const trace = await perfProbe.startTrace("添加账户");
     try {
+    onStage?.("正在添加账户...");
       // 只读钱包无法添加账户
-      const localWallet = await localWalletService.getWalletById(walletId);
+      const localWallet = await trace.markAsync("读取钱包信息", localWalletService.getWalletById(walletId));
       if (localWallet?.source === "SUBSCRIBE") {
+        perfProbe.endTrace(trace);
         throw new Error("只读钱包无法添加账户");
       }
 
+    onStage?.("正在同步到钱包...");
       // 读取助记词用于地址派生
-      const mnemonic = await SecureStore.getItemAsync(mnemonicKey(walletId));
+      const mnemonic = await trace.markAsync("读取助记词", SecureStore.getItemAsync(mnemonicKey(walletId)));
       if (!mnemonic) {
+        perfProbe.endTrace(trace);
         throw new Error("无法获取助记词，请重新导入钱包");
       }
 
       // 获取当前链上的最大账户索引
-      const maxIndex = await localAccountService.getMaxAccountIndex(walletId, network);
+      const maxIndex = await trace.markAsync("查询账户索引", localAccountService.getMaxAccountIndex(walletId, network));
       const accountIndex = maxIndex + 1;
 
       // 检查是否已存在账户
       if (!allowMultiAccount && maxIndex >= 0) {
+        perfProbe.endTrace(trace);
         throw new Error("该钱包下此网络已有账户");
       }
 
+    onStage?.("正在打包数据...");
       // 使用 BIP44 从助记词派生链上地址
-      const address = deriveAddressFromMnemonic(mnemonic, network, accountIndex);
+      trace.mark("派生地址");
+      const address = await trace.markAsync("派生地址(native)", deriveAddressFromMnemonic(mnemonic, network, accountIndex), pbkdf2Impl());
       const derivationPath = getDerivationPath(network, accountIndex);
 
       const { generateUUID } = await import("../db/database");
       const accountId = generateUUID();
       const accountName = name || `${network} Account ${accountIndex + 1}`;
 
+    onStage?.("正在写入数据...");
       // 同步地址到服务端，获取 serverAddressId
-      const serverAddress = await syncService.syncAddress(walletId, network, address);
+      const serverAddress = await trace.markAsync("POST /wallets/{id}/addresses", syncService.syncAddress(walletId, network, address));
 
-      // 保存到本地 SQLite
-      await localAccountService.createAccount({
+    onStage?.("正在同步远端...");
+      // 保存到本地 SQLite + addresses 表，单独计时
+      await trace.markAsync("SQLite createAccount", localAccountService.createAccount({
         id: accountId,
         wallet_id: walletId,
         chain: network,
@@ -459,28 +536,153 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         account_index: accountIndex,
         name: accountName,
         server_address_id: serverAddress.id,
-      });
-
-      // 同步写入 addresses 表（type=internalWallet, status=verified）
-      // 用于交易列表显示钱包名称、转账确认页识别本钱包地址
-      await localAddressService.upsertAddress({
+      }));
+      await trace.markAsync("SQLite upsertAddress", localAddressService.upsertAddress({
         chain: network,
         address: address,
         walletId: walletId,
         name: accountName,
         type: "internalWallet",
         status: "verified",
-      });
-
-      await get().fetchAccounts(walletId);
+      }));
+      // 写库成功后直接更新内存，不再 fetchAccounts 查库
+      const newAccount: Account = {
+        id: accountId,
+        walletId,
+        chain: network,
+        derivationPath,
+        address,
+        extendedPubkey: "",
+        accountIndex,
+        name: accountName,
+        serverAddressId: serverAddress.id,
+        createdAt: new Date().toISOString(),
+      };
+      // 如果当前活跃钱包就是目标钱包，追加到 accounts 内存
+      const currentAccounts = get().accounts;
+      const isActiveWallet = get().activeWallet?.id === walletId;
+      if (isActiveWallet) {
+        set({ accounts: [...currentAccounts, newAccount], accountCount: currentAccounts.length + 1 });
+      }
     } catch (err: unknown) {
+      perfProbe.endTrace(trace);
       throw err;
     }
+    perfProbe.endTrace(trace);
+  },
+
+  /** Add accounts (batch) — derive addresses locally, batch sync to server, batch write to SQLite */
+  addAccounts: async (walletId: string, networks: string[], allowMultiAccount?: boolean, onStage?: (stage: string) => void) => {
+    const trace = await perfProbe.startTrace("批量添加账户");
+    try {
+      onStage?.("正在添加账户...");
+      // 只读钱包无法添加账户
+      const localWallet = await trace.markAsync("读取钱包信息", localWalletService.getWalletById(walletId));
+      if (localWallet?.source === "SUBSCRIBE") {
+        perfProbe.endTrace(trace);
+        throw new Error("只读钱包无法添加账户");
+      }
+
+      onStage?.("正在同步到钱包...");
+      // 读取助记词（一次读取，所有链共用）
+      const mnemonic = await trace.markAsync("读取助记词", SecureStore.getItemAsync(mnemonicKey(walletId)));
+      if (!mnemonic) {
+        perfProbe.endTrace(trace);
+        throw new Error("无法获取助记词，请重新导入钱包");
+      }
+
+      onStage?.("正在打包数据...");
+      // 为每条链派生地址（本地计算，一次 mnemonicToSeedSync）
+      const { generateUUID } = await import("../db/database");
+      const derivedAccounts: { chain: string; address: string; derivationPath: string; accountId: string; accountName: string; accountIndex: number }[] = [];
+      for (const network of networks) {
+        const maxIndex = await localAccountService.getMaxAccountIndex(walletId, network);
+        const accountIndex = maxIndex + 1;
+        if (!allowMultiAccount && maxIndex >= 0) continue; // 跳过全部已有的链
+        const address = await deriveAddressFromMnemonic(mnemonic, network, accountIndex);
+        const derivationPath = getDerivationPath(network, accountIndex);
+        const accountId = generateUUID();
+        const accountName = `${network} Account`;
+        derivedAccounts.push({ chain: network, address, derivationPath, accountId, accountName, accountIndex });
+      }
+
+      if (derivedAccounts.length === 0) {
+        perfProbe.endTrace(trace);
+        return; // 所有链都已存在，无需添加
+      }
+
+      onStage?.("正在同步远端...");
+      // 一次 HTTP 请求完成所有链的服务端同步（替代逐链 POST /wallets/{id}/addresses）
+      const walletAlias = localWallet!.name;
+      const walletSource = localWallet!.source === "IMPORT" ? "IMPORT" : "CREATE";
+      const syncInput = {
+        walletId,
+        source: walletSource,
+        alias: walletAlias,
+        addresses: derivedAccounts.map((d) => ({ chain: d.chain, address: d.address })),
+      };
+      const syncResults = await trace.markAsync("POST /wallets/sync", walletService.batchSyncWallets([syncInput]));
+
+      onStage?.("正在写入数据...");
+      // 批量写入本地 SQLite，单独计时
+      await trace.markAsync("SQLite批量写入(accounts+addresses)", Promise.all(derivedAccounts.map((d) => {
+        const syncAddr = syncResults[0]?.addresses.find((a) => a.chain === d.chain && a.address === d.address);
+        const serverAddressId = syncAddr?.serverAddressId || "";
+        return Promise.all([
+          localAccountService.createAccount({
+            id: d.accountId,
+            wallet_id: walletId,
+            chain: d.chain,
+            derivation_path: d.derivationPath,
+            address: d.address,
+            extended_pubkey: "",
+            account_index: d.accountIndex,
+            name: d.accountName,
+            server_address_id: serverAddressId,
+          }),
+          localAddressService.upsertAddress({
+            chain: d.chain,
+            address: d.address,
+            walletId,
+            name: d.accountName,
+            type: "internalWallet",
+            status: "verified",
+          }),
+        ]);
+      })));
+
+      // 更新内存：批量追加 accounts
+      const newAccounts: Account[] = derivedAccounts.map((d) => {
+        const syncAddr = syncResults[0]?.addresses.find((a) => a.chain === d.chain && a.address === d.address);
+        return {
+          id: d.accountId,
+          walletId,
+          chain: d.chain,
+          derivationPath: d.derivationPath,
+          address: d.address,
+          extendedPubkey: "",
+          accountIndex: d.accountIndex,
+          name: d.accountName,
+          serverAddressId: syncAddr?.serverAddressId || "",
+          createdAt: new Date().toISOString(),
+        };
+      });
+      const currentAccounts = get().accounts;
+      const isActiveWallet = get().activeWallet?.id === walletId;
+      if (isActiveWallet) {
+        set({ accounts: [...currentAccounts, ...newAccounts], accountCount: currentAccounts.length + newAccounts.length });
+      }
+    } catch (err: unknown) {
+      perfProbe.endTrace(trace);
+      throw err;
+    }
+    perfProbe.endTrace(trace);
   },
 
   /** Delete account — delete local + server */
   deleteAccount: async (accountId: string) => {
     try {
+
       const account = await localAccountService.getAccountById(accountId);
       if (!account) return;
 
@@ -501,10 +703,14 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         await localAddressService.deleteAddress(account.chain, account.address);
       }
 
-      const walletId = get().activeWallet?.id;
-      if (walletId) {
-        await get().fetchAccounts(walletId);
-      }
+      // 写库成功后直接更新内存，不再 fetchAccounts 查库
+      const currentAccounts = get().accounts;
+      const remainingAccounts = currentAccounts.filter((a) => a.id !== accountId);
+      set({
+        accounts: remainingAccounts,
+        accountCount: remainingAccounts.length,
+        activeAccount: remainingAccounts[0] || null,
+      });
     } catch (err: unknown) {
       throw err;
     }
@@ -516,8 +722,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     if (balanceFetchInFlight[walletId]) return;
     balanceFetchInFlight[walletId] = true;
     set({ balanceLoading: true });
+    const trace = await perfProbe.startTrace("查询余额");
     try {
-      const detail = await walletService.getWalletBalanceDetail(walletId);
+      const detail = await trace.markAsync("GET /wallets/{id}/balance", walletService.getWalletBalanceDetail(walletId));
       set({
         totalBalanceUsd: detail.totalBalanceUsd || "0",
         assets: detail.assets || [],
@@ -527,12 +734,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       set({ balanceLoading: false });
     } finally {
       delete balanceFetchInFlight[walletId];
+      perfProbe.endTrace(trace);
     }
   },
 
   /** Verify wallet password locally */
-  verifyPassword: async (walletId: string, password: string): Promise<boolean> => {
-    return localWalletService.verifyPassword(walletId, password);
+  verifyPassword: async (walletId: string, password: string, trace?: TraceHandle): Promise<boolean> => {
+    return localWalletService.verifyPassword(walletId, password, trace);
   },
 
   /** Subscribe wallet (readonly) — subscribe an existing wallet without mnemonic */
@@ -586,8 +794,20 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         }
       }
 
-      // 4. 刷新钱包列表
-      await get().fetchWallets();
+      // 4. 写库成功后直接更新内存，不再 fetchWallets 查库
+      const newWallet: SimpleWallet = {
+        id: walletId,
+        name: serverWallet.alias || "",
+        source: "SUBSCRIBE",
+        type: "",
+        sortOrder: 0,
+        isPinned: false,
+        avatar: "",
+        passwordHint: "",
+        createdAt: new Date().toISOString(),
+        isReadOnly: true,
+      };
+      set({ wallets: [...get().wallets, newWallet], activeWallet: newWallet, hasWallets: true });
     } catch (err: unknown) {
       throw err;
     }
@@ -595,18 +815,37 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   /** Unsubscribe wallet (readonly) — cancel subscription and clean local data */
   unsubscribeWallet: async (walletId: string) => {
+    const trace = await perfProbe.startTrace("取消订阅钱包");
     try {
       // 1. 调用后端取消订阅 API
-      await syncService.unsubscribeWalletReadonly(walletId);
+      await trace.markAsync("DELETE /subscribe", syncService.unsubscribeWalletReadonly(walletId));
 
       // 2. 删除本地数据（钱包+账户+地址+通知）
-      await localWalletService.deleteWallet(walletId);
-      await localNotificationService.deleteWalletNotifications(walletId);
+      await trace.markAsync("本地删除", Promise.all([
+        localWalletService.deleteWallet(walletId),
+        localNotificationService.deleteWalletNotifications(walletId),
+      ]));
 
-      // 3. 刷新钱包列表
-      await get().fetchWallets();
+      // 写库成功后直接更新内存，不再 fetchWallets 查库
+      const currentWallets = get().wallets;
+      const remainingWallets = currentWallets.filter((w) => w.id !== walletId);
+      const currentActive = get().activeWallet;
+      const newActive = currentActive?.id === walletId
+        ? remainingWallets[0] || null
+        : currentActive;
+      const newAccounts = currentActive?.id === walletId ? [] : get().accounts;
+      set({
+        wallets: remainingWallets,
+        activeWallet: newActive,
+        accounts: newAccounts,
+        activeAccount: newAccounts[0] || null,
+        accountCount: newAccounts.length,
+        hasWallets: remainingWallets.length > 0,
+      });
     } catch (err: unknown) {
+      perfProbe.endTrace(trace);
       throw err;
     }
+    perfProbe.endTrace(trace);
   },
   }));

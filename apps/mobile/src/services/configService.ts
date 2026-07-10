@@ -20,6 +20,7 @@ export interface ConfigItem {
 const SERVICE_CONFIG_ENABLED_KEY = "aquad_service_config_enabled";
 const MULTI_ACCOUNT_ENABLED_KEY = "aquad_multi_account_enabled";
 const FEEDBACK_CODE_KEY = "aquad_feedback_code";
+const PERF_PROBE_ENABLED_KEY = "aquad_perf_probe_enabled";
 
 /** device_cap 管理权限掩码 */
 const ADMIN_PERM_MARKER = 0x5E2D8A37;
@@ -127,6 +128,23 @@ export const configService = {
   async setMultiAccountEnabled(enabled: boolean): Promise<void> {
     try {
       await SecureStore.setItemAsync(MULTI_ACCOUNT_ENABLED_KEY, enabled ? "true" : "false");
+    } catch {
+      // silent
+    }
+  },
+
+  async getPerfProbeEnabled(): Promise<boolean> {
+    try {
+      const val = await SecureStore.getItemAsync(PERF_PROBE_ENABLED_KEY);
+      return val === "true";
+    } catch {
+      return false;
+    }
+  },
+
+  async setPerfProbeEnabled(enabled: boolean): Promise<void> {
+    try {
+      await SecureStore.setItemAsync(PERF_PROBE_ENABLED_KEY, enabled ? "true" : "false");
     } catch {
       // silent
     }

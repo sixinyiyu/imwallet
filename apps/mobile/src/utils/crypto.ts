@@ -19,6 +19,13 @@ export const PBKDF2_SALT_MNEMONIC = "imwallet_mnemonic_salt_v2";
 // ── Native module reference ──
 const Pbkdf2Native = NativeModules.Pbkdf2;
 
+/** 查询当前 PBKDF2 实现方式（用于 perfProbe 日志标注） */
+export function pbkdf2Impl(): string {
+  if (Platform.OS === "web") return "web/crypto.subtle";
+  if (Pbkdf2Native) return "native/" + Platform.OS;
+  return "js/@noble/hashes";
+}
+
 // ── Web implementation using browser crypto.subtle ──
 
 /** Web: PBKDF2 via crypto.subtle — returns hex string */
