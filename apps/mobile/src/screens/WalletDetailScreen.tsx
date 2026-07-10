@@ -62,7 +62,7 @@ export default function WalletDetailScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const walletId = route.params?.walletId;
-  const { wallets, accounts, fetchAccounts, deleteWallet, fetchWallets, verifyPassword } = useWalletStore();
+  const { wallets, accounts, fetchAccounts, deleteWallet, verifyPassword } = useWalletStore();
 
   const [detail, setDetail] = useState<SimpleWallet | null>(null);
   const [loading, setLoading] = useState(true);
@@ -188,8 +188,17 @@ export default function WalletDetailScreen() {
     setSavingAlias(true);
     try {
       await localWalletService.updateWallet(walletId, { name: editAlias.trim() });
+      // 写库成功后直接更新内存，不再 fetchWallets 查库
+      const currentWallets = useWalletStore.getState().wallets;
+      const updatedWallets = currentWallets.map((w) =>
+        w.id === walletId ? { ...w, name: editAlias.trim() } : w
+      );
+      const currentActive = useWalletStore.getState().activeWallet;
+      const updatedActive = currentActive?.id === walletId
+        ? { ...currentActive, name: editAlias.trim() }
+        : currentActive;
+      useWalletStore.setState({ wallets: updatedWallets, activeWallet: updatedActive });
       setDetail(null);
-      await fetchWallets();
       setShowEditModal(false);
     } catch (err: unknown) {
       alert("提示", getErrorMessage(err, "修改失败"));

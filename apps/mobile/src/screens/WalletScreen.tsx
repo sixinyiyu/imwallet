@@ -59,8 +59,8 @@ export default function WalletScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchWallets();
-      // 每次聚焦刷新余额（充值后余额可能已变化）
+      // 钱包列表已在内存中缓存，不再每次聚焦都 fetchWallets 查库
+      // 只刷新余额（充值后余额可能已变化）
       // fetchBalance 已有 in-flight dedup，不会重复请求
       const w = useWalletStore.getState().activeWallet;
       if (w) {

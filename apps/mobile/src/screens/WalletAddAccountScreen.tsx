@@ -19,6 +19,7 @@ import { accountService } from "../services/accountService";
 import { localAccountService } from "../services/localAccountService";
 import { LinearGradient } from "expo-linear-gradient";
 import { TOKEN_ICONS, TronIcon, EthIcon, BtcIcon } from "../components/icons";
+import { LoadingOverlay } from "../components/LoadingOverlay";
 import type { ChainInfo } from "../types";
 import { useAlert } from "../hooks/useAlert";
 import { configService } from "../services/configService";
@@ -59,6 +60,7 @@ export default function WalletAddAccountScreen() {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedChains, setSelectedChains] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
+  const [creatingStage, setCreatingStage] = useState("添加中");
   const [chains, setChains] = useState<ChainInfo[]>([]);
   const [chainsLoaded, setChainsLoaded] = useState(false);
   /** 已有账户的链集合（该链下所有代币账户都已存在） */
@@ -134,12 +136,13 @@ export default function WalletAddAccountScreen() {
       return;
     }
     setCreating(true);
+    setCreatingStage("正在添加账户...");
     try {
       // 逐个添加选中的链账户，单个失败不阻塞后续
       for (const chainName of selectedChains) {
         if (!multiAccountEnabled && existingChains.has(chainName)) continue; // 跳过全部已有的链
         try {
-          await addAccount(effectiveWalletId, chainName, `${chainName} Account`, multiAccountEnabled);
+          await addAccount(effectiveWalletId, chainName, `${chainName} Account`, multiAccountEnabled, (stage) => setCreatingStage(stage));
         } catch {
           // 单个账户添加失败不阻塞流程
         }
@@ -164,6 +167,9 @@ export default function WalletAddAccountScreen() {
     : [...selectedChains].some((c) => !existingChains.has(c));
 
   return (
+    <>
+      {/* 添加账户加载遮罩 */}
+      <LoadingOverlay visible={creating} stage={creatingStage} />
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       {/* 上方图片区域 - 占屏幕 3/5 */}
       <View style={styles.imageArea}>
@@ -302,6 +308,7 @@ export default function WalletAddAccountScreen() {
         </View>
       </Modal>
     </Animated.View>
+    </>
   );
 }
 

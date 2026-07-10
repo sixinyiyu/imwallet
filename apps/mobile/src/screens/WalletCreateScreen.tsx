@@ -167,18 +167,11 @@ export default function WalletCreateScreen() {
 
     setLoading(true);
     setLoadingStage("正在生成助记词...");
-    // 阶段提示：模拟创建流程的各步骤
-    const stageTimer1 = setTimeout(() => setLoadingStage("正在加密数据..."), 800);
-    const stageTimer2 = setTimeout(() => setLoadingStage("正在注册钱包..."), 1600);
     try {
-      const id = await createWallet(alias.trim(), password, passwordHint.trim() || undefined);
-      clearTimeout(stageTimer1);
-      clearTimeout(stageTimer2);
+      const id = await createWallet(alias.trim(), password, passwordHint.trim() || undefined, (stage) => setLoadingStage(stage));
       setLoadingStage("正在跳转...");
       navigation.replace("WalletAddAccount", { walletId: id });
     } catch (err: unknown) {
-      clearTimeout(stageTimer1);
-      clearTimeout(stageTimer2);
       alert("创建失败", getErrorMessage(err, "请稍后重试"));
     } finally {
       setLoading(false);
