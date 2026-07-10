@@ -5,6 +5,7 @@ import Constants from "expo-constants";
 import "react-native-get-random-values";
 import * as ed25519 from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
+import { saveLogToLocal } from "../services/logService";
 
 // ===== Configure SHA-512 for @noble/ed25519 v3 =====
 // v3 requires hashes.sha512 to be set before calling sync methods (getPublicKey, sign, etc.)
@@ -15,6 +16,9 @@ ed25519.hashes.sha512 = sha512;
 const DEVICE_PRIV_JWK = "imwallet_device_priv_jwk";
 const DEVICE_PUBLIC_KEY = "imwallet_device_public_key";
 const DEVICE_REGISTERED = "imwallet_device_registered";
+
+// ── 诊断：拦截器首次请求标记 ──
+let _interceptorLogged = false;
 
 const BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ||
@@ -137,22 +141,54 @@ export async function ensureDeviceKeys(): Promise<{ publicKeyHex: string; privat
   let publicKeyHex = await SecureStore.getItemAsync(DEVICE_PUBLIC_KEY);
   let privateKeyHex = await SecureStore.getItemAsync(DEVICE_PRIV_JWK);
 
+  // ── 诊断日志：记录 SecureStore 首次读取结果 ──
+  saveLogToLocal("info", `[ensureDeviceKeys] 首次读取: pub=${publicKeyHex ? publicKeyHex.substring(0, 8) + "..." : "null"}, priv=${privateKeyHex ? privateKeyHex.substring(0, 8) + "..." : "null"}, len_pub=${publicKeyHex?.length ?? 0}, len_priv=${privateKeyHex?.length ?? 0}`);
+
   if (publicKeyHex && privateKeyHex) {
+    // 验证公钥和私钥是否匹配
+    try {
+      const derivedPubKey = bytesToHex(ed25519.getPublicKey(hexToBytes(privateKeyHex)));
+      const match = derivedPubKey === publicKeyHex;
+      saveLogToLocal("info", `[ensureDeviceKeys] 密钥匹配校验: match=${match}, derived=${derivedPubKey.substring(0, 8)}..., stored=${publicKeyHex.substring(0, 8)}...`);
+      if (match) {
+        return { publicKeyHex, privateKeyHex };
+      }
+    } catch (e: unknown) {
+      saveLogToLocal("info", `[ensureDeviceKeys] 密钥匹配校验异常: ${String(e)}`);
+    }
+    // 密钥不匹配或校验异常 — 不丢弃，仍然返回（让业务继续用旧密钥）
+    // 只记录诊断信息，不改变行为
+    saveLogToLocal("info", `[ensureDeviceKeys] 密钥不匹配但保留旧密钥, pub=${publicKeyHex.substring(0, 8)}...`);
     return { publicKeyHex, privateKeyHex };
   }
 
+  // 密钥缺失，需要生成新密钥
+  saveLogToLocal("info", `[ensureDeviceKeys] 密钥缺失，生成新密钥`);
   try {
     const keys = await generateKeyPair();
+    saveLogToLocal("info", `[ensureDeviceKeys] 新密钥生成: pub=${keys.publicKeyHex.substring(0, 8)}...`);
     await SecureStore.setItemAsync(DEVICE_PRIV_JWK, keys.privateKeyHex);
     await SecureStore.setItemAsync(DEVICE_PUBLIC_KEY, keys.publicKeyHex);
+    // 写入后立即回读验证
+    const readBackPub = await SecureStore.getItemAsync(DEVICE_PUBLIC_KEY);
+    const readBackPriv = await SecureStore.getItemAsync(DEVICE_PRIV_JWK);
+    const writeOk = readBackPub === keys.publicKeyHex && readBackPriv === keys.privateKeyHex;
+    saveLogToLocal("info", `[ensureDeviceKeys] 写入回读验证: writeOk=${writeOk}, readBackPub=${readBackPub ? readBackPub.substring(0, 8) + "..." : "null"}, expected=${keys.publicKeyHex.substring(0, 8)}...`);
+    if (!writeOk) {
+      // 回读不一致 — SecureStore 有问题，但仍返回新密钥（不改行为）
+      saveLogToLocal("info", `[ensureDeviceKeys] 回读不一致，仍返回新密钥`);
+    }
     return { publicKeyHex: keys.publicKeyHex, privateKeyHex: keys.privateKeyHex };
   } catch (err) {
+    saveLogToLocal("info", `[ensureDeviceKeys] 生成密钥异常: ${String(err)}`);
     return null;
   }
 }
 
 export async function ensureDeviceRegistered(publicKeyHex: string): Promise<void> {
   const registered = await SecureStore.getItemAsync(DEVICE_REGISTERED);
+  // ── 诊断日志：记录注册前的状态 ──
+  saveLogToLocal("info", `[ensureDeviceRegistered] pub=${publicKeyHex.substring(0, 8)}..., registered=${registered}, platform=${Platform.OS}`);
   if (registered === "true") return;
 
   const platform = Platform.OS === "ios" ? "ios" : Platform.OS === "android" ? "android" : "web";
@@ -163,9 +199,13 @@ export async function ensureDeviceRegistered(publicKeyHex: string): Promise<void
       platform,
     });
     await SecureStore.setItemAsync(DEVICE_REGISTERED, "true");
+    saveLogToLocal("info", `[ensureDeviceRegistered] 注册成功: pub=${publicKeyHex.substring(0, 8)}...`);
   } catch (err: unknown) {
-    if ((err as { response?: { status?: number } }).response?.status === 409) {
+    const status = (err as { response?: { status?: number } }).response?.status;
+    saveLogToLocal("info", `[ensureDeviceRegistered] 注册失败: status=${status}, pub=${publicKeyHex.substring(0, 8)}...`);
+    if (status === 409) {
       await SecureStore.setItemAsync(DEVICE_REGISTERED, "true");
+      saveLogToLocal("info", `[ensureDeviceRegistered] 409冲突，标记已注册`);
     }
   }
 }
@@ -185,6 +225,12 @@ api.interceptors.request.use(async (config) => {
   const publicKeyHex = await SecureStore.getItemAsync(DEVICE_PUBLIC_KEY);
   const privateKeyHex = await SecureStore.getItemAsync(DEVICE_PRIV_JWK);
   if (!publicKeyHex || !privateKeyHex) return config;
+
+  // ── 诊断日志：记录拦截器读取的密钥（仅首次请求） ──
+  if (!_interceptorLogged) {
+    _interceptorLogged = true;
+    saveLogToLocal("info", `[api拦截器] 首次请求密钥: pub=${publicKeyHex.substring(0, 8)}..., url=${config.url}`);
+  }
 
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const nonce = generateNonce();

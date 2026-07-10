@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { getDevicePublicKey } from "../services/api";
+import { saveLogToLocal } from "../services/logService";
 
 interface AuthState {
   /** 设备是否已就绪（密钥对已生成 + 设备已注册） */
@@ -18,6 +19,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   initDevice: async () => {
     try {
       const publicKey = await getDevicePublicKey();
+      // ── 诊断日志：记录 initDevice 最终读到的 deviceId ──
+      saveLogToLocal("info", `[initDevice] deviceId=${publicKey ? publicKey.substring(0, 8) + "..." : "null"}`);
       if (publicKey) {
         set({ isReady: true, deviceId: publicKey });
       } else {
