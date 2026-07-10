@@ -513,7 +513,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     onStage?.("正在打包数据...");
       // 使用 BIP44 从助记词派生链上地址
       trace.mark("派生地址");
-      const address = deriveAddressFromMnemonic(mnemonic, network, accountIndex);
+      const address = await trace.markAsync("派生地址(native)", deriveAddressFromMnemonic(mnemonic, network, accountIndex), pbkdf2Impl());
       const derivationPath = getDerivationPath(network, accountIndex);
 
       const { generateUUID } = await import("../db/database");
@@ -599,7 +599,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         const maxIndex = await localAccountService.getMaxAccountIndex(walletId, network);
         const accountIndex = maxIndex + 1;
         if (!allowMultiAccount && maxIndex >= 0) continue; // 跳过全部已有的链
-        const address = deriveAddressFromMnemonic(mnemonic, network, accountIndex);
+        const address = await deriveAddressFromMnemonic(mnemonic, network, accountIndex);
         const derivationPath = getDerivationPath(network, accountIndex);
         const accountId = generateUUID();
         const accountName = `${network} Account`;
