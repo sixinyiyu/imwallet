@@ -33,6 +33,8 @@ jobs:
 
       - name: Build release binary (musl)
         run: cargo build --release --target x86_64-unknown-linux-musl --manifest-path apps/server/Cargo.toml
+        env:
+          IMWALLET_VERSION: ${{ inputs.version }}
 
       - name: Verify binary exists
         run: |
@@ -81,6 +83,8 @@ jobs:
 
       - name: Build release binary
         run: cargo build --release --manifest-path apps/server/Cargo.toml
+        env:
+          IMWALLET_VERSION: ${{ inputs.version }}
 
       - name: Create release archive
         shell: pwsh

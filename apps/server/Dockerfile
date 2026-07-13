@@ -3,6 +3,10 @@
 
 FROM rust:1.95-slim-bookworm AS builder
 
+# CI 注入版本号（fallback 到 Cargo.toml version）
+ARG IMWALLET_VERSION
+ENV IMWALLET_VERSION=${IMWALLET_VERSION}
+
 WORKDIR /build
 
 # 预构建依赖层（利用 Docker 缓存）

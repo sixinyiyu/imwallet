@@ -23,6 +23,14 @@ use log::Level;
 use std::sync::Arc;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
+/// 服务端版本号。
+/// CI 构建时通过 IMWALLET_VERSION 环境变量注入（如 v0.3.0），
+/// 本地开发时 fallback 到 Cargo.toml 的 version。
+const SERVER_VERSION: &str = match option_env!("IMWALLET_VERSION") {
+    Some(v) => v,
+    None => env!("CARGO_PKG_VERSION"),
+};
+
 static ALLOWED_HEADERS: &[&str] = &[
     "Content-Type",
     "Authorization",
@@ -42,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
     // 2. 初始化日志
     init_logger(&config);
 
-    log::info!("rs-wallet starting...");
+    log::info!("rs-wallet v{} starting...", SERVER_VERSION);
 
     // 3. 初始化数据库连接
     let db = Arc::new(
