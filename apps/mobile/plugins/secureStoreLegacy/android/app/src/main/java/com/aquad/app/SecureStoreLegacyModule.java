@@ -231,9 +231,6 @@ public class SecureStoreLegacyModule extends ReactContextBaseJavaModule {
 
       promise.resolve(plaintext);
 
-    } catch (KeyPermanentlyInvalidatedException e) {
-      Log.w(TAG, "KeyStore key has been permanently invalidated for key: " + key);
-      promise.resolve(null);
     } catch (Exception e) {
       Log.w(TAG, "Failed to read value for key: " + key + ": " + e.getMessage());
       // Return null instead of throwing — we don't want to crash the app or delete the data
