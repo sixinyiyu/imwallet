@@ -26,6 +26,7 @@ import { formatTime as formatDate } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";
 import { getErrorMessage, trimAmount } from "../utils/format";
 import { perfProbe } from "../utils/perfProbe";
+import { useFiatStore } from "../stores/fiatStore";
 
 // ── 筛选类型定义 ──
 type TimeFilter = "today" | "7d" | "30d" | "90d";
@@ -38,6 +39,7 @@ const TIME_OPTIONS: { label: string; value: TimeFilter }[] = [
 ];
 
 export default function RechargeScreen() {
+  const { currency } = useFiatStore();
   const [assets, setAssets] = useState<AssetInfo[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<SimpleWallet | null>(null);
   const [selectedToken, setSelectedToken] = useState<AssetInfo | null>(null);
@@ -347,7 +349,7 @@ export default function RechargeScreen() {
             )}
             <Text style={styles.recordToken}>{item.tokenSymbol}</Text>
           </View>
-          <Text style={styles.recordAmount}>+{trimAmount(item.amount)}</Text>
+          <Text style={styles.recordAmount}>+{currency.symbol}{trimAmount(item.amount)}</Text>
         </View>
         <View style={styles.recordBody}>
           <View style={styles.recordAddressRow}>
@@ -395,36 +397,36 @@ export default function RechargeScreen() {
               </TouchableOpacity>
 
               {!formCollapsed && (
-              <>
-              <Text style={styles.fieldLabel}>选择钱包</Text>
-              <TouchableOpacity style={styles.pickerBtn} onPress={openWalletPicker} activeOpacity={0.7}>
-                <Text style={selectedWallet ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
-                  {selectedWallet ? `${selectedWallet.name}(${shortAddr(selectedWallet.id)})` : "请选择钱包"}
-                </Text>
-                <ChevronRightIcon size={18} color="#9CA3AF" />
-              </TouchableOpacity>
+                <>
+                  <Text style={styles.fieldLabel}>选择钱包</Text>
+                  <TouchableOpacity style={styles.pickerBtn} onPress={openWalletPicker} activeOpacity={0.7}>
+                    <Text style={selectedWallet ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
+                      {selectedWallet ? `${selectedWallet.name}(${shortAddr(selectedWallet.id)})` : "请选择钱包"}
+                    </Text>
+                    <ChevronRightIcon size={18} color="#9CA3AF" />
+                  </TouchableOpacity>
 
-              <Text style={styles.fieldLabel}>选择代币</Text>
-              <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowTokenPicker(true)} activeOpacity={0.7}>
-                <View style={styles.tokenPickerLeft}>
-                  {selectedToken && TOKEN_ICONS[selectedToken.symbol] ? React.createElement(TOKEN_ICONS[selectedToken.symbol], { size: 18 }) : null}
-                  <Text style={selectedToken ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
-                    {selectedToken ? `${selectedToken.symbol} · ${shortAddr(getAssetAddress(selectedToken))}` : "请选择代币"}
-                  </Text>
-                </View>
-                <ChevronRightIcon size={18} color="#9CA3AF" />
-              </TouchableOpacity>
+                  <Text style={styles.fieldLabel}>选择代币</Text>
+                  <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowTokenPicker(true)} activeOpacity={0.7}>
+                    <View style={styles.tokenPickerLeft}>
+                      {selectedToken && TOKEN_ICONS[selectedToken.symbol] ? React.createElement(TOKEN_ICONS[selectedToken.symbol], { size: 18 }) : null}
+                      <Text style={selectedToken ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
+                        {selectedToken ? `${selectedToken.symbol} · ${shortAddr(getAssetAddress(selectedToken))}` : "请选择代币"}
+                      </Text>
+                    </View>
+                    <ChevronRightIcon size={18} color="#9CA3AF" />
+                  </TouchableOpacity>
 
-              <Text style={styles.fieldLabel}>充值金额</Text>
-              <TextInput style={styles.input} value={amount} onChangeText={setAmount} placeholder="请输入充值金额" placeholderTextColor="#C8C9CC" keyboardType="decimal-pad" />
+                  <Text style={styles.fieldLabel}>充值金额</Text>
+                  <TextInput style={styles.input} value={amount} onChangeText={setAmount} placeholder="请输入充值金额" placeholderTextColor="#C8C9CC" keyboardType="decimal-pad" />
 
-              <Text style={styles.fieldLabel}>备注（可选）</Text>
-              <TextInput style={styles.input} value={memo} onChangeText={setMemo} placeholder="添加备注" placeholderTextColor="#C8C9CC" />
+                  <Text style={styles.fieldLabel}>备注（可选）</Text>
+                  <TextInput style={styles.input} value={memo} onChangeText={setMemo} placeholder="添加备注" placeholderTextColor="#C8C9CC" />
 
-              <TouchableOpacity style={[styles.rechargeBtn, !canSubmit && styles.rechargeBtnDisabled]} onPress={handleRecharge} disabled={!canSubmit} activeOpacity={0.7}>
-                {submitting ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.rechargeBtnText}>充值</Text>}
-              </TouchableOpacity>
-              </>
+                  <TouchableOpacity style={[styles.rechargeBtn, !canSubmit && styles.rechargeBtnDisabled]} onPress={handleRecharge} disabled={!canSubmit} activeOpacity={0.7}>
+                    {submitting ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.rechargeBtnText}>充值</Text>}
+                  </TouchableOpacity>
+                </>
               )}
             </View>
 
@@ -524,7 +526,7 @@ export default function RechargeScreen() {
       {/* ── 充值表单：钱包选择器 ── */}
       <Modal visible={showWalletPicker} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowWalletPicker(false)}>
-          <Pressable style={styles.pickerCard} onPress={() => {}}>
+          <Pressable style={styles.pickerCard} onPress={() => { }}>
             <Text style={styles.pickerTitle}>选择钱包</Text>
             <TextInput style={styles.walletSearchInput} value={walletSearch} onChangeText={handleWalletSearch} placeholder="搜索钱包名称" placeholderTextColor="#C8C9CC" />
             <FlatList
@@ -579,7 +581,7 @@ export default function RechargeScreen() {
       {/* ── 筛选：钱包选择器 ── */}
       <Modal visible={showFilterWalletPicker} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowFilterWalletPicker(false)}>
-          <Pressable style={styles.pickerCard} onPress={() => {}}>
+          <Pressable style={styles.pickerCard} onPress={() => { }}>
             <Text style={styles.pickerTitle}>筛选钱包</Text>
             <TouchableOpacity style={[styles.pickerItem, !filterWallet && styles.pickerItemActive]} onPress={() => { setFilterWallet(null); setShowFilterWalletPicker(false); }}>
               <Text style={styles.pickerItemName}>全部钱包</Text>

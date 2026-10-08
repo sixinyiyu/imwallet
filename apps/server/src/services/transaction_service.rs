@@ -377,22 +377,29 @@ pub async fn get_transactions(
     let (in_ph, in_args) = crate::db::query::in_clause(&addresses, 1);
 
     // ── Step 3: 构建 UNION ALL + SQL 级分页 ──
-    // token_symbol 过滤条件（可选）
-    let (token_cond, sym_arg) = if let Some(sym) = token_symbol {
-        (format!(" AND t.token_symbol = ${}", n + 1), Some(sym))
+    // token_symbol 过滤条件（可选）：from / to 两个 UNION 分支各用【独立】占位符。
+    // ⚠️ 早期版本两个分支复用同一占位符（${n+1}），但参数列表却 push 了两次，
+    // 导致 from 分支的 token_symbol 占位符绑定了第二个（to 分支）的值，
+    // 且把 LIMIT 参数错位绑定到 token_symbol 上，最终查询报错/过滤失效。
+    let has_sym = token_symbol.is_some();
+    let (from_token_cond, to_token_cond) = if has_sym {
+        (
+            format!(" AND t.token_symbol = ${}", n + 1),
+            format!(" AND t.token_symbol = ${}", n + 2),
+        )
     } else {
-        (String::new(), None)
+        (String::new(), String::new())
     };
 
     // LIMIT/OFFSET 参数编号：
     //   无 token_symbol: 第 2n+1 个参数是 LIMIT，第 2n+2 个是 OFFSET
     //   有 token_symbol: 第 2n+3 个参数是 LIMIT，第 2n+4 个是 OFFSET
-    let limit_ph = if sym_arg.is_some() {
+    let limit_ph = if has_sym {
         format!("${}", 2 * n + 3)
     } else {
         format!("${}", 2 * n + 1)
     };
-    let offset_ph = if sym_arg.is_some() {
+    let offset_ph = if has_sym {
         format!("${}", 2 * n + 4)
     } else {
         format!("${}", 2 * n + 2)
@@ -401,10 +408,10 @@ pub async fn get_transactions(
     let sql = format!(
         "WITH combined AS (
             SELECT t.id, t.from_address, t.to_address, t.token_symbol, t.amount, t.fee, t.memo, t.platform, t.created_at
-            FROM transactions t WHERE t.from_address IN {in_ph}{token_cond}
+            FROM transactions t WHERE t.from_address IN {in_ph}{from_token_cond}
             UNION ALL
             SELECT t.id, t.from_address, t.to_address, t.token_symbol, t.amount, t.fee, t.memo, t.platform, t.created_at
-            FROM transactions t WHERE t.to_address IN {in_ph}{token_cond}
+            FROM transactions t WHERE t.to_address IN {in_ph}{to_token_cond}
         )
         SELECT DISTINCT id, from_address, to_address, token_symbol, amount, fee, memo, platform, created_at,
             COUNT(*) OVER() as total_count
@@ -412,7 +419,8 @@ pub async fn get_transactions(
         ORDER BY created_at DESC
         LIMIT {limit_ph} OFFSET {offset_ph}",
         in_ph = in_ph,
-        token_cond = token_cond,
+        from_token_cond = from_token_cond,
+        to_token_cond = to_token_cond,
         limit_ph = limit_ph,
         offset_ph = offset_ph,
     );
@@ -421,10 +429,10 @@ pub async fn get_transactions(
     let mut args = in_args.clone();
     // to_address 分支的 IN 参数（与 from 相同的地址列表）
     args.extend(in_args.iter().take(n).cloned());
-    if let Some(sym) = sym_arg {
-        // from 分支的 token_symbol
+    if let Some(sym) = token_symbol {
+        // from 分支的 token_symbol（绑定 ${n+1}）
         args.push(rbs::value!(sym));
-        // to 分支的 token_symbol
+        // to 分支的 token_symbol（绑定 ${n+2}）
         args.push(rbs::value!(sym));
     }
     args.push(rbs::value!(l));

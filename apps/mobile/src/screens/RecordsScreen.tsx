@@ -13,6 +13,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../types/navigation";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useWalletStore } from "../stores/walletStore";
+import { useFiatStore } from "../stores/fiatStore";
 import { TransactionListSkeleton } from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import { transactionService, type TransactionFilter } from "../services/transactionService";
@@ -292,6 +293,7 @@ export function TransactionCard({
   feeMode?: string;
   onPress?: (tx: Transaction) => void;
 }) {
+  const { currency } = useFiatStore();
   const isReceive = transaction.toAddress === currentAddress;
   const label = isReceive ? "收到" : "发送";
   const amountColor = isReceive ? "#10B981" : "#EF4444";
@@ -328,7 +330,7 @@ export function TransactionCard({
           <Text style={card.label}>{label}</Text>
         </View>
         <Text style={[card.amount, { color: amountColor }]}>
-          {prefix}{trimAmount(displayAmount)}
+          {prefix}{currency.symbol}{trimAmount(displayAmount)}
         </Text>
       </View>
 
@@ -351,7 +353,7 @@ export function TransactionCard({
         <Text style={card.time}>{formatTime(transaction.createdAt)}</Text>
         {/* 接收方(B)不显示手续费，发送方(A)显示手续费和实到金额 */}
         {!isReceive && feeNum > 0 && (
-          <Text style={card.fee}>手续费 {trimAmount(feeNum)}</Text>
+          <Text style={card.fee}>手续费 {currency.symbol}{trimAmount(feeNum)}</Text>
         )}
       </View>
     </TouchableOpacity>

@@ -14,6 +14,7 @@ import type { Transaction } from "../types";
 import { transactionService } from "../services/transactionService";
 import { localAddressService } from "../services/localAddressService";
 import { useWalletStore } from "../stores/walletStore";
+import { useFiatStore } from "../stores/fiatStore";
 import { ShareIcon, CopyIcon, renderTokenIcon } from "../components/icons";
 import { TradeDetailSkeleton } from "../components/Skeleton";
 import { useAlert } from "../hooks/useAlert";
@@ -41,6 +42,7 @@ export default function TradeDetailScreen() {
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
   const { accounts } = useWalletStore();
+  const { currency } = useFiatStore();
   const [tx, setTx] = useState<Transaction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -160,116 +162,116 @@ export default function TradeDetailScreen() {
 
   return (
     <View style={styles.container}>
-    <ScrollView ref={detailRef} contentContainerStyle={styles.scroll} collapsable={false}>
-      {/* 状态区 */}
-      <View style={styles.statusSection}>
-        {tx.status === "CONFIRMED" && <SuccessIcon size={72} />}
-        {tx.status === "PENDING" && <PendingIcon size={72} />}
-        {tx.status === "FAILED" && <FailureIcon size={72} />}
-        <Text style={styles.statusLabel}>
-          {tx.status === "CONFIRMED" ? "成功" : tx.status === "PENDING" ? "处理中" : "失败"}
-        </Text>
-        <Text style={styles.statusTime}>{formatFullTime(tx.createdAt)}</Text>
-      </View>
+      <ScrollView ref={detailRef} contentContainerStyle={styles.scroll} collapsable={false}>
+        {/* 状态区 */}
+        <View style={styles.statusSection}>
+          {tx.status === "CONFIRMED" && <SuccessIcon size={72} />}
+          {tx.status === "PENDING" && <PendingIcon size={72} />}
+          {tx.status === "FAILED" && <FailureIcon size={72} />}
+          <Text style={styles.statusLabel}>
+            {tx.status === "CONFIRMED" ? "成功" : tx.status === "PENDING" ? "处理中" : "失败"}
+          </Text>
+          <Text style={styles.statusTime}>{formatFullTime(tx.createdAt)}</Text>
+        </View>
 
-      {/* 概览 */}
-      <Text style={styles.sectionTitle}>概览</Text>
-      <View style={styles.card}>
-        {/* 发送方 - icon根据当前用户高亮 */}
-        <View style={styles.partyBlock}>
-          <View style={[styles.partyIconWrap, isSender && styles.partyIconHighlight]}>
-            <Text style={[styles.partyIconEmoji, isSender && styles.partyIconEmojiHighlight]}>👤</Text>
+        {/* 概览 */}
+        <Text style={styles.sectionTitle}>概览</Text>
+        <View style={styles.card}>
+          {/* 发送方 - icon根据当前用户高亮 */}
+          <View style={styles.partyBlock}>
+            <View style={[styles.partyIconWrap, isSender && styles.partyIconHighlight]}>
+              <Text style={[styles.partyIconEmoji, isSender && styles.partyIconEmojiHighlight]}>👤</Text>
+            </View>
+            <View style={styles.partyTextWrap}>
+              {fromName ? <Text style={styles.partyName}>{fromName}</Text> : null}
+              <View style={styles.partyAddrRow}>
+                <Text style={styles.partyAddr}>{shortenAddress(tx.fromAddress)}</Text>
+                <TouchableOpacity style={styles.copyBtn} onPress={() => handleCopyAddress(tx.fromAddress)} activeOpacity={0.6}>
+                  <CopyIcon size={14} color="#9CA3AF" />
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-          <View style={styles.partyTextWrap}>
-            {fromName ? <Text style={styles.partyName}>{fromName}</Text> : null}
-            <View style={styles.partyAddrRow}>
-              <Text style={styles.partyAddr}>{shortenAddress(tx.fromAddress)}</Text>
-              <TouchableOpacity style={styles.copyBtn} onPress={() => handleCopyAddress(tx.fromAddress)} activeOpacity={0.6}>
-                <CopyIcon size={14} color="#9CA3AF" />
-              </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          {/* 金额行 */}
+          <View style={styles.flowAmountRow}>
+            <Text style={styles.flowLabel}>发送</Text>
+            <Text style={styles.flowAmount}>{currency.symbol}{trimAmount(parseFloat(tx.amount))}</Text>
+          </View>
+
+          <View style={styles.divider} />
+
+          {/* 接收方 - icon根据当前用户高亮 */}
+          <View style={styles.partyBlock}>
+            <View style={[styles.partyIconWrap, isReceiver && styles.partyIconHighlight]}>
+              <Text style={[styles.partyIconEmoji, isReceiver && styles.partyIconEmojiHighlight]}>👤</Text>
+            </View>
+            <View style={styles.partyTextWrap}>
+              {toName ? <Text style={styles.partyName}>{toName}</Text> : null}
+              <View style={styles.partyAddrRow}>
+                <Text style={styles.partyAddr}>{shortenAddress(tx.toAddress)}</Text>
+                <TouchableOpacity style={styles.copyBtn} onPress={() => handleCopyAddress(tx.toAddress)} activeOpacity={0.6}>
+                  <CopyIcon size={14} color="#9CA3AF" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
 
-        <View style={styles.divider} />
-
-        {/* 金额行 */}
-        <View style={styles.flowAmountRow}>
-          <Text style={styles.flowLabel}>发送</Text>
-          <Text style={styles.flowAmount}>{trimAmount(parseFloat(tx.amount))}</Text>
+        {/* 代币转移 */}
+        <Text style={styles.sectionTitle}>代币转移</Text>
+        <View style={styles.card}>
+          <TokenTransferRow
+            address={tx.fromAddress}
+            alias={fromName}
+            token={tx.tokenSymbol}
+            amount={`-${currency.symbol}${trimAmount(parseFloat(tx.amount))}`}
+            isOut
+            isCurrentUser={isSender}
+          />
+          <View style={styles.divider} />
+          <TokenTransferRow
+            address={tx.toAddress}
+            alias={toName}
+            token={tx.tokenSymbol}
+            amount={`+${currency.symbol}${trimAmount(receivedAmount)}`}
+            isOut={false}
+            isCurrentUser={isReceiver}
+          />
         </View>
 
-        <View style={styles.divider} />
-
-        {/* 接收方 - icon根据当前用户高亮 */}
-        <View style={styles.partyBlock}>
-          <View style={[styles.partyIconWrap, isReceiver && styles.partyIconHighlight]}>
-            <Text style={[styles.partyIconEmoji, isReceiver && styles.partyIconEmojiHighlight]}>👤</Text>
-          </View>
-          <View style={styles.partyTextWrap}>
-            {toName ? <Text style={styles.partyName}>{toName}</Text> : null}
-            <View style={styles.partyAddrRow}>
-              <Text style={styles.partyAddr}>{shortenAddress(tx.toAddress)}</Text>
-              <TouchableOpacity style={styles.copyBtn} onPress={() => handleCopyAddress(tx.toAddress)} activeOpacity={0.6}>
-                <CopyIcon size={14} color="#9CA3AF" />
-              </TouchableOpacity>
-            </View>
-          </View>
+        {/* 交易详情 */}
+        <Text style={styles.sectionTitle}>交易详情</Text>
+        <View style={styles.card}>
+          <InfoRow label="网络" value="Private Chain" />
+          <View style={styles.divider} />
+          <InfoRow label="转账金额" value={`${currency.symbol}${trimAmount(tx.amount)}`} />
+          <View style={styles.divider} />
+          <InfoRow label="手续费" value={`${currency.symbol}${trimAmount(tx.fee)}`} />
+          {isFeeDeducted ? (
+            <>
+              <View style={styles.divider} />
+              <InfoRow label="实际到账" value={`${currency.symbol}${trimAmount(receivedAmount)}`} />
+            </>
+          ) : null}
+          <View style={styles.cardDivider} />
+          <InfoRow
+            label={isFeeDeducted ? "发送方支付" : "总计（含手续费）"}
+            value={`${currency.symbol}${trimAmount(senderTotal)}`}
+            bold
+          />
+          {tx.memo ? (
+            <>
+              <View style={styles.divider} />
+              <InfoRow label="备注" value={tx.memo} />
+            </>
+          ) : null}
         </View>
-      </View>
 
-      {/* 代币转移 */}
-      <Text style={styles.sectionTitle}>代币转移</Text>
-      <View style={styles.card}>
-        <TokenTransferRow
-          address={tx.fromAddress}
-          alias={fromName}
-          token={tx.tokenSymbol}
-          amount={`-${trimAmount(parseFloat(tx.amount))}`}
-          isOut
-          isCurrentUser={isSender}
-        />
-        <View style={styles.divider} />
-        <TokenTransferRow
-          address={tx.toAddress}
-          alias={toName}
-          token={tx.tokenSymbol}
-          amount={`+${trimAmount(receivedAmount)}`}
-          isOut={false}
-          isCurrentUser={isReceiver}
-        />
-      </View>
-
-      {/* 交易详情 */}
-      <Text style={styles.sectionTitle}>交易详情</Text>
-      <View style={styles.card}>
-        <InfoRow label="网络" value="Private Chain" />
-        <View style={styles.divider} />
-        <InfoRow label="转账金额" value={`${trimAmount(tx.amount)}`} />
-        <View style={styles.divider} />
-        <InfoRow label="手续费" value={`${trimAmount(tx.fee)}`} />
-        {isFeeDeducted ? (
-          <>
-            <View style={styles.divider} />
-            <InfoRow label="实际到账" value={`${trimAmount(receivedAmount)}`} />
-          </>
-        ) : null}
-        <View style={styles.cardDivider} />
-        <InfoRow
-          label={isFeeDeducted ? "发送方支付" : "总计（含手续费）"}
-          value={`${trimAmount(senderTotal)}`}
-          bold
-        />
-        {tx.memo ? (
-          <>
-            <View style={styles.divider} />
-            <InfoRow label="备注" value={tx.memo} />
-          </>
-        ) : null}
-      </View>
-
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        <View style={{ height: 40 }} />
+      </ScrollView>
 
       {/* Toast */}
       {toastVisible && (
