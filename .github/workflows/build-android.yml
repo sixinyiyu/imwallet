@@ -4,12 +4,42 @@ on:
   push:
     tags:
       - "android-v*"
+  # 允许通过 GitHub API / 页面手动触发（scripts/trigger-pipeline.js android-eas <version>）
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '要构建的版本号（如 1.2.25；留空则读取 apps/mobile/package.json）'
+        required: false
+        default: ''
 
 permissions:
   contents: write
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+            echo "✅ Version from input: $VERSION"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME#android-v}"
+            echo "✅ Version from tag: $VERSION"
+          else
+            VERSION=$(jq -r '.version' apps/mobile/package.json)
+            echo "✅ Version from package.json: $VERSION"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
   build:
+    needs: prepare
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -98,7 +128,7 @@ jobs:
             console.log(url);
           ")
           if [ -n "$BUILD_URL" ]; then
-            VERSION="${GITHUB_REF_NAME#android-v}"
+            VERSION="${{ needs.prepare.outputs.version }}"
             curl -L -o "dist/imwallet-${VERSION}-${{ matrix.abi }}.apk" "$BUILD_URL"
             echo "✅ APK downloaded: imwallet-${VERSION}-${{ matrix.abi }}.apk"
           else
@@ -116,7 +146,7 @@ jobs:
           path: apps/mobile/dist/*.apk
 
   release:
-    needs: build
+    needs: [prepare, build]
     runs-on: ubuntu-latest
 
     steps:
@@ -129,6 +159,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: IMWallet ${{ github.ref_name }}
+          tag_name: android-v${{ needs.prepare.outputs.version }}
+          name: IMWallet android-v${{ needs.prepare.outputs.version }}
           files: release-artifacts/**/*.apk
           generate_release_notes: true

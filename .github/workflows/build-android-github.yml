@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
     paths: ['apps/mobile/**', 'package.json', 'package-lock.json']
+  # 允许通过 GitHub API / 页面手动触发（scripts/trigger-pipeline.js android <version>）
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '要构建的版本号（留空则读取 apps/mobile/package.json）'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -22,22 +29,32 @@ jobs:
       - name: Check if version changed
         id: check
         run: |
-          OLD_VERSION=$(git show HEAD~1:apps/mobile/package.json 2>/dev/null | jq -r '.version' || echo "0.0.0")
-          NEW_VERSION=$(jq -r '.version' apps/mobile/package.json)
-          if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "✅ Version changed: $OLD_VERSION → $NEW_VERSION"
+            echo "✅ 手动触发（workflow_dispatch），强制执行构建"
           else
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "⏭️ Version unchanged ($NEW_VERSION), skip build"
+            OLD_VERSION=$(git show HEAD~1:apps/mobile/package.json 2>/dev/null | jq -r '.version' || echo "0.0.0")
+            NEW_VERSION=$(jq -r '.version' apps/mobile/package.json)
+            if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
+              echo "changed=true" >> $GITHUB_OUTPUT
+              echo "✅ Version changed: $OLD_VERSION → $NEW_VERSION"
+            else
+              echo "changed=false" >> $GITHUB_OUTPUT
+              echo "⏭️ Version unchanged ($NEW_VERSION), skip build"
+            fi
           fi
 
       - name: Read version from package.json
         id: version
         run: |
-          VERSION=$(jq -r '.version' apps/mobile/package.json)
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+            echo "✅ Version from input: $VERSION"
+          else
+            VERSION=$(jq -r '.version' apps/mobile/package.json)
+            echo "✅ Version from package.json: $VERSION"
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "✅ Version: $VERSION"
 
   build:
     needs: prepare

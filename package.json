@@ -18,7 +18,15 @@
     "lint:server": "cargo fmt -- --check && cargo clippy -- -D warnings",
     "check:server": "cargo check --workspace",
     "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down"
+    "docker:down": "docker-compose down",
+    "trigger": "node scripts/trigger-pipeline.js",
+    "trigger:android": "node scripts/trigger-pipeline.js android",
+    "trigger:android-eas": "node scripts/trigger-pipeline.js android-eas",
+    "trigger:ios": "node scripts/trigger-pipeline.js ios",
+    "trigger:ios-store": "node scripts/trigger-pipeline.js ios-store",
+    "trigger:server": "node scripts/trigger-pipeline.js server",
+    "trigger:server-docker": "node scripts/trigger-pipeline.js server-docker",
+    "trigger:server-ci": "node scripts/trigger-pipeline.js server-ci"
   },
   "engines": {
     "node": ">=18.0.0"
