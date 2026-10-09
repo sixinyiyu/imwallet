@@ -1,6 +1,7 @@
 //! 健康检查路由 — GET /health
 
 use crate::middleware::AppState;
+use crate::SERVER_VERSION;
 use axum::extract::State;
 use axum::Json;
 use serde::Serialize;
@@ -22,7 +23,7 @@ pub async fn health_check_handler(State(state): State<AppState>) -> Json<HealthR
     Json(HealthResponse {
         status: if db_ok { "ok" } else { "degraded" },
         service: "rs-wallet",
-        version: env!("CARGO_PKG_VERSION"),
+        version: SERVER_VERSION,
         db: if db_ok { "connected" } else { "unreachable" },
     })
 }

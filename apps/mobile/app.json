@@ -43,7 +43,8 @@
       "./plugins/withAbiFilter",
       "./plugins/withSecureScreen",
       "expo-sqlite",
-      "./plugins/withPbkdf2"
+      "./plugins/withPbkdf2",
+      "./plugins/withSecureStoreLegacy"
     ],
     "extra": {
       "apiBaseUrl": "https://imwallet.dpdns.org/api/v1",

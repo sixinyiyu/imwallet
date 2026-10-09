@@ -16,6 +16,7 @@ import { useAuthStore } from "./authStore";
 import { saveLogToLocal } from "../services/logService";
 import { getErrorMessage } from "../utils/format";
 import { perfProbe, TraceHandle } from "../utils/perfProbe";
+import { migrateAllKnownKeys } from "../utils/secureStorage";
 import type { SimpleWallet, Account, AssetBalance, LocalWallet } from "../types";
 
 const MNEMONIC_KEY_PREFIX = "aquad_mnemonic_";
@@ -109,6 +110,18 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   /** Load local state: local data first (no network dependency), then network sync */
   loadLocalState: async () => {
+    // ── 阶段 0：Android SecureStore legacy 迁移（必须在所有 SecureStore 读取之前完成）──
+    // expo-secure-store v56 改了 KeyStore alias 格式，旧格式数据会被删除。
+    // migrateAllKnownKeys 用旧 alias 解密并回写新格式，防止密钥丢失导致孤儿设备。
+    try {
+      const migratedCount = await migrateAllKnownKeys();
+      if (migratedCount > 0) {
+        saveLogToLocal("info", `[loadLocalState] SecureStore legacy 迁移完成: ${migratedCount} keys`);
+      }
+    } catch (e) {
+      saveLogToLocal("info", `[loadLocalState] SecureStore legacy 迁移异常: ${String(e)}`);
+    }
+
     // ── 阶段 1：本地数据加载（不依赖网络，必须成功才能判断路由）──
     try {
       await get().fetchWallets();
