@@ -49,6 +49,7 @@ export default function WalletScreen() {
     loading,
     hasFetched,
     balanceLoading,
+    balanceStale,
     fetchWallets,
     setActiveWallet,
     fetchBalance,
@@ -155,6 +156,7 @@ export default function WalletScreen() {
         {/* Balance Card */}
         <BalanceCard
           totalBalanceUsd={totalBalanceUsd}
+          stale={balanceStale}
         />
 
         {/* Action Buttons */}

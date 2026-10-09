@@ -9,6 +9,7 @@ import { localAddressService } from "../services/localAddressService";
 import { notificationSyncService } from "../services/notificationSyncService";
 import { localNotificationService } from "../services/localNotificationService";
 import { syncWalletsWithServer, syncSubscribedWallets } from "../services/walletSyncService";
+import { localBalanceService, isBalanceStale } from "../services/localBalanceService";
 import { generateMnemonic, cleanMnemonic, generateIdentifier } from "../utils/mnemonic";
 import { deriveAddressFromMnemonic, getDerivationPath } from "../utils/derivation";
 import { ensureDeviceKeys, ensureDeviceRegistered } from "../services/api";
@@ -65,8 +66,13 @@ interface WalletState {
   balanceLoading: boolean;
   hasFetched: boolean;
   accountCount: number;
+  /** 余额缓存时间（ISO），用于判断数据是否过期 */
+  balanceUpdatedAt: string;
+  /** 当前展示的余额是否为离线缓存（服务端不可用或数据过期时为 true） */
+  balanceStale: boolean;
 
   loadLocalState: () => Promise<void>;
+  loadCachedBalance: (walletId: string, markStale?: boolean) => Promise<void>;
   syncWalletsWithServer: () => Promise<void>;
   syncSubscribedWalletsAsync: () => Promise<void>;
   fetchWallets: () => Promise<void>;
@@ -103,6 +109,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   balanceLoading: false,
   hasFetched: false,
   accountCount: 0,
+  balanceUpdatedAt: "",
+  balanceStale: false,
 
   isWalletBackedUp: (walletId: string): boolean => {
     return get().backedUpWallets.has(walletId);
@@ -131,6 +139,14 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       return;
     }
 
+    // ── 阶段 1.5：读取当前钱包的离线余额缓存（不依赖网络，离线也能看到上次余额）──
+    {
+      const aw = get().activeWallet;
+      if (aw) {
+        await get().loadCachedBalance(aw.id);
+      }
+    }
+
     // ── 阶段 2：设备初始化 + 网络同步（失败不影响本地数据已加载的事实）──
     // 设备初始化必须先完成（后续 API 请求需要签名），钱包同步和通知同步可并行
     try {
@@ -157,7 +173,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
    * Recovers from server data loss by re-registering wallets and re-syncing addresses.
    */
   syncWalletsWithServer: async () => {
-     await syncWalletsWithServer();  },
+    await syncWalletsWithServer();
+  },
 
   /**
    * 异步加载订阅钱包 — 从后端获取当前设备的钱包列表，
@@ -166,7 +183,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
    */
   syncSubscribedWalletsAsync: async () => {
     try {
-       await syncSubscribedWallets();      await get().fetchWallets();
+      await syncSubscribedWallets(); await get().fetchWallets();
     } catch {
       // silent — 异步同步失败不影响用户
     }
@@ -291,7 +308,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   setActiveWallet: (wallet: SimpleWallet) => {
     set({ activeWallet: wallet });
     get().fetchAccounts(wallet.id);
-    get().fetchBalance(wallet.id);
+    // 先读本地缓存立即渲染（离线也能看到上次余额），再请求服务端刷新。
+    // 顺序执行，避免缓存读取晚于网络请求返回而覆盖最新数据。
+    get()
+      .loadCachedBalance(wallet.id)
+      .finally(() => get().fetchBalance(wallet.id));
   },
 
   setActiveAccount: (account: Account) => {
@@ -450,6 +471,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // 本地 SQLite 删除（accounts + addresses + wallets 串行）
       await localWalletService.deleteWallet(walletId, trace);
 
+      // 删除离线余额缓存
+      await localBalanceService.deleteBalance(walletId);
+
       // SecureStore 删除（并行）
       await trace.markAsync("SecureStore删除(mnemonic+backedUp)", Promise.all([
         SecureStore.deleteItemAsync(mnemonicKey(walletId)),
@@ -497,7 +521,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   addAccount: async (walletId: string, network: string, name?: string, allowMultiAccount?: boolean, onStage?: (stage: string) => void) => {
     const trace = await perfProbe.startTrace("添加账户");
     try {
-    onStage?.("正在添加账户...");
+      onStage?.("正在添加账户...");
       // 只读钱包无法添加账户
       const localWallet = await trace.markAsync("读取钱包信息", localWalletService.getWalletById(walletId));
       if (localWallet?.source === "SUBSCRIBE") {
@@ -505,7 +529,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         throw new Error("只读钱包无法添加账户");
       }
 
-    onStage?.("正在同步到钱包...");
+      onStage?.("正在同步到钱包...");
       // 读取助记词用于地址派生
       const mnemonic = await trace.markAsync("读取助记词", SecureStore.getItemAsync(mnemonicKey(walletId)));
       if (!mnemonic) {
@@ -523,7 +547,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         throw new Error("该钱包下此网络已有账户");
       }
 
-    onStage?.("正在打包数据...");
+      onStage?.("正在打包数据...");
       // 使用 BIP44 从助记词派生链上地址
       trace.mark("派生地址");
       const address = await trace.markAsync("派生地址(native)", deriveAddressFromMnemonic(mnemonic, network, accountIndex), pbkdf2Impl());
@@ -533,11 +557,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const accountId = generateUUID();
       const accountName = name || `${network} Account ${accountIndex + 1}`;
 
-    onStage?.("正在写入数据...");
+      onStage?.("正在写入数据...");
       // 同步地址到服务端，获取 serverAddressId
       const serverAddress = await trace.markAsync("POST /wallets/{id}/addresses", syncService.syncAddress(walletId, network, address));
 
-    onStage?.("正在同步远端...");
+      onStage?.("正在同步远端...");
       // 保存到本地 SQLite + addresses 表，单独计时
       await trace.markAsync("SQLite createAccount", localAccountService.createAccount({
         id: accountId,
@@ -729,6 +753,26 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
+  /**
+   * 读取本地余额缓存并渲染。
+   * markStale=true 时（服务端请求失败）强制标注数据过期；
+   * 否则按缓存时间（默认 5 分钟）判断是否过期。
+   */
+  loadCachedBalance: async (walletId: string, markStale = false) => {
+    try {
+      const cached = await localBalanceService.getBalance(walletId);
+      if (!cached) return;
+      set({
+        totalBalanceUsd: cached.totalBalanceUsd || "0",
+        assets: cached.assets || [],
+        balanceUpdatedAt: cached.updatedAt,
+        balanceStale: markStale || isBalanceStale(cached.updatedAt),
+      });
+    } catch {
+      // silent — 缓存读取失败不影响主流程
+    }
+  },
+
   /** Fetch balance for wallet (from server API, with in-flight dedup) */
   fetchBalance: async (walletId: string) => {
     // In-flight dedup: 同一 walletId 的并发请求只发一次
@@ -738,12 +782,26 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const trace = await perfProbe.startTrace("查询余额");
     try {
       const detail = await trace.markAsync("GET /wallets/{id}/balance", walletService.getWalletBalanceDetail(walletId));
+      // 成功：更新内存 + 写入离线缓存
       set({
         totalBalanceUsd: detail.totalBalanceUsd || "0",
         assets: detail.assets || [],
         balanceLoading: false,
+        balanceUpdatedAt: new Date().toISOString(),
+        balanceStale: false,
       });
+      // 缓存写入失败不影响主流程
+      localBalanceService
+        .saveBalance({
+          walletId,
+          totalBalanceUsd: detail.totalBalanceUsd || "0",
+          totalBalanceCny: detail.totalBalanceCny || "0",
+          assets: detail.assets || [],
+        })
+        .catch(() => { });
     } catch {
+      // 失败：回退到本地缓存，并标注「数据可能已过期」
+      await get().loadCachedBalance(walletId, true);
       set({ balanceLoading: false });
     } finally {
       delete balanceFetchInFlight[walletId];
@@ -833,10 +891,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // 1. 调用后端取消订阅 API
       await trace.markAsync("DELETE /subscribe", syncService.unsubscribeWalletReadonly(walletId));
 
-      // 2. 删除本地数据（钱包+账户+地址+通知）
+      // 2. 删除本地数据（钱包+账户+地址+通知+余额缓存）
       await trace.markAsync("本地删除", Promise.all([
         localWalletService.deleteWallet(walletId),
         localNotificationService.deleteWalletNotifications(walletId),
+        localBalanceService.deleteBalance(walletId),
       ]));
 
       // 写库成功后直接更新内存，不再 fetchWallets 查库
@@ -861,4 +920,4 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
     perfProbe.endTrace(trace);
   },
-  }));
+}));

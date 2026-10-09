@@ -7,7 +7,7 @@ import type { DatabaseAdapter, SelectOptions, OrderByClause } from "./types";
  */
 
 const DB_NAME = "imwallet";
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 /** 客户端所有表名 */
 const TABLES = [
@@ -16,6 +16,7 @@ const TABLES = [
   "addresses",
   "notifications",
   "deleted_notification_ids",
+  "wallet_balances",
 ] as const;
 
 /** 布尔字段列表（需要 true/false ↔ 1/0 转换） */
@@ -149,6 +150,11 @@ export class IndexedDBAdapter implements DatabaseAdapter {
 
         // v6 → v7：添加 deleted_notification_ids object store
         if (oldVersion < 7) {
+          didUpgrade = true;
+        }
+
+        // v7 → v8：添加 wallet_balances object store（离线余额缓存）
+        if (oldVersion < 8) {
           didUpgrade = true;
         }
 

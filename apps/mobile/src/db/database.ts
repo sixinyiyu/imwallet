@@ -97,6 +97,18 @@ const SQLITE_INIT_SQL = `
     deleted_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_deleted_notification_wallet_id ON deleted_notification_ids(wallet_id);
+
+  -- 离线余额缓存：服务端 /wallets/{id}/balance 的最近一次成功结果，
+  -- 用于服务端不可用时展示上次余额/代币，并标注「数据可能已过期」。
+  CREATE TABLE IF NOT EXISTS wallet_balances (
+    id TEXT PRIMARY KEY,
+    wallet_id TEXT NOT NULL,
+    total_balance_usd TEXT NOT NULL DEFAULT '0',
+    total_balance_cny TEXT NOT NULL DEFAULT '0',
+    assets TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_wallet_balances_wallet_id ON wallet_balances(wallet_id);
 `;
 
 // ─── 数据库单例 ──────────────────────────────────────────────────────────────

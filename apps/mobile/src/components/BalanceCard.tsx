@@ -6,9 +6,11 @@ import { EyeIcon, EyeOffIcon } from "../components/icons";
 
 interface Props {
   totalBalanceUsd: string;
+  /** 数据是否为离线缓存（服务端不可用或已过期），为 true 时展示过期提示 */
+  stale?: boolean;
 }
 
-export default function BalanceCard({ totalBalanceUsd }: Props) {
+export default function BalanceCard({ totalBalanceUsd, stale = false }: Props) {
   const { currency } = useFiatStore();
   const [balanceVisible, setBalanceVisible] = useState(true);
 
@@ -39,6 +41,9 @@ export default function BalanceCard({ totalBalanceUsd }: Props) {
       <Text style={styles.balanceValue} adjustsFontSizeToFit numberOfLines={1}>
         {displayBalance}
       </Text>
+      {stale && (
+        <Text style={styles.staleHint}>离线数据 · 可能已过期，请检查网络</Text>
+      )}
     </LinearGradient>
   );
 }
@@ -57,4 +62,9 @@ const styles = StyleSheet.create({
   balanceLabel: { fontSize: 14, color: "rgba(255,255,255,0.7)" },
   eyeBtn: { padding: 4 },
   balanceValue: { fontSize: 28, fontWeight: "700", color: "#FFFFFF" },
+  staleHint: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "rgba(255,255,255,0.85)",
+  },
 });
