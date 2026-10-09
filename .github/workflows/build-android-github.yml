@@ -68,6 +68,12 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # 覆盖 action 默认值 "tools platform-tools"。
+          # 新版 Android SDK 仓库已移除 "tools" 包，会导致
+          # `sdkmanager tools` 报错 "Failed to find package 'tools'"。
+          # 这里显式安装 Expo SDK 56 / RN 0.85 所需的平台与构建工具。
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
 
       - name: Install npm dependencies
         run: npm ci
