@@ -26,7 +26,6 @@ import { formatTime as formatDate } from "../utils/date";
 import { copyToClipboard } from "../utils/clipboard";
 import { getErrorMessage, trimAmount } from "../utils/format";
 import { perfProbe } from "../utils/perfProbe";
-import { useFiatStore } from "../stores/fiatStore";
 
 // ── 筛选类型定义 ──
 type TimeFilter = "today" | "7d" | "30d" | "90d";
@@ -39,7 +38,6 @@ const TIME_OPTIONS: { label: string; value: TimeFilter }[] = [
 ];
 
 export default function RechargeScreen() {
-  const { currency } = useFiatStore();
   const [assets, setAssets] = useState<AssetInfo[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<SimpleWallet | null>(null);
   const [selectedToken, setSelectedToken] = useState<AssetInfo | null>(null);
@@ -349,7 +347,7 @@ export default function RechargeScreen() {
             )}
             <Text style={styles.recordToken}>{item.tokenSymbol}</Text>
           </View>
-          <Text style={styles.recordAmount}>+{currency.symbol}{trimAmount(item.amount)}</Text>
+          <Text style={styles.recordAmount}>+{trimAmount(item.amount)}</Text>
         </View>
         <View style={styles.recordBody}>
           <View style={styles.recordAddressRow}>

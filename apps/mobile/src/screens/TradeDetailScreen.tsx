@@ -14,7 +14,6 @@ import type { Transaction } from "../types";
 import { transactionService } from "../services/transactionService";
 import { localAddressService } from "../services/localAddressService";
 import { useWalletStore } from "../stores/walletStore";
-import { useFiatStore } from "../stores/fiatStore";
 import { ShareIcon, CopyIcon, renderTokenIcon } from "../components/icons";
 import { TradeDetailSkeleton } from "../components/Skeleton";
 import { useAlert } from "../hooks/useAlert";
@@ -42,7 +41,6 @@ export default function TradeDetailScreen() {
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
   const { accounts } = useWalletStore();
-  const { currency } = useFiatStore();
   const [tx, setTx] = useState<Transaction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -198,7 +196,7 @@ export default function TradeDetailScreen() {
           {/* 金额行 */}
           <View style={styles.flowAmountRow}>
             <Text style={styles.flowLabel}>发送</Text>
-            <Text style={styles.flowAmount}>{currency.symbol}{trimAmount(parseFloat(tx.amount))}</Text>
+            <Text style={styles.flowAmount}>{trimAmount(parseFloat(tx.amount))}</Text>
           </View>
 
           <View style={styles.divider} />
@@ -227,7 +225,7 @@ export default function TradeDetailScreen() {
             address={tx.fromAddress}
             alias={fromName}
             token={tx.tokenSymbol}
-            amount={`-${currency.symbol}${trimAmount(parseFloat(tx.amount))}`}
+            amount={`-${trimAmount(parseFloat(tx.amount))}`}
             isOut
             isCurrentUser={isSender}
           />
@@ -236,7 +234,7 @@ export default function TradeDetailScreen() {
             address={tx.toAddress}
             alias={toName}
             token={tx.tokenSymbol}
-            amount={`+${currency.symbol}${trimAmount(receivedAmount)}`}
+            amount={`+${trimAmount(receivedAmount)}`}
             isOut={false}
             isCurrentUser={isReceiver}
           />
@@ -247,19 +245,19 @@ export default function TradeDetailScreen() {
         <View style={styles.card}>
           <InfoRow label="网络" value="Private Chain" />
           <View style={styles.divider} />
-          <InfoRow label="转账金额" value={`${currency.symbol}${trimAmount(tx.amount)}`} />
+          <InfoRow label="转账金额" value={trimAmount(tx.amount)} />
           <View style={styles.divider} />
-          <InfoRow label="手续费" value={`${currency.symbol}${trimAmount(tx.fee)}`} />
+          <InfoRow label="手续费" value={trimAmount(tx.fee)} />
           {isFeeDeducted ? (
             <>
               <View style={styles.divider} />
-              <InfoRow label="实际到账" value={`${currency.symbol}${trimAmount(receivedAmount)}`} />
+              <InfoRow label="实际到账" value={trimAmount(receivedAmount)} />
             </>
           ) : null}
           <View style={styles.cardDivider} />
           <InfoRow
             label={isFeeDeducted ? "发送方支付" : "总计（含手续费）"}
-            value={`${currency.symbol}${trimAmount(senderTotal)}`}
+            value={trimAmount(senderTotal)}
             bold
           />
           {tx.memo ? (
